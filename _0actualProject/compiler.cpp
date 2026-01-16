@@ -395,6 +395,21 @@ struct BinaryExpr:Expr{
     }
 };
 
+//added on day 13
+struct CallExpr:Expr{
+    string callee;
+    vector<unique_ptr<Expr>> args;
+
+    CallExpr(string c,vector<unique_ptr<Expr>> a)
+        :callee(move(c)),args(move(a)){}
+    
+    void print(int d){
+        cout<<string(d,' ')<<"Call "<<callee<<"\n";
+        for(auto& a:args) a->print(d+2);
+    }
+};
+
+
 /* ===================== STATEMENTS ===================== */
 
 struct Stmt{
@@ -459,6 +474,35 @@ struct WhileStmt:Stmt{
     }
 };
 
+//added on day 13
+struct FunctionStmt:Stmt{
+    string name;
+    vector<string> params;
+    unique_ptr<BlockStmt> body;
+
+    FunctionStmt(string n,vector<string> p,unique_ptr<BlockStmt> b)
+        :name(move(n)),params(move(p)),body(move(b)){}
+    
+    void print(int d){
+        cout<<string(d,' ')<<"Function "<<name<<"\n";
+        cout<<string(d+2,' ')<<"Params:";
+        for(auto& p:params) cout<<" "<<p;
+        cout<<"\n";
+        body->print(d+2);
+    }
+};
+
+struct ReturnStmt:Stmt{
+    unique_ptr<Expr> value;
+    ReturnStmt(unique_ptr<Expr> v):value(move(v)){}
+    void print(int d){
+        cout<<string(d,' ')<<"Return\n";
+        if(value) value->print(d+2);
+    }
+};
+
+
+
 
 class Parser{
     vector<Token> tokens;
@@ -504,6 +548,8 @@ private:
         if(match({TokenType::WHILE})) return whileStatement();   // ⭐ NEW
         if(match({TokenType::PRINT})) return printStatement();
         if(match({TokenType::LBRACE}))return blockStatement();
+        if(match({TokenType::FUNCTION})) return functionStatement();
+        if(match({TokenType::RETURN}))   return returnStatement();
         return expressionStatement();
     }
 
@@ -553,6 +599,42 @@ private:
         return make_unique<ExprStmt>(move(expr));
     }
 
+    //added on day 13
+    unique_ptr<Stmt> functionStatement() {
+	    Token name=peek();
+	    consume(TokenType::IDENTIFIER,"Expected function name");
+
+	    consume(TokenType::LPAREN,"Expected '(' after function name");
+	    vector<string> params;
+
+	    if(!match({TokenType::RPAREN})) {
+		    do {
+			    Token p=peek();
+			    consume(TokenType::IDENTIFIER,"Expected parameter name");
+		    	params.push_back(p.lexeme);
+		    } while(match({TokenType::COMMA}));
+		    consume(TokenType::RPAREN,"Expected ')'");
+	    }
+
+	    consume(TokenType::LBRACE,"Expected '{' before function body");
+	    auto body=blockStatement();
+	    return make_unique<FunctionStmt>(
+	        name.lexeme,
+	        move(params),
+	        unique_ptr<BlockStmt>(static_cast<BlockStmt*>(body.release()))
+	    );
+    }
+
+    unique_ptr<Stmt> returnStatement(){
+        unique_ptr<Expr> value=nullptr;
+        if(!match({TokenType::SEMICOLON})){
+            value=expression();
+            consume(TokenType::SEMICOLON,"Expected ';' after return");
+        }
+        return make_unique<ReturnStmt>(move(value));
+    }
+
+
     /* ================= EXPRESSIONS (UNCHANGED) ================= */
 
     unique_ptr<Expr> expression(){ return equality(); }
@@ -570,7 +652,7 @@ private:
     unique_ptr<Expr> comparison(){
         auto expr=term();
         while(match({TokenType::LESS,TokenType::LESS_EQUAL,
-                     TokenType::GREATER,TokenType::GREATER_EQUAL})){
+                    TokenType::GREATER,TokenType::GREATER_EQUAL})){
             string op=previous().lexeme;
             auto right=term();
             expr=make_unique<BinaryExpr>(op,move(expr),move(right));
@@ -607,17 +689,31 @@ private:
         return primary();
     }
 
-    unique_ptr<Expr> primary(){
-        if(match({TokenType::NUMBER}))
-            return make_unique<NumberExpr>(stod(previous().lexeme));
-        if(match({TokenType::IDENTIFIER}))
-            return make_unique<VariableExpr>(previous().lexeme);
-        if(match({TokenType::LPAREN})){
-            auto expr=expression();
-            consume(TokenType::RPAREN,"Expected ')'");
-            return expr;
-        }
-        throw runtime_error("Expected expression");
+    unique_ptr<Expr> primary() {
+	    if(match({TokenType::NUMBER}))
+		    return make_unique<NumberExpr>(stod(previous().lexeme));
+    	if(match({TokenType::IDENTIFIER})) {
+	    	string name=previous().lexeme;
+
+	    	if(match({TokenType::LPAREN})) {
+			    vector<unique_ptr<Expr>> args;
+			    if(!match({TokenType::RPAREN})) {
+				    do {
+				    	args.push_back(expression());
+			    	} while(match({TokenType::COMMA}));
+			    	consume(TokenType::RPAREN,"Expected ')'");
+			    }
+			    return make_unique<CallExpr>(name,move(args));
+		    }
+
+		    return make_unique<VariableExpr>(name);
+	    }
+	    if(match({TokenType::LPAREN})) {
+	    	auto expr=expression();
+	    	consume(TokenType::RPAREN,"Expected ')'");
+	    	return expr;
+    	}
+	    throw runtime_error("Expected expression");
     }
 };
 
@@ -626,19 +722,21 @@ private:
 // ================== TEST DRIVER ==================
 int main(){
     string src =
-        "while (x < 10) {"
-        "   if (x == 5) {"
-        "       print x;"
+        "function fact(n) {"
+        "   if (n <= 1) {"
+        "       return 1;"
+        "   } else {"
+        "       return n * fact(n - 1);"
         "   }"
-        "   print x + 1;"
         "}";
 
     Lexer lx(src);
     Parser p(lx.scanTokens());
-    auto program = p.parseProgram();
+    auto program=p.parseProgram();
 
     for(auto& s:program)
         s->print(0);
 }
+
 
 

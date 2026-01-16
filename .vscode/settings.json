@@ -1,0 +1,6 @@
+{
+    "[cpp]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnPaste": true
+    }
+}
