@@ -443,15 +443,19 @@ struct IfStmt:Stmt{
         }
     }
 };
-
 class Parser{
     vector<Token> tokens;
     int current=0;
 public:
     Parser(vector<Token> t):tokens(move(t)){}
 
-    unique_ptr<Expr> parse(){
-        return expression();
+    // ===== NEW ENTRY POINT =====
+    vector<unique_ptr<Stmt>> parseProgram(){
+        vector<unique_ptr<Stmt>> program;
+        while(!isAtEnd()){
+            program.push_back(statement());
+        }
+        return program;
     }
 
 private:
@@ -461,23 +465,76 @@ private:
 
     bool match(initializer_list<TokenType> types){
         for(auto t:types){
-            if(peek().type==t){current++;return true;}
+            if(peek().type==t){
+                current++;
+                return true;
+            }
         }
         return false;
     }
 
     void consume(TokenType type,const string& msg){
-        if(peek().type==type){current++;return;}
+        if(peek().type==type){
+            current++;
+            return;
+        }
         throw runtime_error(msg);
     }
 
-    // GRAMMAR IMPLEMENTATION
-    // expression → equality
+    /* ================= STATEMENTS ================= */
+
+    unique_ptr<Stmt> statement(){
+        if(match({TokenType::IF})) return ifStatement();
+        if(match({TokenType::PRINT})) return printStatement();
+        if(match({TokenType::LBRACE})) return blockStatement();
+        return expressionStatement();
+    }
+
+    unique_ptr<Stmt> ifStatement(){
+        consume(TokenType::LPAREN,"Expected '(' after if");
+        auto condition=expression();
+        consume(TokenType::RPAREN,"Expected ')' after condition");
+
+        auto thenBranch=statement();
+        unique_ptr<Stmt> elseBranch=nullptr;
+
+        if(match({TokenType::ELSE})){
+            elseBranch=statement();
+        }
+
+        return make_unique<IfStmt>(
+            move(condition),
+            move(thenBranch),
+            move(elseBranch)
+        );
+    }
+
+    unique_ptr<Stmt> blockStatement(){
+        auto block=make_unique<BlockStmt>();
+        while(!match({TokenType::RBRACE})){
+            block->stmts.push_back(statement());
+        }
+        return block;
+    }
+
+    unique_ptr<Stmt> printStatement(){
+        auto value=expression();
+        consume(TokenType::SEMICOLON,"Expected ';' after print");
+        return make_unique<PrintStmt>(move(value));
+    }
+
+    unique_ptr<Stmt> expressionStatement(){
+        auto expr=expression();
+        consume(TokenType::SEMICOLON,"Expected ';' after expression");
+        return make_unique<ExprStmt>(move(expr));
+    }
+
+    /* ================= EXPRESSIONS (UNCHANGED) ================= */
+
     unique_ptr<Expr> expression(){
         return equality();
     }
 
-    // equality → comparison ( (== | !=) comparison )*
     unique_ptr<Expr> equality(){
         auto expr=comparison();
         while(match({TokenType::EQUAL_EQUAL,TokenType::BANG_EQUAL})){
@@ -488,10 +545,10 @@ private:
         return expr;
     }
 
-    // comparison → term ( (< | <= | > | >=) term )*
     unique_ptr<Expr> comparison(){
         auto expr=term();
-        while(match({TokenType::LESS,TokenType::LESS_EQUAL,TokenType::GREATER,TokenType::GREATER_EQUAL})){
+        while(match({TokenType::LESS,TokenType::LESS_EQUAL,
+                     TokenType::GREATER,TokenType::GREATER_EQUAL})){
             string op=previous().lexeme;
             auto right=term();
             expr=make_unique<BinaryExpr>(op,move(expr),move(right));
@@ -499,7 +556,6 @@ private:
         return expr;
     }
 
-    // term → factor ( (+ | -) factor )*
     unique_ptr<Expr> term(){
         auto expr=factor();
         while(match({TokenType::PLUS,TokenType::MINUS})){
@@ -510,7 +566,6 @@ private:
         return expr;
     }
 
-    // factor → unary ( (* | /) unary )*
     unique_ptr<Expr> factor(){
         auto expr=unary();
         while(match({TokenType::STAR,TokenType::SLASH})){
@@ -521,7 +576,6 @@ private:
         return expr;
     }
 
-    // unary → (! | -) unary | primary
     unique_ptr<Expr> unary(){
         if(match({TokenType::BANG,TokenType::MINUS})){
             string op=previous().lexeme;
@@ -531,7 +585,6 @@ private:
         return primary();
     }
 
-    // primary → NUMBER | IDENTIFIER | '(' expression ')'
     unique_ptr<Expr> primary(){
         if(match({TokenType::NUMBER})){
             return make_unique<NumberExpr>(stod(previous().lexeme));
@@ -548,12 +601,21 @@ private:
     }
 };
 
+
 // ================== TEST DRIVER ==================
 int main(){
-    string src="x + 3 * (y - 2) <= 10 == !z";
+    string src =
+        "if (x + 1 > 10) {"
+        "   print x;"
+        "} else {"
+        "   print x + 1;"
+        "}";
+
     Lexer lx(src);
-    vector<Token> toks=lx.scanTokens();
-    Parser p(toks);
-    auto ast=p.parse();
-    ast->print();
+    Parser p(lx.scanTokens());
+    auto program = p.parseProgram();
+
+    for(auto& s:program)
+        s->print(0);
 }
+
