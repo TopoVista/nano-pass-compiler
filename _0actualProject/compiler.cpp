@@ -443,13 +443,29 @@ struct IfStmt:Stmt{
         }
     }
 };
+
+//added on day 12
+struct WhileStmt:Stmt{
+    unique_ptr<Expr> condition;
+    unique_ptr<Stmt> body;
+
+    WhileStmt(unique_ptr<Expr> c, unique_ptr<Stmt> b)
+        :condition(move(c)), body(move(b)) {}
+
+    void print(int d){
+        cout << string(d,' ') << "While\n";
+        condition->print(d+2);
+        body->print(d+2);
+    }
+};
+
+
 class Parser{
     vector<Token> tokens;
     int current=0;
 public:
     Parser(vector<Token> t):tokens(move(t)){}
 
-    // ===== NEW ENTRY POINT =====
     vector<unique_ptr<Stmt>> parseProgram(){
         vector<unique_ptr<Stmt>> program;
         while(!isAtEnd()){
@@ -484,10 +500,19 @@ private:
     /* ================= STATEMENTS ================= */
 
     unique_ptr<Stmt> statement(){
-        if(match({TokenType::IF})) return ifStatement();
+        if(match({TokenType::IF}))    return ifStatement();
+        if(match({TokenType::WHILE})) return whileStatement();   // ⭐ NEW
         if(match({TokenType::PRINT})) return printStatement();
-        if(match({TokenType::LBRACE})) return blockStatement();
+        if(match({TokenType::LBRACE}))return blockStatement();
         return expressionStatement();
+    }
+
+    unique_ptr<Stmt> whileStatement(){
+        consume(TokenType::LPAREN,"Expected '(' after while");
+        auto condition = expression();
+        consume(TokenType::RPAREN,"Expected ')' after condition");
+        auto body = statement();
+        return make_unique<WhileStmt>(move(condition), move(body));
     }
 
     unique_ptr<Stmt> ifStatement(){
@@ -498,9 +523,8 @@ private:
         auto thenBranch=statement();
         unique_ptr<Stmt> elseBranch=nullptr;
 
-        if(match({TokenType::ELSE})){
+        if(match({TokenType::ELSE}))
             elseBranch=statement();
-        }
 
         return make_unique<IfStmt>(
             move(condition),
@@ -531,9 +555,7 @@ private:
 
     /* ================= EXPRESSIONS (UNCHANGED) ================= */
 
-    unique_ptr<Expr> expression(){
-        return equality();
-    }
+    unique_ptr<Expr> expression(){ return equality(); }
 
     unique_ptr<Expr> equality(){
         auto expr=comparison();
@@ -586,15 +608,13 @@ private:
     }
 
     unique_ptr<Expr> primary(){
-        if(match({TokenType::NUMBER})){
+        if(match({TokenType::NUMBER}))
             return make_unique<NumberExpr>(stod(previous().lexeme));
-        }
-        if(match({TokenType::IDENTIFIER})){
+        if(match({TokenType::IDENTIFIER}))
             return make_unique<VariableExpr>(previous().lexeme);
-        }
         if(match({TokenType::LPAREN})){
             auto expr=expression();
-            consume(TokenType::RPAREN,"Expected ')' after expression");
+            consume(TokenType::RPAREN,"Expected ')'");
             return expr;
         }
         throw runtime_error("Expected expression");
@@ -602,12 +622,14 @@ private:
 };
 
 
+
 // ================== TEST DRIVER ==================
 int main(){
     string src =
-        "if (x + 1 > 10) {"
-        "   print x;"
-        "} else {"
+        "while (x < 10) {"
+        "   if (x == 5) {"
+        "       print x;"
+        "   }"
         "   print x + 1;"
         "}";
 
@@ -618,4 +640,5 @@ int main(){
     for(auto& s:program)
         s->print(0);
 }
+
 
