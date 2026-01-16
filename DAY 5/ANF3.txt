@@ -1,0 +1,182 @@
+Here’s a **clean, structured, and highly teachable version** of your provided content 👇
+
+---
+
+## ⚙️ Connection Between A-Normal Form and Assembly Code
+
+### 🔗 1. The Relationship
+
+A-Normal Form (ANF) brings **explicit sequencing** to computations — much like **assembly code**, where **every operation happens step by step** and **each intermediate result has a name (register or variable)**.
+
+Let’s see how this looks in practice.
+
+---
+
+### 🔸 2. Example: Celsius Conversion
+
+#### **A-Normal Form (Scheme)**
+
+```scheme
+(define (celsius F)
+  (let ((t1 (/ 5 9)))
+    (let ((t2 (- F 32)))
+      (* t1 t2))))
+```
+
+#### **Equivalent Assembly Pseudocode**
+
+```assembly
+celsius:
+    mov F, a0      ; input F stored in a0
+    div t1, 5, 9   ; t1 = 5 / 9
+    sub t2, F, 32  ; t2 = F - 32
+    mul rv, t1, t2 ; rv = t1 * t2
+    ret rv         ; return rv
+```
+
+---
+
+### 🧠 Key Insight
+
+> The **A-Normalization process** enforces a clear **evaluation order**,
+> just like in assembly — every computation step is **explicit** and **named**.
+
+| Concept                | A-Normal Form      | Assembly Equivalent          |
+| ---------------------- | ------------------ | ---------------------------- |
+| Intermediate variables | `let` bindings     | registers (`t1`, `t2`, etc.) |
+| Sequential execution   | Nested `let` order | Instruction order            |
+| Final result           | Tail expression    | Return register (`rv`)       |
+
+So, ANF acts as a **bridge** between high-level source code and low-level assembly — it makes **control flow and data flow explicit**.
+
+---
+
+## 🔄 Transforming to A-Normal Form
+
+The **original A-Normalization algorithm** was proposed by *Flanagan et al.* in 1993.
+It was written in **Scheme**, and even today, it still works efficiently and can be easily extended.
+
+Here’s a modernized version written in **Racket (a Scheme dialect):**
+
+---
+
+### 🧩 1. Detecting Atomic Values
+
+```scheme
+(define (Value? M)
+  (match M
+    [`(quote ,_)         #t]
+    [(? number?)         #t]
+    [(? boolean?)        #t]
+    [(? string?)         #t]
+    [(? char?)           #t]
+    [(? symbol?)         #t]
+    [(or '+ '- '* '/ '=) #t]
+    [else                #f]))
+```
+
+✅ **Purpose:**
+Checks if an expression `M` is *atomic* — meaning it’s already simple and doesn’t need transformation.
+
+---
+
+### 🧩 2. The Entry Point
+
+```scheme
+(define (normalize-term M)
+  (normalize M (λ (x) x)))
+```
+
+This starts the normalization process on expression `M`.
+It uses a **continuation** `(λ (x) x)` — meaning “once normalized, return the result directly.”
+
+---
+
+### 🧩 3. The Main Normalization Function
+
+```scheme
+(define (normalize M k)
+  (match M
+    [`(λ ,params ,body)
+      (k `(λ ,params ,(normalize-term body)))]
+    
+    [`(let ([,x ,M1]) ,M2)
+      (normalize M1 (λ (N1)
+        `(let ([,x ,N1])
+           ,(normalize M2 k))))]
+
+    [`(if ,M1 ,M2 ,M3)
+      (normalize-name M1 (λ (t)
+        (k `(if ,t ,(normalize-term M2)
+                   ,(normalize-term M3)))))]
+
+    [`(,Fn . ,M*)
+      (normalize-name Fn (λ (t)
+        (normalize-name* M* (λ (t*)
+          (k `(,t . ,t*))))))]
+
+    [(? Value?)
+      (k M)]))
+```
+
+#### 🧭 Explanation:
+
+* **Lambda case:** Normalizes the body of the function.
+* **Let case:** Normalizes the bound expression, then continues to the next.
+* **If case:** Normalizes the condition into a name (`t`), then processes both branches.
+* **Function call case:** Normalizes both the function and its arguments.
+* **Atomic case:** If already atomic, just return it.
+
+---
+
+### 🧩 4. Handling Non-Atomic Names
+
+```scheme
+(define (normalize-name M k)
+  (normalize M (λ (N)
+    (if (Value? N)
+        (k N)
+        (let ([t (gensym)])
+          `(let ([,t ,N]) ,(k t)))))))
+```
+
+✅ **Idea:**
+If an expression isn’t atomic, **create a fresh variable (`t`)**, bind the computation to it, and pass the variable forward.
+
+---
+
+### 🧩 5. Handling Lists of Expressions (Arguments)
+
+```scheme
+(define (normalize-name* M* k)
+  (if (null? M*)
+      (k '())
+      (normalize-name (car M*) (λ (t)
+        (normalize-name* (cdr M*) (λ (t*)
+          (k `(,t . ,t*))))))))
+```
+
+✅ **Idea:**
+Recursively normalizes each argument in a list of expressions, making sure **all arguments** are atomic before the function call is rebuilt.
+
+---
+
+## 🧾 Summary of the Algorithm
+
+| Function          | Purpose                                                      |
+| ----------------- | ------------------------------------------------------------ |
+| `Value?`          | Checks if an expression is atomic                            |
+| `normalize-term`  | Entry point for normalization                                |
+| `normalize`       | Core recursive transformer                                   |
+| `normalize-name`  | Forces expression to become atomic (creates `let` if needed) |
+| `normalize-name*` | Normalizes argument lists for function calls                 |
+
+---
+
+## 💬 In One Line:
+
+> **A-Normalization** transforms any high-level expression into a sequence of explicit, named computations — mirroring the structure of **assembly code** and laying the foundation for **efficient code generation**.
+
+---
+
+Would you like me to show **step-by-step transformations** of a few example expressions (e.g. `(f (+ x 3))` → ANF → assembly-like sequence)?

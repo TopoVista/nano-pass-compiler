@@ -1,0 +1,157 @@
+Here’s your content turned into a **clean, structured, and easy-to-understand explanation** 👇
+
+---
+
+## ⚙️ A-Normal Form (ANF)
+
+### 🧩 Core Idea
+
+**A-Normal Form (ANF)** is a syntactic discipline that **divides expressions** into two clear categories:
+
+1. **Atomic Expressions (simple, safe, guaranteed to finish)**
+2. **Complex Expressions (must be simplified or “let-bound”)**
+
+This makes evaluation **explicitly step-by-step** — every complex computation gets a name before use.
+
+---
+
+### 🔸 1. Atomic Expressions
+
+An expression is **atomic** if it:
+
+* ✅ **Always terminates**
+* ⚡ **Has no side effects**
+* 🧭 **Has no control effects** (does not alter the flow, e.g. via exceptions or jumps)
+* 🚫 **Cannot produce an error**
+
+**Examples of atomic expressions:**
+
+```
+42
+"x"
+true
+x
++
+(lambda (x) (* x x))
+```
+
+In short — atomic expressions are **safe, simple values or functions**.
+
+---
+
+### 🔸 2. Complex Expressions
+
+A **complex expression** is any computation that doesn’t meet the atomic conditions.
+In ANF, these **must either:**
+
+* Be **bound to a variable** using `let`, or
+* Appear **in tail position** (the final expression in a function body).
+
+This rule ensures that **every intermediate computation** is made explicit and ordered.
+
+---
+
+### 🧾 3. Grammar of A-Normal Form
+
+Adapted from *Flanagan et al., “The Essence of Compiling with Continuations”*:
+
+```
+<aexp> ::= NUMBER | STRING | VAR | BOOLEAN | PRIMOP 
+         | (lambda (VAR ...) <exp>)
+
+<cexp> ::= (<aexp> <aexp> ...)
+         | (if <aexp> <exp> <exp>)
+
+<exp>  ::= (let ([VAR <cexp>]) <exp>)
+         | <cexp>
+         | <aexp>
+```
+
+Let’s break that down:
+
+| Symbol   | Meaning                                                                 |
+| -------- | ----------------------------------------------------------------------- |
+| `<aexp>` | Atomic expression (constants, variables, lambdas, primitive operations) |
+| `<cexp>` | Complex expression (function application, conditionals)                 |
+| `<exp>`  | Full expression (can contain `let` bindings, complex or atomic forms)   |
+
+---
+
+### 🧮 4. Examples
+
+#### Example 1: Nested Function Calls
+
+**Original (not in ANF):**
+
+```
+((f g) (h x) 3)
+```
+
+**In A-Normal Form:**
+
+```
+(let ([t0 (f g)])
+  (let ([t1 (h x)])
+    (t0 t1 3)))
+```
+
+👉 Here, both `(f g)` and `(h x)` are **complex**, so they are **let-bound** before use.
+
+---
+
+#### Example 2: Factorial Function
+
+**Original:**
+
+```scheme
+(define (f n)
+  (if (= n 0)
+      1
+      (* n (f (- n 1)))))
+
+(f 20)
+```
+
+**A-Normal Form:**
+
+```scheme
+(define f
+  (λ (n)
+    (let ((g1478 (= n 0)))
+      (if g1478
+          1
+          (let ((g1479 (- n 1)))
+            (let ((g1480 (f g1479)))
+              (* n g1480)))))))
+(f 20)
+```
+
+Step-by-step breakdown:
+
+1. `(= n 0)` → bound as `g1478`
+2. `(- n 1)` → bound as `g1479`
+3. `(f g1479)` → bound as `g1480`
+4. Finally, `(* n g1480)` is used as the result.
+
+Each intermediate computation is **explicit** and **ordered** via nested `let` bindings.
+
+---
+
+### 🧠 Summary
+
+| Concept                | Meaning                                                         |
+| ---------------------- | --------------------------------------------------------------- |
+| **Atomic Expression**  | Simple, guaranteed to terminate (numbers, vars, lambdas)        |
+| **Complex Expression** | Computation needing evaluation (applications, ifs)              |
+| **Rule**               | Complex expressions must be `let`-bound unless in tail position |
+| **Goal**               | Make all evaluation order explicit and simple                   |
+
+---
+
+### 💬 In One Line:
+
+> **A-Normal Form** makes all computation steps explicit — every non-trivial expression gets a name, making the program easier to analyze, optimize, and compile.
+
+---
+
+Would you like me to now teach the **A-Normalization process** — i.e. how to automatically transform any expression into ANF (with rules and examples)?

@@ -1,0 +1,93 @@
+Perfect 👌 Let’s make this **task crystal clear** first:
+
+You’ll take **3 normal Scheme-like expressions** and convert them into **A-Normal Form (ANF)** — meaning:
+✅ every *complex expression* (function call, arithmetic op, `if`, etc.) must be **let-bound**,
+✅ only *atomic expressions* (variables, constants, lambdas, etc.) can appear as arguments,
+✅ non-atomic expressions appear **only in `let` bindings or in tail position**.
+
+---
+
+Let’s go step by step through **3 example conversions** 👇
+
+---
+
+### 🧩 **Example 1**
+
+**Original:**
+
+```scheme
+(+ (* 2 3) (+ 4 5))
+```
+
+**Step 1:**
+Both `(* 2 3)` and `(+ 4 5)` are complex, so let-bind them.
+
+**A-Normal Form:**
+
+```scheme
+(let ([t0 (* 2 3)])
+  (let ([t1 (+ 4 5)])
+    (+ t0 t1)))
+```
+
+---
+
+### 🧩 **Example 2**
+
+**Original:**
+
+```scheme
+(if (> (+ x 1) 10) (* y 2) (/ z 3))
+```
+
+**Step 1:**
+`(+ x 1)` and `(> (+ x 1) 10)` are complex → must be let-bound.
+
+**A-Normal Form:**
+
+```scheme
+(let ([t0 (+ x 1)])
+  (let ([t1 (> t0 10)])
+    (if t1
+        (let ([t2 (* y 2)]) t2)
+        (let ([t3 (/ z 3)]) t3))))
+```
+
+---
+
+### 🧩 **Example 3**
+
+**Original:**
+
+```scheme
+(f (g x) (h (+ y 1)))
+```
+
+**Step 1:**
+`(g x)` and `(h (+ y 1))` are complex, also `(+ y 1)` is complex.
+
+**A-Normal Form:**
+
+```scheme
+(let ([t0 (g x)])
+  (let ([t1 (+ y 1)])
+    (let ([t2 (h t1)])
+      (f t0 t2))))
+```
+
+---
+
+### 🔍 Quick Recap
+
+| Expression Type               | Allowed directly? | If not, do this           |
+| ----------------------------- | ----------------- | ------------------------- |
+| Constant (`1`, `#t`, `"abc"`) | ✅                 | —                         |
+| Variable (`x`, `y`)           | ✅                 | —                         |
+| Lambda (`(λ (...) ...)`)      | ✅                 | —                         |
+| Function Call (`(f x)`)       | ❌                 | Bind it with `let`        |
+| Arithmetic (`(+ x y)`)        | ❌                 | Bind it with `let`        |
+| If condition                  | ❌                 | Bind test expr with `let` |
+
+---
+
+Would you like me to now **check or correct your own 3 expressions** when you try converting them to ANF?
