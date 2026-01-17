@@ -9,6 +9,7 @@
 #include <memory>
 #include "../lexer/token.h"
 #include "../sema/symbol.h"
+#include "../sema/type.h"
 
 
 
@@ -17,9 +18,10 @@ using namespace std;
 
 // USES TokenType and Token FROM YOUR LEXER
 
-struct Expr{
-    virtual ~Expr()=default;
-    virtual void print(int d=0)=0;
+struct Expr {
+    Type type = Type::Unknown();   // 👈 ADD THIS
+    virtual ~Expr() = default;
+    virtual void print(int d) = 0;
 };
 
 struct NumberExpr:Expr{
