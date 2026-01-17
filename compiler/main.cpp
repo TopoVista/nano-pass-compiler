@@ -13,39 +13,35 @@
 #include "passes\desugar_if_else.h"
 #include "parser\parser.h"
 #include "passes\desugar_inc_dec.h"
+#include "passes\anf_pass.h"
 
-using namespace std;
 
 // ================== TEST DRIVER ==================
+#include "passes/anf_pass.h"
 
 int main() {
-    vector<unique_ptr<Stmt>> program;
+    auto stmt = make_unique<PrintStmt>(
+        make_unique<BinaryExpr>(
+            "+",
+            make_unique<VariableExpr>("a"),
+            make_unique<BinaryExpr>(
+                "*",
+                make_unique<VariableExpr>("b"),
+                make_unique<VariableExpr>("c")
+            )
+        )
+    );
 
-    program.push_back(make_unique<ExprStmt>(
-        make_unique<UnaryExpr>("++", make_unique<VariableExpr>("x"))
-    ));
+    cout << "=== BEFORE ANF ===\n";
+    stmt->print(0);
 
-    program.push_back(make_unique<ExprStmt>(
-        make_unique<UnaryExpr>("--", make_unique<VariableExpr>("y"))
-    ));
+    ANFPass pass;
+    auto lowered = pass.transformStmt(move(stmt));
 
-    program.push_back(make_unique<PrintStmt>(
-        make_unique<VariableExpr>("x")
-    ));
-
-    cout << "=== BEFORE ++/-- DESUGARING ===\n";
-    for (auto& s : program) s->print(0);
-
-    DesugarIncDecPass pass;
-    vector<unique_ptr<Stmt>> lowered;
-
-    for (auto& s : program)
-        lowered.push_back(pass.transformStmt(move(s)));
-
-    cout << "\n=== AFTER ++/-- DESUGARING ===\n";
-    for (auto& s : lowered) s->print(0);
+    cout << "\n=== AFTER ANF ===\n";
+    for (auto& s : lowered)
+        s->print(0);
 }
-
 
 
 
