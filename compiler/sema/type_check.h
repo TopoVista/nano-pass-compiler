@@ -37,7 +37,7 @@ struct TypeCheckPass {
         else if (auto s = dynamic_cast<IfStmt*>(stmt)) {
             Type cond = checkExpr(s->condition.get());
             if (cond.kind != TypeKind::Bool)
-                throw runtime_error("Type error: The condition in an 'if' statement must evaluate to a boolean value (true or false).");
+                errorAt(s->condition->loc, "Type error: The condition in an 'if' statement must be boolean");
             checkStmt(s->thenBranch.get());
             if (s->elseBranch)
                 checkStmt(s->elseBranch.get());
@@ -46,7 +46,7 @@ struct TypeCheckPass {
         else if (auto s = dynamic_cast<WhileStmt*>(stmt)) {
             Type cond = checkExpr(s->condition.get());
             if (cond.kind != TypeKind::Bool)
-                throw runtime_error("Type error: The condition in a 'while' loop must evaluate to a boolean value (true or false).");
+                errorAt(s->condition->loc, "Type error: The condition in a 'while' loop must be boolean");
             checkStmt(s->body.get());
         }
 
@@ -86,7 +86,7 @@ struct TypeCheckPass {
             }
 
             if (!e->symbol)
-                throw runtime_error("Semantic error: Variable '" + e->name + "' is used but has not been declared in the current scope. Please ensure it is defined before use.");
+                errorAt(e->loc, "Use of undeclared variable: " + e->name);
 
             e->type = e->symbol->type;
             return e->type;
@@ -98,12 +98,12 @@ struct TypeCheckPass {
 
             if (e->op == "!") {
                 if (rt.kind != TypeKind::Bool)
-                    throw runtime_error("Type error: The logical NOT operator '!' can only be applied to boolean expressions.");
+                    errorAt(e->loc, "Type error: '!' can only be applied to boolean expressions");
                 e->type = Type::Bool();
             }
             else if (e->op == "-") {
                 if (!isNumeric(rt))
-                    throw runtime_error("Type error: The unary minus operator '-' can only be applied to numeric types (integers or floats).");
+                    errorAt(e->loc, "Type error: unary '-' expects numeric");
                 e->type = rt;
             }
 
@@ -119,7 +119,7 @@ struct TypeCheckPass {
                 e->op == "/" || e->op == "%") {
 
                 if (!isNumeric(lt) || !isNumeric(rt))
-                    throw runtime_error("Type error: Arithmetic operators (+, -, *, /, %) require both operands to be numeric types (integers or floats).");
+                    errorAt(e->loc, "Type error: arithmetic expects numeric types");
 
                 e->type = (lt.kind == TypeKind::Float || rt.kind == TypeKind::Float)
                           ? Type::Float()
@@ -130,26 +130,26 @@ struct TypeCheckPass {
                      e->op == ">" || e->op == ">=") {
 
                 if (!isNumeric(lt) || !isNumeric(rt))
-                    throw runtime_error("Type error: Comparison operators (<, <=, >, >=) require both operands to be numeric types (integers or floats).");
+                    errorAt(e->loc, "Type error: comparison expects numeric types");
 
                 e->type = Type::Bool();
             }
 
             else if (e->op == "==" || e->op == "!=") {
                 if (!sameType(lt, rt))
-                    throw runtime_error("Type error: Equality operators (==, !=) require both operands to have the same type.");
+                    errorAt(e->loc, "Type error: equality operands must match");
                 e->type = Type::Bool();
             }
 
             else if (e->op == "=") {
                 auto v = dynamic_cast<VariableExpr*>(e->left.get());
                 if (!v)
-                    throw runtime_error("Semantic error: The left-hand side of an assignment (=) must be a valid variable or assignable expression.");
+                    errorAt(e->loc, "Semantic error: left-hand side of assignment must be a variable");
 
                 if (v->symbol->type.kind == TypeKind::Unknown)
                     v->symbol->type = rt;
                 else if (!sameType(v->symbol->type, rt))
-                    throw runtime_error("Type error: Assignment (=) requires the right-hand side to match the type of the left-hand side variable.");
+                    errorAt(e->loc, "Type error: assignment type mismatch");
 
                 e->type = rt;
             }

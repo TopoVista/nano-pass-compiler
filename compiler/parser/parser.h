@@ -78,45 +78,49 @@ private:
         auto condition = expression();
         consume(TokenType::RPAREN,"Expected ')' after condition");
         auto body = statement();
-        return make_unique<WhileStmt>(move(condition), move(body));
+        auto e = make_unique<WhileStmt>(move(condition), move(body));
+        e->loc = { previous().line, previous().col };
+        return e;
     }
 
     unique_ptr<Stmt> forStatement() {
-    	consume(TokenType::LPAREN, "Expected '(' after 'for'");
+        consume(TokenType::LPAREN, "Expected '(' after 'for'");
 
         // init
-	    unique_ptr<Stmt> init = nullptr;
-    	if (!check(TokenType::SEMICOLON)) {
-    		auto initExpr = expression();
-    		consume(TokenType::SEMICOLON, "Expected ';' after for initializer");
-    		init = make_unique<ExprStmt>(move(initExpr));
-    	} else {
-    		consume(TokenType::SEMICOLON, "Expected ';'");
-    	}
+        unique_ptr<Stmt> init = nullptr;
+        if (!check(TokenType::SEMICOLON)) {
+            auto initExpr = expression();
+            consume(TokenType::SEMICOLON, "Expected ';' after for initializer");
+            init = make_unique<ExprStmt>(move(initExpr));
+        } else {
+            consume(TokenType::SEMICOLON, "Expected ';'");
+        }
 
     // condition
-    	unique_ptr<Expr> condition = nullptr;
-    	if (!check(TokenType::SEMICOLON)) {
-    		condition = expression();
-    	}
-    	consume(TokenType::SEMICOLON, "Expected ';' after loop condition");
+        unique_ptr<Expr> condition = nullptr;
+        if (!check(TokenType::SEMICOLON)) {
+            condition = expression();
+        }
+        consume(TokenType::SEMICOLON, "Expected ';' after loop condition");
 
     // increment (expression ONLY, no semicolon)
-    	unique_ptr<Expr> increment = nullptr;
-    	if (!check(TokenType::RPAREN)) {
-    		increment = expression();
-    	}
+        unique_ptr<Expr> increment = nullptr;
+        if (!check(TokenType::RPAREN)) {
+            increment = expression();
+        }
 
-    	consume(TokenType::RPAREN, "Expected ')' after for clauses");
+        consume(TokenType::RPAREN, "Expected ')' after for clauses");
 
-    	auto body = statement();
+        auto body = statement();
 
-    	return make_unique<ForStmt>(
-    	        move(init),
-    	        move(condition),
-    	        move(increment),
-    	        move(body)
-    	);
+        auto e = make_unique<ForStmt>(
+                move(init),
+                move(condition),
+                move(increment),
+                move(body)
+        );
+        e->loc = { previous().line, previous().col };
+        return e;
     }
 
 
@@ -131,11 +135,13 @@ private:
         if(match({TokenType::ELSE}))
             elseBranch=statement();
 
-        return make_unique<IfStmt>(
+        auto e = make_unique<IfStmt>(
             move(condition),
             move(thenBranch),
             move(elseBranch)
         );
+        e->loc = { previous().line, previous().col };
+        return e;
     }
 
     unique_ptr<Stmt> blockStatement(){
@@ -149,7 +155,9 @@ private:
     unique_ptr<Stmt> printStatement(){
         auto value=expression();
         consume(TokenType::SEMICOLON,"Expected ';' after print");
-        return make_unique<PrintStmt>(move(value));
+        auto e = make_unique<PrintStmt>(move(value));
+        e->loc = { previous().line, previous().col };
+        return e;
     }
 
     unique_ptr<Stmt> expressionStatement(){
@@ -160,28 +168,28 @@ private:
 
     //added on day 13
     unique_ptr<Stmt> functionStatement() {
-	    Token name=peek();
-	    consume(TokenType::IDENTIFIER,"Expected function name");
+        Token name=peek();
+        consume(TokenType::IDENTIFIER,"Expected function name");
 
-	    consume(TokenType::LPAREN,"Expected '(' after function name");
-	    vector<string> params;
+        consume(TokenType::LPAREN,"Expected '(' after function name");
+        vector<string> params;
 
-	    if(!match({TokenType::RPAREN})) {
-		    do {
-			    Token p=peek();
-			    consume(TokenType::IDENTIFIER,"Expected parameter name");
-		    	params.push_back(p.lexeme);
-		    } while(match({TokenType::COMMA}));
-		    consume(TokenType::RPAREN,"Expected ')'");
-	    }
+        if(!match({TokenType::RPAREN})) {
+            do {
+                Token p=peek();
+                consume(TokenType::IDENTIFIER,"Expected parameter name");
+            	params.push_back(p.lexeme);
+            } while(match({TokenType::COMMA}));
+            consume(TokenType::RPAREN,"Expected ')'");
+        }
 
-	    consume(TokenType::LBRACE,"Expected '{' before function body");
-	    auto body=blockStatement();
-	    return make_unique<FunctionStmt>(
-	        name.lexeme,
-	        move(params),
-	        unique_ptr<BlockStmt>(static_cast<BlockStmt*>(body.release()))
-	    );
+        consume(TokenType::LBRACE,"Expected '{' before function body");
+        auto body=blockStatement();
+        return make_unique<FunctionStmt>(
+            name.lexeme,
+            move(params),
+            unique_ptr<BlockStmt>(static_cast<BlockStmt*>(body.release()))
+        );
     }
 
     unique_ptr<Stmt> returnStatement(){
@@ -190,7 +198,9 @@ private:
             value=expression();
             consume(TokenType::SEMICOLON,"Expected ';' after return");
         }
-        return make_unique<ReturnStmt>(move(value));
+        auto e = make_unique<ReturnStmt>(move(value));
+        e->loc = { previous().line, previous().col };
+        return e;
     }
 
 
@@ -203,7 +213,9 @@ private:
         while(match({TokenType::EQUAL_EQUAL,TokenType::BANG_EQUAL})){
             string op=previous().lexeme;
             auto right=comparison();
-            expr=make_unique<BinaryExpr>(op,move(expr),move(right));
+            auto e = make_unique<BinaryExpr>(op,move(expr),move(right));
+            e->loc = { previous().line, previous().col };
+            expr = move(e);
         }
         return expr;
     }
@@ -214,7 +226,9 @@ private:
                     TokenType::GREATER,TokenType::GREATER_EQUAL})){
             string op=previous().lexeme;
             auto right=term();
-            expr=make_unique<BinaryExpr>(op,move(expr),move(right));
+            auto e = make_unique<BinaryExpr>(op,move(expr),move(right));
+            e->loc = { previous().line, previous().col };
+            expr = move(e);
         }
         return expr;
     }
@@ -224,7 +238,9 @@ private:
         while(match({TokenType::PLUS,TokenType::MINUS})){
             string op=previous().lexeme;
             auto right=factor();
-            expr=make_unique<BinaryExpr>(op,move(expr),move(right));
+            auto e = make_unique<BinaryExpr>(op,move(expr),move(right));
+            e->loc = { previous().line, previous().col };
+            expr = move(e);
         }
         return expr;
     }
@@ -238,7 +254,9 @@ private:
         })) {
             string op = previous().lexeme;
             auto right = unary();
-            expr = make_unique<BinaryExpr>(op, move(expr), move(right));
+            auto e = make_unique<BinaryExpr>(op, move(expr), move(right));
+            e->loc = { previous().line, previous().col };
+            expr = move(e);
         }
         return expr;
     }
@@ -247,7 +265,9 @@ private:
         if(match({TokenType::BANG,TokenType::MINUS})){
             string op=previous().lexeme;
             auto right=unary();
-            return make_unique<UnaryExpr>(op,move(right));
+            auto e = make_unique<UnaryExpr>(op,move(right));
+            e->loc = { previous().line, previous().col };
+            return e;
         }
         return primary();
     }
@@ -256,30 +276,37 @@ private:
         if (match({TokenType::STRING})) {
             return make_unique<StringExpr>(previous().lexeme);
         }
-	    if(match({TokenType::NUMBER}))
-		    return make_unique<NumberExpr>(stod(previous().lexeme));
-    	if(match({TokenType::IDENTIFIER})) {
-	    	string name=previous().lexeme;
+        if(match({TokenType::NUMBER})) {
+            auto e = make_unique<NumberExpr>(stod(previous().lexeme));
+            e->loc = { previous().line, previous().col };
+            return e;
+        }
+        if(match({TokenType::IDENTIFIER})) {
+        	string name=previous().lexeme;
 
-	    	if(match({TokenType::LPAREN})) {
-			    vector<unique_ptr<Expr>> args;
-			    if(!match({TokenType::RPAREN})) {
-				    do {
-				    	args.push_back(expression());
-			    	} while(match({TokenType::COMMA}));
-			    	consume(TokenType::RPAREN,"Expected ')'");
-			    }
-			    return make_unique<CallExpr>(name,move(args));
-		    }
+        	if(match({TokenType::LPAREN})) {
+                vector<unique_ptr<Expr>> args;
+                if(!match({TokenType::RPAREN})) {
+                    do {
+                    	args.push_back(expression());
+                	} while(match({TokenType::COMMA}));
+                	consume(TokenType::RPAREN,"Expected ')'");
+                }
+                auto e = make_unique<CallExpr>(name,move(args));
+                e->loc = { previous().line, previous().col };
+                return e;
+            }
 
-		    return make_unique<VariableExpr>(name);
-	    }
-	    if(match({TokenType::LPAREN})) {
-	    	auto expr=expression();
-	    	consume(TokenType::RPAREN,"Expected ')'");
-	    	return expr;
-    	}
-	    throw runtime_error("Expected expression");
+            auto e = make_unique<VariableExpr>(name);
+            e->loc = { previous().line, previous().col };
+            return e;
+        }
+        if(match({TokenType::LPAREN})) {
+        	auto expr=expression();
+        	consume(TokenType::RPAREN,"Expected ')'");
+        	return expr;
+        }
+        throw runtime_error("Expected expression");
     }
 
     unique_ptr<Expr> assignment(){
@@ -293,11 +320,13 @@ private:
             if(!var)
                 throw runtime_error("Invalid assignment target");
 
-            return make_unique<BinaryExpr>(
+            auto e = make_unique<BinaryExpr>(
                 op,
                 move(expr),
                 move(value)
             );
+            e->loc = { previous().line, previous().col };
+            return e;
         }
 
         return expr;

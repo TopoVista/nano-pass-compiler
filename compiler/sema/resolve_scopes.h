@@ -6,6 +6,7 @@
 #include "../ast/stmt.h"
 #include "../ast/expr.h"
 #include "symbol_table.h"
+#include "../common/error.h"
 
 using namespace std;
 
@@ -76,7 +77,7 @@ private:
             }
             auto sym = table.lookup(e->name);
             if (!sym)
-                throw runtime_error("Use of undeclared variable: " + e->name);
+                errorAt(e->loc, "Use of undeclared variable: " + e->name);
             e->symbol = sym;
             return;
         }    
@@ -85,7 +86,7 @@ private:
             if (e->op == "=") {
                 auto var = dynamic_cast<VariableExpr*>(e->left.get());
                 if (!var)
-                throw runtime_error("Invalid assignment target");
+                errorAt(e->loc, "Invalid assignment target");
 
                 // Declare variable if not already declared
                 if (!table.lookup(var->name)) {
@@ -107,7 +108,7 @@ private:
         else if (auto e = dynamic_cast<CallExpr*>(expr)) {
             auto sym = table.lookup(e->callee);
             if (!sym)
-                throw runtime_error("Call to undeclared function: " + e->callee);
+                errorAt(e->loc, "Call to undeclared function: " + e->callee);
 
             for (auto& a : e->args)
                 resolveExpr(a.get());

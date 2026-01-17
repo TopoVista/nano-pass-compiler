@@ -41,9 +41,9 @@ int main() {
 
     // ===== SOURCE PROGRAM (INTENTIONAL ERROR) =====
     string src = R"(
-    x = 10;
-    print x + true;
+    print x;
 )";
+
 
 
 

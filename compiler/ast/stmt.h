@@ -8,14 +8,17 @@
 #include <stdexcept>   // for runtime_error
 #include <memory>
 #include "expr.h"
+#include "../common/source_location.h"
 
 using namespace std;
 
 /* ===================== STATEMENTS ===================== */
 
-struct Stmt{
-    virtual ~Stmt()=default;
-    virtual void print(int d)=0;
+
+struct Stmt {
+    SourceLocation loc;
+    virtual ~Stmt() = default;
+    virtual void print(int d) = 0;
 };
 
 struct ExprStmt:Stmt{

@@ -10,6 +10,7 @@
 #include "../lexer/token.h"
 #include "../sema/symbol.h"
 #include "../sema/type.h"
+#include "../common/source_location.h"
 
 
 
@@ -19,7 +20,8 @@ using namespace std;
 // USES TokenType and Token FROM YOUR LEXER
 
 struct Expr {
-    Type type = Type::Unknown();   // 👈 ADD THIS
+    SourceLocation loc;
+    Type type = Type::Unknown();
     virtual ~Expr() = default;
     virtual void print(int d) = 0;
 };
