@@ -8,6 +8,8 @@
 #include <stdexcept>   // for runtime_error
 #include <memory>
 #include "../lexer/token.h"
+#include "../sema/symbol.h"
+
 
 
 using namespace std;
@@ -30,11 +32,18 @@ struct NumberExpr:Expr{
 
 struct VariableExpr:Expr{
     string name;
+    Symbol* symbol = nullptr;
+
     VariableExpr(string n):name(move(n)){}
+    
     void print(int d){
-        cout<<string(d,' ')<<"Var("<<name<<")\n";
+        cout<<string(d,' ')<<"Var("<<name;
+        if(symbol)
+            cout<<" -> depth "<<symbol->depth;
+        cout<<")\n";
     }
 };
+
 
 struct UnaryExpr:Expr{
     string op;

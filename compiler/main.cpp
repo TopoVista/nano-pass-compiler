@@ -13,8 +13,14 @@
 
 #include "visualize/ast_graphviz.h"
 
+#include "sema/symbol_table.h"
+#include "sema/resolve_scopes.h"
+
+
 using namespace std;
 
+
+//================= TEST DRIVER ===================//
 int main() {
 
     // ================= SOURCE PROGRAM =================
@@ -27,10 +33,14 @@ int main() {
         "   }"
         "}";
 
-    // ================= PARSE =================
+    // ================= LEX + PARSE =================
     Lexer lx(src);
     Parser parser(lx.scanTokens());
     auto program = parser.parseProgram();
+
+    // ================= DAY 23: SCOPE RESOLUTION =================
+    ResolveScopesPass resolver;
+    resolver.resolve(program);
 
     {
         ASTGraphviz gv("01_parse.dot");
@@ -48,7 +58,7 @@ int main() {
         gv.draw(p1);
     }
 
-    // ================= PASS 2: +=, ++, -- =================
+    // ================= PASS 2: += / ++ / -- =================
     DesugarPlusAssignPass pass2;
     DesugarIncDecPass pass2b;
     vector<unique_ptr<Stmt>> p2;
@@ -90,6 +100,6 @@ int main() {
         gv.draw(anf);
     }
 
-    cout << "Day 21 recap complete.\n";
+    cout << "Day 23 scope resolution complete.\n";
     return 0;
 }
