@@ -1,12 +1,6 @@
 digraph AST {
 node [shape=box];
-node0 [label="If"];
-node1 [label="Var(true)"];
+node0 [label="PrintStmt"];
+node1 [label="Var(x)"];
 node0 -> node1;
-node2 [label="Block"];
-node0 -> node2;
-node3 [label="PrintStmt"];
-node2 -> node3;
-node4 [label="Var(false)"];
-node3 -> node4;
 }

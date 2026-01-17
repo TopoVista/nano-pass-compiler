@@ -32,6 +32,15 @@ struct NumberExpr:Expr{
     }
 };
 
+struct StringExpr : Expr {
+    string value;
+    StringExpr(string v) : value(move(v)) {}
+    void print(int d) {
+        cout << string(d,' ') << "String(\"" << value << "\")\n";
+    }
+};
+
+
 struct VariableExpr:Expr{
     string name;
     Symbol* symbol = nullptr;

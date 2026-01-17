@@ -253,6 +253,9 @@ private:
     }
 
     unique_ptr<Expr> primary() {
+        if (match({TokenType::STRING})) {
+            return make_unique<StringExpr>(previous().lexeme);
+        }
 	    if(match({TokenType::NUMBER}))
 		    return make_unique<NumberExpr>(stod(previous().lexeme));
     	if(match({TokenType::IDENTIFIER})) {

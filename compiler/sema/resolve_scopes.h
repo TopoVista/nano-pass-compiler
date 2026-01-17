@@ -70,19 +70,16 @@ private:
 
     void resolveExpr(Expr* expr) {
         if (auto e = dynamic_cast<VariableExpr*>(expr)) {
-            auto sym = table.lookup(e->name);
-            // Implicit global declaration on first use
-            if (!sym) {
-                // Declare in global scope (depth 0)
-                table.enterScope(); // ensure global exists
-                sym = table.lookup(e->name);
-                if (!sym) {
-                    table.declare(e->name, SymbolKind::Variable);
-                    sym = table.lookup(e->name);
-                }
+            // 🔥 FIX: boolean literals are NOT variables
+            if (e->name == "true" || e->name == "false") {
+                  return;  // skip scope resolution for bool literals
             }
+            auto sym = table.lookup(e->name);
+            if (!sym)
+                throw runtime_error("Use of undeclared variable: " + e->name);
             e->symbol = sym;
-        }
+            return;
+        }    
         else if (auto e = dynamic_cast<BinaryExpr*>(expr)) {
             // Handle assignment: lhs = rhs
             if (e->op == "=") {

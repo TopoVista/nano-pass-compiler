@@ -167,13 +167,12 @@ public:
                     advance();
                 }
                 if (isAtEnd())
-                    throw runtime_error("Unterminated string");
+                    throw runtime_error("Unterminated string literal");
 
                 advance(); // consume closing quote
 
-                string lex = src.substr(start + 1, current - start - 2);
-                tokens.push_back(Token{TokenType::IDENTIFIER, lex, line, col});
-                break;
+                string value = src.substr(start + 1, current - start - 2);
+                tokens.push_back(Token{TokenType::STRING, value, line, col});break;
             }
 
             default:
@@ -291,6 +290,7 @@ string tokenTypeName(TokenType t) {
     switch (t) {
     case TokenType::NUMBER: return "NUMBER";
     case TokenType::IDENTIFIER: return "IDENTIFIER";
+    case TokenType::STRING: return "STRING";
     case TokenType::LET: return "LET";
     case TokenType::FUNCTION: return "FUNCTION";
     case TokenType::IF: return "IF";

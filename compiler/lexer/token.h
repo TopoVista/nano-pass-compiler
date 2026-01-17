@@ -10,7 +10,7 @@ Lexer converts raw characters into these tokens.
 */
 
 enum class TokenType {
-    NUMBER, IDENTIFIER,
+    NUMBER, IDENTIFIER, STRING,
     LET, FUNCTION, IF, ELSE, WHILE, FOR, PRINT, RETURN,
     PLUS, MINUS, STAR, SLASH, MOD,
     EQUAL, EQUAL_EQUAL,
