@@ -444,17 +444,17 @@ struct BlockStmt:Stmt{
 };
 
 struct IfStmt:Stmt{
-    unique_ptr<Expr> cond;
-    unique_ptr<Stmt> thenB, elseB;
+    unique_ptr<Expr> condition;
+    unique_ptr<Stmt> thenBranch, elseBranch;
     IfStmt(unique_ptr<Expr>c,unique_ptr<Stmt>t,unique_ptr<Stmt>e)
-        :cond(move(c)),thenB(move(t)),elseB(move(e)){}
+        :condition(move(c)),thenBranch(move(t)),elseBranch(move(e)){}
     void print(int d){
         cout<<string(d,' ')<<"If\n";
-        cond->print(d+2);
-        thenB->print(d+2);
-        if(elseB){
+        condition->print(d+2);
+        thenBranch->print(d+2);
+        if(elseBranch){
             cout<<string(d,' ')<<"Else\n";
-            elseB->print(d+2);
+            elseBranch->print(d+2);
         }
     }
 };
@@ -500,6 +500,111 @@ struct ReturnStmt:Stmt{
         if(value) value->print(d+2);
     }
 };
+
+//added on day 15
+struct ForStmt : Stmt {
+    unique_ptr<Stmt> init;
+    unique_ptr<Expr> condition;
+    unique_ptr<Expr> increment;
+    unique_ptr<Stmt> body;
+
+    ForStmt(unique_ptr<Stmt> i,
+            unique_ptr<Expr> c,
+            unique_ptr<Expr> inc,
+            unique_ptr<Stmt> b)
+        : init(move(i)), condition(move(c)), increment(move(inc)), body(move(b)) {}
+
+    void print(int d){
+        cout<<string(d,' ')<<"For\n";
+        if(init) init->print(d+2);
+        if(condition) condition->print(d+2);
+        if(increment){
+            cout<<string(d+2,' ')<<"Increment\n";
+            increment->print(d+4);
+        }
+        body->print(d+2);
+    }
+};
+
+
+//======PASS 1 : FOR -> WHILE DESUGARING========//  
+struct DesugarForPass {
+
+    unique_ptr<Stmt> transform(unique_ptr<Stmt> stmt){
+        if(auto f = dynamic_cast<ForStmt*>(stmt.get())){
+            return desugarFor(f);
+        }
+
+        if(auto b = dynamic_cast<BlockStmt*>(stmt.get())){
+            auto nb = make_unique<BlockStmt>();
+            for(auto& s : b->stmts)
+                nb->stmts.push_back(transform(move(s)));
+            return nb;
+        }
+
+        if(auto w = dynamic_cast<WhileStmt*>(stmt.get())){
+            return make_unique<WhileStmt>(
+                move(w->condition),
+                transform(move(w->body))
+            );
+        }
+
+        if(auto i = dynamic_cast<IfStmt*>(stmt.get())){
+            return make_unique<IfStmt>(
+                move(i->condition),
+                transform(move(i->thenBranch)),
+                i->elseBranch ? transform(move(i->elseBranch)) : nullptr
+            );
+        }
+
+        // all other statements stay unchanged
+        return stmt;
+    }
+
+private:
+    unique_ptr<Stmt> desugarFor(ForStmt* f){
+        /*
+        for (init; cond; inc) body
+
+        =>
+        {
+            init;
+            while (cond) {
+                body;
+                inc;
+            }
+        }
+        */
+
+        auto block = make_unique<BlockStmt>();
+
+        if(f->init)
+            block->stmts.push_back(transform(move(f->init)));
+
+        unique_ptr<Stmt> newBody;
+
+        if(f->increment){
+            auto bodyBlock = make_unique<BlockStmt>();
+            bodyBlock->stmts.push_back(transform(move(f->body)));
+            bodyBlock->stmts.push_back(
+                make_unique<ExprStmt>(move(f->increment))
+            );
+            newBody = move(bodyBlock);
+        } else {
+            newBody = transform(move(f->body));
+        }
+
+        auto whileStmt = make_unique<WhileStmt>(
+            f->condition ? move(f->condition)
+                         : make_unique<NumberExpr>(1),
+            move(newBody)
+        );
+
+        block->stmts.push_back(move(whileStmt));
+        return block;
+    }
+};
+
 
 
 
@@ -721,22 +826,39 @@ private:
 
 // ================== TEST DRIVER ==================
 int main(){
-    string src =
-        "function fact(n) {"
-        "   if (n <= 1) {"
-        "       return 1;"
-        "   } else {"
-        "       return n * fact(n - 1);"
-        "   }"
-        "}";
+    auto forStmt = make_unique<ForStmt>(
+        make_unique<ExprStmt>(
+            make_unique<BinaryExpr>("=",
+                make_unique<VariableExpr>("i"),
+                make_unique<NumberExpr>(0)
+            )
+        ),
+        make_unique<BinaryExpr>("<",
+            make_unique<VariableExpr>("i"),
+            make_unique<NumberExpr>(3)
+        ),
+        make_unique<BinaryExpr>("=",
+            make_unique<VariableExpr>("i"),
+            make_unique<BinaryExpr>("+",
+                make_unique<VariableExpr>("i"),
+                make_unique<NumberExpr>(1)
+            )
+        ),
+        make_unique<PrintStmt>(
+            make_unique<VariableExpr>("i")
+        )
+    );
 
-    Lexer lx(src);
-    Parser p(lx.scanTokens());
-    auto program=p.parseProgram();
+    cout<<"=== BEFORE DESUGARING ===\n";
+    forStmt->print(0);
 
-    for(auto& s:program)
-        s->print(0);
+    DesugarForPass pass;
+    auto lowered = pass.transform(move(forStmt));
+
+    cout<<"\n=== AFTER DESUGARING ===\n";
+    lowered->print(0);
 }
+
 
 
 
