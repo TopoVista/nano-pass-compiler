@@ -9,43 +9,42 @@
 #include "lexer\lexer.h"
 #include "ast\expr.h"
 #include "passes\desugar_for.h"
+#include "passes\desugar_plus_assign.h"
+#include "passes\desugar_if_else.h"
+#include "parser\parser.h"
 
 using namespace std;
 
 // ================== TEST DRIVER ==================
-int main(){
-    auto forStmt = make_unique<ForStmt>(
-        make_unique<ExprStmt>(
-            make_unique<BinaryExpr>("=",
-                make_unique<VariableExpr>("i"),
-                make_unique<NumberExpr>(0)
-            )
-        ),
-        make_unique<BinaryExpr>("<",
-            make_unique<VariableExpr>("i"),
-            make_unique<NumberExpr>(3)
-        ),
-        make_unique<BinaryExpr>("=",
-            make_unique<VariableExpr>("i"),
-            make_unique<BinaryExpr>("+",
-                make_unique<VariableExpr>("i"),
-                make_unique<NumberExpr>(1)
-            )
-        ),
-        make_unique<PrintStmt>(
-            make_unique<VariableExpr>("i")
-        )
-    );
+int main() {
+    string src =
+        "if (x < 5) {"
+        "   print x;"
+        "} else {"
+        "   print x + 1;"
+        "}";
 
-    cout<<"=== BEFORE DESUGARING ===\n";
-    forStmt->print(0);
+    // 1. Lex + parse
+    Lexer lx(src);
+    Parser parser(lx.scanTokens());
+    auto program = parser.parseProgram();
 
-    DesugarForPass pass;
-    auto lowered = pass.transform(move(forStmt));
+    cout << "===== BEFORE IF/ELSE DESUGARING =====\n";
+    for (auto& s : program)
+        s->print(0);
 
-    cout<<"\n=== AFTER DESUGARING ===\n";
-    lowered->print(0);
+    // 2. Run Day 17 pass
+    DesugarIfElsePass pass;
+    vector<unique_ptr<Stmt>> lowered;
+
+    for (auto& s : program)
+        lowered.push_back(pass.transform(move(s)));
+
+    cout << "\n===== AFTER IF/ELSE DESUGARING =====\n";
+    for (auto& s : lowered)
+        s->print(0);
 }
+
 
 
 
