@@ -7,46 +7,12 @@
 #include <cctype>      // for isdigit, isalpha, isalnum
 #include <stdexcept>   // for runtime_error
 #include <memory>
+#include "../lexer/token.h"
+
 
 using namespace std;
 
-/*
-===========================================
-TOKEN TYPES
-===========================================
-Each token represents a *category* of lexeme.
-Lexer converts raw characters into these tokens.
-*/
-enum class TokenType {
-    NUMBER, IDENTIFIER,               // literals
-    LET, FUNCTION, IF, ELSE, WHILE, PRINT, RETURN, // keywords
-    PLUS, MINUS, STAR, SLASH,          // arithmetic operators
-    EQUAL, EQUAL_EQUAL,                // = and ==
-    BANG, BANG_EQUAL,                  // ! and !=
-    LESS, LESS_EQUAL,                  // < and <=
-    GREATER, GREATER_EQUAL,            // > and >=
-    SEMICOLON, COMMA,                  // separators
-    LPAREN, RPAREN,                    // ( )
-    LBRACE, RBRACE,                    // { }
-    END_OF_FILE                        // marks end of input
-};
 
-/*
-===========================================
-TOKEN STRUCTURE
-===========================================
-Each token stores:
-- type   : what kind of token it is
-- lexeme: actual text from source code
-- line   : line number (for error reporting)
-- col    : column number
-*/
-struct Token {
-    TokenType type;
-    string lexeme;
-    int line;
-    int col;
-};
 
 /*
 ===========================================
@@ -79,6 +45,7 @@ public:
         kw["if"]       = TokenType::IF;
         kw["else"]     = TokenType::ELSE;
         kw["while"]    = TokenType::WHILE;
+        kw["for"]      = TokenType::FOR;
         kw["print"]    = TokenType::PRINT;
         kw["return"]   = TokenType::RETURN;
     }
@@ -117,6 +84,7 @@ public:
             case '+': tokens.push_back(makeToken(TokenType::PLUS)); break;
             case '-': tokens.push_back(makeToken(TokenType::MINUS)); break;
             case '*': tokens.push_back(makeToken(TokenType::STAR)); break;
+            case '%': tokens.push_back(makeToken(TokenType::MOD)); break;
 
             /*
             --------------------------------
@@ -334,6 +302,7 @@ string tokenTypeName(TokenType t) {
     case TokenType::MINUS: return "MINUS";
     case TokenType::STAR: return "STAR";
     case TokenType::SLASH: return "SLASH";
+    case TokenType::MOD: return "MOD";
     case TokenType::EQUAL: return "EQUAL";
     case TokenType::EQUAL_EQUAL: return "EQUAL_EQUAL";
     case TokenType::BANG: return "BANG";

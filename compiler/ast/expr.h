@@ -7,6 +7,8 @@
 #include <cctype>      // for isdigit, isalpha, isalnum
 #include <stdexcept>   // for runtime_error
 #include <memory>
+#include "../lexer/token.h"
+
 
 using namespace std;
 

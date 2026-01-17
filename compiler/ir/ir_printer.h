@@ -8,7 +8,7 @@ using namespace std;
 
 enum class IROp {
     Assign,
-    Add, Sub, Mul, Div,
+    Add, Sub, Mul, Div, Mod,
     Print,
     Return,
     Label,
@@ -57,6 +57,10 @@ private:
             cout << i.dst << " = " << i.src1 << " / " << i.src2 << "\n";
             break;
 
+        case IROp::Mod:
+            cout << i.dst << " = " << i.src1 << " % " << i.src2 << "\n";
+            break;
+    
         case IROp::Print:
             cout << "print " << i.src1 << "\n";
             break;

@@ -10,6 +10,8 @@
 #include "../ast/stmt.h"
 #include "../ast/expr.h"
 #include "../lexer/lexer.h"
+#include "../lexer/token.h"
+
 
 
 using namespace std;
@@ -52,11 +54,18 @@ private:
         throw runtime_error(msg);
     }
 
+    bool check(TokenType type) {
+        if (isAtEnd()) return false;
+        return peek().type == type;
+    }
+
+
     /* ================= STATEMENTS ================= */
 
     unique_ptr<Stmt> statement(){
         if(match({TokenType::IF}))    return ifStatement();
         if(match({TokenType::WHILE})) return whileStatement();   // ⭐ NEW
+        if(match({TokenType::FOR}))   return forStatement();
         if(match({TokenType::PRINT})) return printStatement();
         if(match({TokenType::LBRACE}))return blockStatement();
         if(match({TokenType::FUNCTION})) return functionStatement();
@@ -71,6 +80,45 @@ private:
         auto body = statement();
         return make_unique<WhileStmt>(move(condition), move(body));
     }
+
+    unique_ptr<Stmt> forStatement() {
+    	consume(TokenType::LPAREN, "Expected '(' after 'for'");
+
+        // init
+	    unique_ptr<Stmt> init = nullptr;
+    	if (!check(TokenType::SEMICOLON)) {
+    		auto initExpr = expression();
+    		consume(TokenType::SEMICOLON, "Expected ';' after for initializer");
+    		init = make_unique<ExprStmt>(move(initExpr));
+    	} else {
+    		consume(TokenType::SEMICOLON, "Expected ';'");
+    	}
+
+    // condition
+    	unique_ptr<Expr> condition = nullptr;
+    	if (!check(TokenType::SEMICOLON)) {
+    		condition = expression();
+    	}
+    	consume(TokenType::SEMICOLON, "Expected ';' after loop condition");
+
+    // increment (expression ONLY, no semicolon)
+    	unique_ptr<Expr> increment = nullptr;
+    	if (!check(TokenType::RPAREN)) {
+    		increment = expression();
+    	}
+
+    	consume(TokenType::RPAREN, "Expected ')' after for clauses");
+
+    	auto body = statement();
+
+    	return make_unique<ForStmt>(
+    	        move(init),
+    	        move(condition),
+    	        move(increment),
+    	        move(body)
+    	);
+    }
+
 
     unique_ptr<Stmt> ifStatement(){
         consume(TokenType::LPAREN,"Expected '(' after if");
@@ -148,7 +196,7 @@ private:
 
     /* ================= EXPRESSIONS (UNCHANGED) ================= */
 
-    unique_ptr<Expr> expression(){ return equality(); }
+    unique_ptr<Expr> expression(){ return assignment(); }
 
     unique_ptr<Expr> equality(){
         auto expr=comparison();
@@ -183,10 +231,14 @@ private:
 
     unique_ptr<Expr> factor(){
         auto expr=unary();
-        while(match({TokenType::STAR,TokenType::SLASH})){
-            string op=previous().lexeme;
-            auto right=unary();
-            expr=make_unique<BinaryExpr>(op,move(expr),move(right));
+        while(match({
+            TokenType::STAR,
+            TokenType::SLASH,
+            TokenType::MOD
+        })) {
+            string op = previous().lexeme;
+            auto right = unary();
+            expr = make_unique<BinaryExpr>(op, move(expr), move(right));
         }
         return expr;
     }
@@ -226,4 +278,26 @@ private:
     	}
 	    throw runtime_error("Expected expression");
     }
+
+    unique_ptr<Expr> assignment(){
+        auto expr = equality();
+
+        if(match({TokenType::EQUAL})){
+            string op = previous().lexeme;
+            auto value = assignment();
+
+            auto var = dynamic_cast<VariableExpr*>(expr.get());
+            if(!var)
+                throw runtime_error("Invalid assignment target");
+
+            return make_unique<BinaryExpr>(
+                op,
+                move(expr),
+                move(value)
+            );
+        }
+
+        return expr;
+    }
+
 };
