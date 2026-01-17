@@ -23,6 +23,8 @@ using namespace std;
 // ===== CPS =====
 #include "passes/cps_pass.h"
 #include "ir/cps.h"
+#include "ir/cps_printer.h"
+
 
 // ============================================================
 // DEBUG PRINTER FOR CPS IR (TEMP, FOR DAY 30 ONLY)
@@ -105,13 +107,15 @@ int main() {
         cout << "\n=== CPS IR ===\n";
 
         CPSPass cps;
+        CPSPrinter printer;
 
         for (auto& s : anf) {
             auto cpsIR = cps.transformStmt(s.get(), "_halt");
-            printCPS(cpsIR.get());
+            printer.print(cpsIR.get());
         }
 
-        cout << "\nDay 30 CPS test complete.\n";
+
+        cout << "\nDay 31 CPS test complete.\n";
     }
     catch (const runtime_error& e) {
         cout << "ERROR: " << e.what() << "\n";
