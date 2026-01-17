@@ -63,14 +63,29 @@ struct TypeCheckPass {
 
     Type checkExpr(Expr* expr) {
 
+        // ================= NUMBER =================
         if (auto e = dynamic_cast<NumberExpr*>(expr)) {
             e->type = Type::Int();
+            return e->type;
         }
 
+        // ================= VARIABLE / BOOL LITERAL =================
         else if (auto e = dynamic_cast<VariableExpr*>(expr)) {
+
+            // 🔥 KEY FIX: boolean literals
+            if (e->name == "true" || e->name == "false") {
+                e->type = Type::Bool();
+                return e->type;
+            }
+
+            if (!e->symbol)
+                throw runtime_error("use of undeclared variable: " + e->name);
+
             e->type = e->symbol->type;
+            return e->type;
         }
 
+        // ================= UNARY =================
         else if (auto e = dynamic_cast<UnaryExpr*>(expr)) {
             Type rt = checkExpr(e->right.get());
 
@@ -84,8 +99,11 @@ struct TypeCheckPass {
                     throw runtime_error("unary - expects numeric");
                 e->type = rt;
             }
+
+            return e->type;
         }
 
+        // ================= BINARY =================
         else if (auto e = dynamic_cast<BinaryExpr*>(expr)) {
             Type lt = checkExpr(e->left.get());
             Type rt = checkExpr(e->right.get());
@@ -128,15 +146,20 @@ struct TypeCheckPass {
 
                 e->type = rt;
             }
+
+            return e->type;
         }
 
+        // ================= CALL =================
         else if (auto e = dynamic_cast<CallExpr*>(expr)) {
             for (auto& a : e->args)
                 checkExpr(a.get());
 
-            e->type = Type::Int(); // temporary until Day 25
+            // temporary until function typing is implemented
+            e->type = Type::Int();
+            return e->type;
         }
 
-        return expr->type;
+        return Type::Unknown();
     }
 };
