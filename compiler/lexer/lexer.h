@@ -48,6 +48,8 @@ public:
         kw["for"]      = TokenType::FOR;
         kw["print"]    = TokenType::PRINT;
         kw["return"]   = TokenType::RETURN;
+        kw["true"]     = TokenType::TRUE;
+        kw["false"]    = TokenType::FALSE;
     }
 
     /*
@@ -166,14 +168,17 @@ public:
                     }
                     advance();
                 }
+
                 if (isAtEnd())
                     throw runtime_error("Unterminated string literal");
 
-                advance(); // consume closing quote
+                advance(); // closing "
 
                 string value = src.substr(start + 1, current - start - 2);
-                tokens.push_back(Token{TokenType::STRING, value, line, col});break;
+                tokens.push_back(Token{TokenType::STRING, value, line, col});
+                break;
             }
+
 
             default:
                 if (isdigit(c)) {

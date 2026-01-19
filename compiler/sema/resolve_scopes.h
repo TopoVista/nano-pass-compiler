@@ -6,7 +6,6 @@
 #include "../ast/stmt.h"
 #include "../ast/expr.h"
 #include "symbol_table.h"
-#include "../common/error.h"
 
 using namespace std;
 
@@ -71,22 +70,23 @@ private:
 
     void resolveExpr(Expr* expr) {
         if (auto e = dynamic_cast<VariableExpr*>(expr)) {
-            // 🔥 FIX: boolean literals are NOT variables
-            if (e->name == "true" || e->name == "false") {
-                  return;  // skip scope resolution for bool literals
-            }
             auto sym = table.lookup(e->name);
             if (!sym)
-                errorAt(e->loc, "Use of undeclared variable: " + e->name);
+                throw runtime_error(
+                    "Error at line " + to_string(e->loc.line) +
+                    ", column " + to_string(e->loc.col) +
+                    ": Use of undeclared variable '" + e->name + "'"
+                );
             e->symbol = sym;
             return;
-        }    
+        }
+
         else if (auto e = dynamic_cast<BinaryExpr*>(expr)) {
             // Handle assignment: lhs = rhs
             if (e->op == "=") {
                 auto var = dynamic_cast<VariableExpr*>(e->left.get());
                 if (!var)
-                errorAt(e->loc, "Invalid assignment target");
+                throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Invalid assignment target");
 
                 // Declare variable if not already declared
                 if (!table.lookup(var->name)) {
@@ -108,7 +108,7 @@ private:
         else if (auto e = dynamic_cast<CallExpr*>(expr)) {
             auto sym = table.lookup(e->callee);
             if (!sym)
-                errorAt(e->loc, "Call to undeclared function: " + e->callee);
+                throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Call to undeclared function '" + e->callee + "'");
 
             for (auto& a : e->args)
                 resolveExpr(a.get());

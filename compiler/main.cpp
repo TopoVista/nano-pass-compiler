@@ -25,101 +25,87 @@ using namespace std;
 #include "ir/cps.h"
 #include "ir/cps_printer.h"
 
-
-// ============================================================
-// DEBUG PRINTER FOR CPS IR (TEMP, FOR DAY 30 ONLY)
-// ============================================================
-void printCPS(CPSExpr* e, int d = 0) {
-    string pad(d, ' ');
-
-    if (auto x = dynamic_cast<CPSCall*>(e)) {
-        cout << pad << "Call " << x->func << "(";
-        for (auto& a : x->args) cout << a << " ";
-        cout << ")\n";
-    }
-    else if (auto x = dynamic_cast<CPSLet*>(e)) {
-        cout << pad << "Let " << x->var << " =\n";
-        printCPS(x->rhs.get(), d + 2);
-        cout << pad << "In\n";
-        printCPS(x->body.get(), d + 2);
-    }
-    else if (auto x = dynamic_cast<CPSIf*>(e)) {
-        cout << pad << "If " << x->cond << "\n";
-        printCPS(x->thenE.get(), d + 2);
-        printCPS(x->elseE.get(), d + 2);
-    }
-}
-
 // ============================================================
 // MAIN
 // ============================================================
 int main() {
 
-    // ===== SOURCE PROGRAM (SIMPLE & VALID) =====
-    string src =
-        "a = 1;"
-        "b = 2;"
-        "print a + b;";
+    // ===== DAY 32 TEST PROGRAMS =====
+    vector<string> tests = {
+        "print x;",
+        "if (true) { print 1; }",
+        "a = 1; if (a == 1) { print true; }",
+        "if (true) {print false;}"
+    };
 
-    try {
-        // ===== LEX + PARSE =====
-        Lexer lx(src);
-        Parser parser(lx.scanTokens());
-        auto program = parser.parseProgram();
 
-        // ===== SCOPE RESOLUTION =====
-        ResolveScopesPass resolver;
-        resolver.resolve(program);
+    for (size_t i = 0; i < tests.size(); i++) {
 
-        // ===== TYPE CHECK =====
-        TypeCheckPass typecheck;
-        typecheck.check(program);
+        cout << "\n========================================\n";
+        cout << "TEST " << i + 1 << "\n";
+        cout << "SOURCE:\n" << tests[i] << "\n";
+        cout << "========================================\n";
 
-        // ===== DESUGAR PASSES =====
-        DesugarForPass pass1;
-        DesugarPlusAssignPass pass2;
-        DesugarIncDecPass pass2b;
-        DesugarIfElsePass pass3;
-        DesugarBoolPass passBool;
+        try {
+            // ===== LEX + PARSE =====
+            Lexer lx(tests[i]);
+            Parser parser(lx.scanTokens());
+            auto program = parser.parseProgram();
 
-        vector<unique_ptr<Stmt>> lowered;
+            // ===== SCOPE RESOLUTION =====
+            ResolveScopesPass resolver;
+            resolver.resolve(program);
 
-        for (auto& s : program) {
-            auto x = pass1.transform(move(s));
-            x = pass2.transformStmt(move(x));
-            x = pass2b.transformStmt(move(x));
-            x = pass3.transform(move(x));
-            x = passBool.transformStmt(move(x));
-            lowered.push_back(move(x));
+            // ===== TYPE CHECK =====
+            TypeCheckPass typecheck;
+            typecheck.check(program);
+
+            // ===== DESUGAR PASSES =====
+            DesugarForPass pass1;
+            DesugarPlusAssignPass pass2;
+            DesugarIncDecPass pass2b;
+            DesugarIfElsePass pass3;
+            DesugarBoolPass passBool;
+
+            vector<unique_ptr<Stmt>> lowered;
+
+            for (auto& s : program) {
+                auto x = pass1.transform(move(s));
+                x = pass2.transformStmt(move(x));
+                x = pass2b.transformStmt(move(x));
+                x = pass3.transform(move(x));
+                x = passBool.transformStmt(move(x));
+                lowered.push_back(move(x));
+            }
+
+            // ===== ANF =====
+            ANFPass anfPass;
+            vector<unique_ptr<Stmt>> anf;
+
+            for (auto& s : lowered) {
+                auto xs = anfPass.transformStmt(move(s));
+                for (auto& t : xs)
+                    anf.push_back(move(t));
+            }
+
+            // ===== CPS (DAY 30 / 32) =====
+            cout << "\n--- CPS IR ---\n";
+
+            CPSPass cps;
+            CPSPrinter printer;
+
+            for (auto& s : anf) {
+                auto cpsIR = cps.transformStmt(s.get(), "_halt");
+                printer.print(cpsIR.get());
+            }
+
+            cout << "\nTEST " << i + 1 << " OK\n";
         }
-
-        // ===== ANF =====
-        ANFPass anfPass;
-        vector<unique_ptr<Stmt>> anf;
-
-        for (auto& s : lowered) {
-            auto xs = anfPass.transformStmt(move(s));
-            for (auto& t : xs)
-                anf.push_back(move(t));
+        catch (const runtime_error& e) {
+            cout << "ERROR: " << e.what() << "\n";
         }
-
-        // ===== CPS (DAY 30) =====
-        cout << "\n=== CPS IR ===\n";
-
-        CPSPass cps;
-        CPSPrinter printer;
-
-        for (auto& s : anf) {
-            auto cpsIR = cps.transformStmt(s.get(), "_halt");
-            printer.print(cpsIR.get());
-        }
-
-
-        cout << "\nDay 31 CPS test complete.\n";
     }
-    catch (const runtime_error& e) {
-        cout << "ERROR: " << e.what() << "\n";
-    }
 
+    cout << "\n=== DAY 32 COMPLETE: CPS LOWERING VERIFIED ===\n";
     return 0;
 }

@@ -37,7 +37,7 @@ struct TypeCheckPass {
         else if (auto s = dynamic_cast<IfStmt*>(stmt)) {
             Type cond = checkExpr(s->condition.get());
             if (cond.kind != TypeKind::Bool)
-                errorAt(s->condition->loc, "Type error: The condition in an 'if' statement must be boolean");
+                throw runtime_error("Error at line " + to_string(s->condition->loc.line) + ", column " + to_string(s->condition->loc.col) + ": Type error: The condition in an 'if' statement must be boolean");
             checkStmt(s->thenBranch.get());
             if (s->elseBranch)
                 checkStmt(s->elseBranch.get());
@@ -46,7 +46,7 @@ struct TypeCheckPass {
         else if (auto s = dynamic_cast<WhileStmt*>(stmt)) {
             Type cond = checkExpr(s->condition.get());
             if (cond.kind != TypeKind::Bool)
-                errorAt(s->condition->loc, "Type error: The condition in a 'while' loop must be boolean");
+                throw runtime_error("Error at line " + to_string(s->condition->loc.line) + ", column " + to_string(s->condition->loc.col) + ": Type error: The condition in a 'while' loop must be boolean");
             checkStmt(s->body.get());
         }
 
@@ -75,18 +75,16 @@ struct TypeCheckPass {
             return e->type;
         }
 
+        //=================== BOOL ==================
+        if (auto e = dynamic_cast<BoolExpr*>(expr)) {
+            e->type = Type::Bool();
+            return e->type;
+        }
 
-        // ================= VARIABLE / BOOL LITERAL =================
+        // ================= VARIABLE ==============
         else if (auto e = dynamic_cast<VariableExpr*>(expr)) {
-
-            // 🔥 KEY FIX: boolean literals
-            if (e->name == "true" || e->name == "false") {
-                e->type = Type::Bool();
-                return e->type;
-            }
-
             if (!e->symbol)
-                errorAt(e->loc, "Use of undeclared variable: " + e->name);
+                throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Use of undeclared variable '" + e->name + "'");
 
             e->type = e->symbol->type;
             return e->type;
@@ -98,12 +96,12 @@ struct TypeCheckPass {
 
             if (e->op == "!") {
                 if (rt.kind != TypeKind::Bool)
-                    errorAt(e->loc, "Type error: '!' can only be applied to boolean expressions");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: '!' can only be applied to boolean expressions");
                 e->type = Type::Bool();
             }
             else if (e->op == "-") {
                 if (!isNumeric(rt))
-                    errorAt(e->loc, "Type error: unary '-' expects numeric");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: unary '-' expects numeric");
                 e->type = rt;
             }
 
@@ -119,7 +117,7 @@ struct TypeCheckPass {
                 e->op == "/" || e->op == "%") {
 
                 if (!isNumeric(lt) || !isNumeric(rt))
-                    errorAt(e->loc, "Type error: arithmetic expects numeric types");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: arithmetic expects numeric types");
 
                 e->type = (lt.kind == TypeKind::Float || rt.kind == TypeKind::Float)
                           ? Type::Float()
@@ -130,26 +128,26 @@ struct TypeCheckPass {
                      e->op == ">" || e->op == ">=") {
 
                 if (!isNumeric(lt) || !isNumeric(rt))
-                    errorAt(e->loc, "Type error: comparison expects numeric types");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: comparison expects numeric types");
 
                 e->type = Type::Bool();
             }
 
             else if (e->op == "==" || e->op == "!=") {
                 if (!sameType(lt, rt))
-                    errorAt(e->loc, "Type error: equality operands must match");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: equality operands must match");
                 e->type = Type::Bool();
             }
 
             else if (e->op == "=") {
                 auto v = dynamic_cast<VariableExpr*>(e->left.get());
                 if (!v)
-                    errorAt(e->loc, "Semantic error: left-hand side of assignment must be a variable");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Semantic error: left-hand side of assignment must be a variable");
 
                 if (v->symbol->type.kind == TypeKind::Unknown)
                     v->symbol->type = rt;
                 else if (!sameType(v->symbol->type, rt))
-                    errorAt(e->loc, "Type error: assignment type mismatch");
+                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: assignment type mismatch");
 
                 e->type = rt;
             }

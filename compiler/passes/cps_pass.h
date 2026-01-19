@@ -103,6 +103,20 @@ struct CPSPass {
             );
         }
 
+        //------UNARY------
+        else if (auto u = dynamic_cast<UnaryExpr*>(expr)) {
+            // convert -a  →  call neg(a)
+            string tmp = freshTemp();
+            return make_unique<CPSLet>(
+                tmp,
+                make_unique<CPSCall>(
+                    u->op == "-" ? "neg" : "not",
+                    vector<string>{ getName(u->right.get()) }
+                ),
+                make_unique<CPSCall>(k, vector<string>{ tmp })
+            );
+        }
+
         throw runtime_error("Unsupported expr in CPS");
     }
 

@@ -34,13 +34,26 @@ struct NumberExpr:Expr{
     }
 };
 
+// ==================== BOOLEAN LITERAL ====================
+struct BoolExpr : Expr {
+    bool value;
+    BoolExpr(bool v) : value(v) {}
+
+    void print(int d) override {
+        cout << string(d, ' ') << "Bool(" << (value ? "true" : "false") << ")\n";
+    }
+};
+
+// ==================== STRING LITERAL ====================
 struct StringExpr : Expr {
     string value;
     StringExpr(string v) : value(move(v)) {}
-    void print(int d) {
-        cout << string(d,' ') << "String(\"" << value << "\")\n";
+
+    void print(int d) override {
+        cout << string(d, ' ') << "String(\"" << value << "\")\n";
     }
 };
+
 
 
 struct VariableExpr:Expr{

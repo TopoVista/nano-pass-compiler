@@ -281,16 +281,22 @@ private:
             e->loc = { previous().line, previous().col };
             return e;
         }
+        if (match({TokenType::TRUE})) {
+            return make_unique<BoolExpr>(true);
+        }
+        if (match({TokenType::FALSE})) {
+            return make_unique<BoolExpr>(false);
+        }
         if(match({TokenType::IDENTIFIER})) {
-        	string name=previous().lexeme;
+            string name=previous().lexeme;
 
-        	if(match({TokenType::LPAREN})) {
+            if(match({TokenType::LPAREN})) {
                 vector<unique_ptr<Expr>> args;
                 if(!match({TokenType::RPAREN})) {
                     do {
-                    	args.push_back(expression());
-                	} while(match({TokenType::COMMA}));
-                	consume(TokenType::RPAREN,"Expected ')'");
+                        args.push_back(expression());
+                    } while(match({TokenType::COMMA}));
+                    consume(TokenType::RPAREN,"Expected ')'");
                 }
                 auto e = make_unique<CallExpr>(name,move(args));
                 e->loc = { previous().line, previous().col };
@@ -302,9 +308,9 @@ private:
             return e;
         }
         if(match({TokenType::LPAREN})) {
-        	auto expr=expression();
-        	consume(TokenType::RPAREN,"Expected ')'");
-        	return expr;
+            auto expr=expression();
+            consume(TokenType::RPAREN,"Expected ')'");
+            return expr;
         }
         throw runtime_error("Expected expression");
     }
