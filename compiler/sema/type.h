@@ -1,123 +1,185 @@
 #pragma once
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
-enum class TypeKind {
-    Int,
-    Float,
-    Bool,
-    Char,
-    String,
-    Array,
-    Function,
-    Void,
-    Unknown
+enum class LangTypeKind {
+  Integer,
+  Floating,
+  Bool,
+  Char,
+  String,
+  Array,
+  Function,
+  Void,
+  Unknown
 };
 
-struct Type {
-    TypeKind kind;
+struct LangType {
+  LangTypeKind kind;
 
-    std::unique_ptr<Type> element; // array<T>
-    std::vector<Type> params;      // function params
-    std::unique_ptr<Type> ret;     // function return
+  int bitWidth = 0;
+  bool isUnsigned = false;
 
-    Type(TypeKind k = TypeKind::Unknown) : kind(k) {}
+  // Array
+  std::shared_ptr<LangType> element;
+  int arraySize = 0;
 
-    // 🔥 COPY CONSTRUCTOR (DEEP COPY)
-    Type(const Type& other) : kind(other.kind) {
-        if (other.element)
-            element = std::make_unique<Type>(*other.element);
-        if (other.ret)
-            ret = std::make_unique<Type>(*other.ret);
-        params = other.params;
-    }
+  // Function
+  std::vector<LangType> params;
+  std::shared_ptr<LangType> ret;
 
-    // 🔥 COPY ASSIGNMENT (DEEP COPY)
-    Type& operator=(const Type& other) {
-        if (this == &other) return *this;
+  LangType(LangTypeKind k = LangTypeKind::Unknown) : kind(k) {}
 
-        kind = other.kind;
-        params = other.params;
+  // =============================
+  // Copy Constructor
+  // =============================
 
-        element.reset();
-        ret.reset();
+  LangType(const LangType &other)
+      : kind(other.kind), bitWidth(other.bitWidth),
+        isUnsigned(other.isUnsigned), arraySize(other.arraySize),
+        params(other.params) {
 
-        if (other.element)
-            element = std::make_unique<Type>(*other.element);
-        if (other.ret)
-            ret = std::make_unique<Type>(*other.ret);
+    if (other.element)
+      element = std::make_unique<LangType>(*other.element);
 
-        return *this;
-    }
+    if (other.ret)
+      ret = std::make_unique<LangType>(*other.ret);
+  }
 
-    // MOVE is fine (unique_ptr supports it)
-    Type(Type&&) = default;
-    Type& operator=(Type&&) = default;
+  LangType &operator=(const LangType &other) {
+    if (this == &other)
+      return *this;
 
-    static Type Int() { return Type(TypeKind::Int); }
-    static Type Float() { return Type(TypeKind::Float); }
-    static Type Bool() { return Type(TypeKind::Bool); }
-    static Type Char() { return Type(TypeKind::Char); }
-    static Type String() { return Type(TypeKind::String); }
-    static Type Void() { return Type(TypeKind::Void); }
-    static Type Unknown() { return Type(TypeKind::Unknown); }
+    kind = other.kind;
+    bitWidth = other.bitWidth;
+    isUnsigned = other.isUnsigned;
+    arraySize = other.arraySize;
+    params = other.params;
 
-    static Type Array(Type elem) {
-        Type t(TypeKind::Array);
-        t.element = std::make_unique<Type>(std::move(elem));
-        return t;
-    }
+    element.reset();
+    ret.reset();
 
-    static Type Function(std::vector<Type> ps, Type r) {
-        Type t(TypeKind::Function);
-        t.params = std::move(ps);
-        t.ret = std::make_unique<Type>(std::move(r));
-        return t;
-    }
+    if (other.element)
+      element = std::make_unique<LangType>(*other.element);
+
+    if (other.ret)
+      ret = std::make_unique<LangType>(*other.ret);
+
+    return *this;
+  }
+
+  LangType(LangType &&) = default;
+  LangType &operator=(LangType &&) = default;
+
+  // =============================
+  // Factory Methods
+  // =============================
+
+  static LangType Int(int bits = 32, bool unsignedFlag = false) {
+    LangType t(LangTypeKind::Integer);
+    t.bitWidth = bits;
+    t.isUnsigned = unsignedFlag;
+    return t;
+  }
+
+  static LangType Float(int bits = 32) {
+    LangType t(LangTypeKind::Floating);
+    t.bitWidth = bits;
+    return t;
+  }
+
+  static LangType Bool() {
+    LangType t(LangTypeKind::Bool);
+    t.bitWidth = 1;
+    return t;
+  }
+
+  static LangType Char() {
+    LangType t(LangTypeKind::Char);
+    t.bitWidth = 8;
+    return t;
+  }
+
+  static LangType String() { return LangType(LangTypeKind::String); }
+
+  static LangType Void() { return LangType(LangTypeKind::Void); }
+
+  static LangType Unknown() { return LangType(LangTypeKind::Unknown); }
+
+  static LangType Array(LangType elem, int size) {
+    LangType t(LangTypeKind::Array);
+    t.element = std::make_shared<LangType>(std::move(elem));
+    t.arraySize = size;
+    return t;
+  }
+
+  static LangType Function(std::vector<LangType> ps, LangType r) {
+    LangType t(LangTypeKind::Function);
+    t.params = std::move(ps);
+    t.ret = std::make_unique<LangType>(std::move(r));
+    return t;
+  }
+
+  // =============================
+  // Helper Methods
+  // =============================
+
+  bool isInt() const { return kind == LangTypeKind::Integer; }
+
+  bool isFloat() const { return kind == LangTypeKind::Floating; }
+
+  bool isBool() const { return kind == LangTypeKind::Bool; }
+
+  bool isChar() const { return kind == LangTypeKind::Char; }
+
+  bool isArray() const { return kind == LangTypeKind::Array; }
+
+  bool isFunction() const { return kind == LangTypeKind::Function; }
+
+  bool isNumeric() const {
+    return kind == LangTypeKind::Integer || kind == LangTypeKind::Floating;
+  }
 };
 
+// =============================
+// Type Comparison
+// =============================
 
-inline std::string typeName(const Type& t) {
-    switch (t.kind) {
-        case TypeKind::Int: return "int";
-        case TypeKind::Float: return "float";
-        case TypeKind::Bool: return "bool";
-        case TypeKind::Char: return "char";
-        case TypeKind::String: return "string";
-        case TypeKind::Void: return "void";
-        case TypeKind::Unknown: return "unknown";
-        case TypeKind::Array:
-            return "array<" + typeName(*t.element) + ">";
-        case TypeKind::Function: {
-            std::string s = "function(";
-            for (size_t i = 0; i < t.params.size(); i++) {
-                s += typeName(t.params[i]);
-                if (i + 1 < t.params.size()) s += ", ";
-            }
-            s += " -> " + typeName(*t.ret) + ")";
-            return s;
-        }
-    }
-    return "invalid";
-}
+inline bool sameType(const LangType &a, const LangType &b) {
 
-inline bool sameType(const Type& a, const Type& b) {
-    if (a.kind != b.kind) return false;
+  if (a.kind != b.kind)
+    return false;
 
-    if (a.kind == TypeKind::Array)
-        return sameType(*a.element, *b.element);
+  switch (a.kind) {
 
-    if (a.kind == TypeKind::Function) {
-        if (a.params.size() != b.params.size()) return false;
-        for (size_t i = 0; i < a.params.size(); i++)
-            if (!sameType(a.params[i], b.params[i])) return false;
-        return sameType(*a.ret, *b.ret);
-    }
+  case LangTypeKind::Integer:
+  case LangTypeKind::Floating:
+    return a.bitWidth == b.bitWidth && a.isUnsigned == b.isUnsigned;
 
+  case LangTypeKind::Bool:
+  case LangTypeKind::Char:
+    return a.bitWidth == b.bitWidth;
+
+  case LangTypeKind::Array:
+    if (!a.element || !b.element)
+      return false;
+    return a.arraySize == b.arraySize && sameType(*a.element, *b.element);
+
+  case LangTypeKind::Function:
+    if (a.params.size() != b.params.size())
+      return false;
+
+    for (size_t i = 0; i < a.params.size(); i++)
+      if (!sameType(a.params[i], b.params[i]))
+        return false;
+
+    if (!a.ret || !b.ret)
+      return false;
+
+    return sameType(*a.ret, *b.ret);
+
+  default:
     return true;
-}
-
-inline bool isNumeric(const Type& t) {
-    return t.kind == TypeKind::Int || t.kind == TypeKind::Float;
+  }
 }

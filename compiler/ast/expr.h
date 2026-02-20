@@ -1,108 +1,169 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
+#include <cctype>
 #include <iostream>
-#include <cctype>      // for isdigit, isalpha, isalnum
-#include <stdexcept>   // for runtime_error
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "../common/source_location.h"
 #include "../lexer/token.h"
 #include "../sema/symbol.h"
 #include "../sema/type.h"
-#include "../common/source_location.h"
-
-
 
 using namespace std;
 
-
-// USES TokenType and Token FROM YOUR LEXER
+// ============================================================
+// Base Expression
+// ============================================================
 
 struct Expr {
-    SourceLocation loc;
-    Type type = Type::Unknown();
-    virtual ~Expr() = default;
-    virtual void print(int d) = 0;
+  SourceLocation loc;
+  LangType type = LangType::Unknown();
+  virtual ~Expr() = default;
+  virtual void print(int d) = 0;
 };
 
-struct NumberExpr:Expr{
-    double value;
-    NumberExpr(double v):value(v){}
-    void print(int d){
-        cout<<string(d,' ')<<"Number("<<value<<")\n";
-    }
+// ============================================================
+// Number Literal (int + float)
+// ============================================================
+
+struct NumberExpr : Expr {
+
+  bool isFloat;
+  long long intValue;
+  double floatValue;
+
+  NumberExpr(long long v) : isFloat(false), intValue(v), floatValue(0.0) {}
+
+  NumberExpr(double v) : isFloat(true), intValue(0), floatValue(v) {}
+
+  void print(int d) override {
+    cout << string(d, ' ');
+    if (isFloat)
+      cout << "Float(" << floatValue << ")\n";
+    else
+      cout << "Int(" << intValue << ")\n";
+  }
 };
 
-// ==================== BOOLEAN LITERAL ====================
+// ============================================================
+// Boolean Literal
+// ============================================================
+
 struct BoolExpr : Expr {
-    bool value;
-    BoolExpr(bool v) : value(v) {}
+  bool value;
 
-    void print(int d) override {
-        cout << string(d, ' ') << "Bool(" << (value ? "true" : "false") << ")\n";
-    }
+  BoolExpr(bool v) : value(v) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "Bool(" << (value ? "true" : "false") << ")\n";
+  }
 };
 
-// ==================== STRING LITERAL ====================
+// ============================================================
+// String Literal
+// ============================================================
+
 struct StringExpr : Expr {
-    string value;
-    StringExpr(string v) : value(move(v)) {}
+  string value;
 
-    void print(int d) override {
-        cout << string(d, ' ') << "String(\"" << value << "\")\n";
-    }
+  StringExpr(string v) : value(std::move(v)) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "String(\"" << value << "\")\n";
+  }
 };
 
+// ============================================================
+// Variable
+// ============================================================
 
+struct VariableExpr : Expr {
+  string name;
+  Symbol *symbol = nullptr;
 
-struct VariableExpr:Expr{
-    string name;
-    Symbol* symbol = nullptr;
+  VariableExpr(string n) : name(std::move(n)) {}
 
-    VariableExpr(string n):name(move(n)){}
-    
-    void print(int d){
-        cout<<string(d,' ')<<"Var("<<name;
-        if(symbol)
-            cout<<" -> depth "<<symbol->depth;
-        cout<<")\n";
-    }
+  void print(int d) override {
+    cout << string(d, ' ') << "Var(" << name;
+    if (symbol)
+      cout << " -> depth " << symbol->depth;
+    cout << ")\n";
+  }
 };
 
+// ============================================================
+// Array Index Expression  ← DAY 5 ADDITION
+// ============================================================
 
-struct UnaryExpr:Expr{
-    string op;
-    unique_ptr<Expr> right;
-    UnaryExpr(string o,unique_ptr<Expr> r):op(move(o)),right(move(r)){}
-    void print(int d){
-        cout<<string(d,' ')<<"Unary("<<op<<")\n";
-        right->print(d+2);
-    }
+struct IndexExpr : Expr {
+  unique_ptr<Expr> array;
+  unique_ptr<Expr> index;
+
+  IndexExpr(unique_ptr<Expr> a, unique_ptr<Expr> i)
+      : array(std::move(a)), index(std::move(i)) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "Index\n";
+    array->print(d + 2);
+    index->print(d + 2);
+  }
 };
 
-struct BinaryExpr:Expr{
-    string op;
-    unique_ptr<Expr> left,right;
-    BinaryExpr(string o,unique_ptr<Expr> l,unique_ptr<Expr> r):op(move(o)),left(move(l)),right(move(r)){}
-    void print(int d){
-        cout<<string(d,' ')<<"Binary("<<op<<")\n";
-        left->print(d+2);
-        right->print(d+2);
-    }
+// ============================================================
+// Unary Expression
+// ============================================================
+
+struct UnaryExpr : Expr {
+  string op;
+  unique_ptr<Expr> right;
+
+  UnaryExpr(string o, unique_ptr<Expr> r)
+      : op(std::move(o)), right(std::move(r)) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "Unary(" << op << ")\n";
+    right->print(d + 2);
+  }
 };
 
-//added on day 13
-struct CallExpr:Expr{
-    string callee;
-    vector<unique_ptr<Expr>> args;
+// ============================================================
+// Binary Expression
+// ============================================================
 
-    CallExpr(string c,vector<unique_ptr<Expr>> a)
-        :callee(move(c)),args(move(a)){}
-    
-    void print(int d){
-        cout<<string(d,' ')<<"Call "<<callee<<"\n";
-        for(auto& a:args) a->print(d+2);
-    }
+struct BinaryExpr : Expr {
+  string op;
+  unique_ptr<Expr> left;
+  unique_ptr<Expr> right;
+
+  BinaryExpr(string o, unique_ptr<Expr> l, unique_ptr<Expr> r)
+      : op(std::move(o)), left(std::move(l)), right(std::move(r)) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "Binary(" << op << ")\n";
+    left->print(d + 2);
+    right->print(d + 2);
+  }
 };
 
+// ============================================================
+// Function Call
+// ============================================================
+
+struct CallExpr : Expr {
+  string callee;
+  vector<unique_ptr<Expr>> args;
+  Symbol *symbol = nullptr;
+
+  CallExpr(string c, vector<unique_ptr<Expr>> a)
+      : callee(std::move(c)), args(std::move(a)) {}
+
+  void print(int d) override {
+    cout << string(d, ' ') << "Call(" << callee << ")\n";
+    for (auto &arg : args)
+      arg->print(d + 2);
+  }
+};

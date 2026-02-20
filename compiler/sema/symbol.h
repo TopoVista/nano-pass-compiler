@@ -1,20 +1,21 @@
 #pragma once
-#include <string>
 #include "type.h"
+#include <string>
+#include <vector>
 
 using namespace std;
 
-enum class SymbolKind {
-    Variable,
-    Function
-};
+enum class SymbolKind { Variable, Function };
 
 struct Symbol {
-    string name;
-    SymbolKind kind;
-    int depth;
-    Type type;
+  string name;
+  SymbolKind kind;
+  int depth;
+  LangType type;
 
-    Symbol(string n, SymbolKind k, int d, Type t = Type::Unknown())
-        : name(move(n)), kind(k), depth(d), type(t) {}
+  // Function-specific metadata
+  vector<LangType> paramTypes;
+
+  Symbol(string n, SymbolKind k, int d, LangType t = LangType::Unknown())
+      : name(std::move(n)), kind(k), depth(d), type(t) {}
 };

@@ -1,170 +1,282 @@
 #pragma once
 
-#include <stdexcept>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
-#include "type.h"
-#include "symbol.h"
 
 #include "../ast/expr.h"
 #include "../ast/stmt.h"
+#include "../common/error.h"
+#include "symbol.h"
+#include "type.h"
+
 
 using namespace std;
 
 struct TypeCheckPass {
 
-    void check(const vector<unique_ptr<Stmt>>& program) {
-        for (auto& s : program)
-            checkStmt(s.get());
+  LangType currentFunctionReturnType;
+  bool hasReturn = false;
+
+  /* ================= PROGRAM ================= */
+
+  void check(const vector<unique_ptr<Stmt>> &program) {
+
+    for (auto &s : program)
+      checkStmt(s.get());
+
+    bool foundMain = false;
+
+    for (auto &s : program) {
+      if (auto fn = dynamic_cast<FunctionStmt *>(s.get())) {
+        if (fn->name == "main") {
+          foundMain = true;
+          if (fn->returnType.kind != LangTypeKind::Integer)
+            throw CompileError("main must return int", fn->loc.line,
+                               fn->loc.col);
+        }
+      }
     }
 
-    void checkStmt(Stmt* stmt) {
+    if (!foundMain)
+      throw CompileError("Program must define main function", 0, 0);
+  }
 
-        if (auto s = dynamic_cast<ExprStmt*>(stmt)) {
-            checkExpr(s->e.get());
-        }
+  /* ================= STATEMENTS ================= */
 
-        else if (auto s = dynamic_cast<PrintStmt*>(stmt)) {
-            checkExpr(s->e.get());
-        }
+  void checkStmt(Stmt *stmt) {
 
-        else if (auto s = dynamic_cast<BlockStmt*>(stmt)) {
-            for (auto& x : s->stmts)
-                checkStmt(x.get());
-        }
+    if (auto s = dynamic_cast<ExprStmt *>(stmt))
+      checkExpr(s->e.get());
 
-        else if (auto s = dynamic_cast<IfStmt*>(stmt)) {
-            Type cond = checkExpr(s->condition.get());
-            if (cond.kind != TypeKind::Bool)
-                throw runtime_error("Error at line " + to_string(s->condition->loc.line) + ", column " + to_string(s->condition->loc.col) + ": Type error: The condition in an 'if' statement must be boolean");
-            checkStmt(s->thenBranch.get());
-            if (s->elseBranch)
-                checkStmt(s->elseBranch.get());
-        }
+    else if (auto s = dynamic_cast<PrintStmt *>(stmt))
+      checkExpr(s->e.get());
 
-        else if (auto s = dynamic_cast<WhileStmt*>(stmt)) {
-            Type cond = checkExpr(s->condition.get());
-            if (cond.kind != TypeKind::Bool)
-                throw runtime_error("Error at line " + to_string(s->condition->loc.line) + ", column " + to_string(s->condition->loc.col) + ": Type error: The condition in a 'while' loop must be boolean");
-            checkStmt(s->body.get());
-        }
+    else if (auto s = dynamic_cast<BlockStmt *>(stmt))
+      for (auto &x : s->stmts)
+        checkStmt(x.get());
 
-        else if (auto s = dynamic_cast<ReturnStmt*>(stmt)) {
-            if (s->value)
-                checkExpr(s->value.get());
-        }
+    else if (auto s = dynamic_cast<VarDeclStmt *>(stmt)) {
 
-        else if (auto s = dynamic_cast<FunctionStmt*>(stmt)) {
-            for (auto& b : s->body->stmts)
-                checkStmt(b.get());
-        }
+      if (s->initializer) {
+        LangType initType = checkExpr(s->initializer.get());
+
+        if (!isAssignable(s->type, initType))
+          throw CompileError("Type mismatch in variable declaration",
+                             s->loc.line, s->loc.col);
+      }
     }
 
-    Type checkExpr(Expr* expr) {
+    else if (auto s = dynamic_cast<IfStmt *>(stmt)) {
 
-        // ================= NUMBER =================
-        if (auto e = dynamic_cast<NumberExpr*>(expr)) {
-            e->type = Type::Int();
-            return e->type;
-        }
+      LangType cond = checkExpr(s->condition.get());
 
-        // ================= STRING =================
-        else if (auto e = dynamic_cast<StringExpr*>(expr)) {
-            e->type = Type::String();
-            return e->type;
-        }
+      if (cond.kind != LangTypeKind::Bool && cond.kind != LangTypeKind::Integer)
+        throw CompileError("If condition must be bool or int",
+                           s->condition->loc.line, s->condition->loc.col);
 
-        //=================== BOOL ==================
-        if (auto e = dynamic_cast<BoolExpr*>(expr)) {
-            e->type = Type::Bool();
-            return e->type;
-        }
-
-        // ================= VARIABLE ==============
-        else if (auto e = dynamic_cast<VariableExpr*>(expr)) {
-            if (!e->symbol)
-                throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Use of undeclared variable '" + e->name + "'");
-
-            e->type = e->symbol->type;
-            return e->type;
-        }
-
-        // ================= UNARY =================
-        else if (auto e = dynamic_cast<UnaryExpr*>(expr)) {
-            Type rt = checkExpr(e->right.get());
-
-            if (e->op == "!") {
-                if (rt.kind != TypeKind::Bool)
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: '!' can only be applied to boolean expressions");
-                e->type = Type::Bool();
-            }
-            else if (e->op == "-") {
-                if (!isNumeric(rt))
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: unary '-' expects numeric");
-                e->type = rt;
-            }
-
-            return e->type;
-        }
-
-        // ================= BINARY =================
-        else if (auto e = dynamic_cast<BinaryExpr*>(expr)) {
-            Type lt = checkExpr(e->left.get());
-            Type rt = checkExpr(e->right.get());
-
-            if (e->op == "+" || e->op == "-" || e->op == "*" ||
-                e->op == "/" || e->op == "%") {
-
-                if (!isNumeric(lt) || !isNumeric(rt))
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: arithmetic expects numeric types");
-
-                e->type = (lt.kind == TypeKind::Float || rt.kind == TypeKind::Float)
-                          ? Type::Float()
-                          : Type::Int();
-            }
-
-            else if (e->op == "<" || e->op == "<=" ||
-                     e->op == ">" || e->op == ">=") {
-
-                if (!isNumeric(lt) || !isNumeric(rt))
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: comparison expects numeric types");
-
-                e->type = Type::Bool();
-            }
-
-            else if (e->op == "==" || e->op == "!=") {
-                if (!sameType(lt, rt))
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: equality operands must match");
-                e->type = Type::Bool();
-            }
-
-            else if (e->op == "=") {
-                auto v = dynamic_cast<VariableExpr*>(e->left.get());
-                if (!v)
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Semantic error: left-hand side of assignment must be a variable");
-
-                if (v->symbol->type.kind == TypeKind::Unknown)
-                    v->symbol->type = rt;
-                else if (!sameType(v->symbol->type, rt))
-                    throw runtime_error("Error at line " + to_string(e->loc.line) + ", column " + to_string(e->loc.col) + ": Type error: assignment type mismatch");
-
-                e->type = rt;
-            }
-
-            return e->type;
-        }
-
-        // ================= CALL =================
-        else if (auto e = dynamic_cast<CallExpr*>(expr)) {
-            for (auto& a : e->args)
-                checkExpr(a.get());
-
-            // temporary until function typing is implemented
-            e->type = Type::Int();
-            return e->type;
-        }
-
-        return Type::Unknown();
+      checkStmt(s->thenBranch.get());
+      if (s->elseBranch)
+        checkStmt(s->elseBranch.get());
     }
+
+    else if (auto s = dynamic_cast<WhileStmt *>(stmt)) {
+
+      LangType cond = checkExpr(s->condition.get());
+
+      if (cond.kind != LangTypeKind::Bool && cond.kind != LangTypeKind::Integer)
+        throw CompileError("While condition must be bool or int",
+                           s->condition->loc.line, s->condition->loc.col);
+
+      checkStmt(s->body.get());
+    }
+
+    else if (auto s = dynamic_cast<ReturnStmt *>(stmt)) {
+
+      hasReturn = true;
+
+      if (!s->value && currentFunctionReturnType.kind != LangTypeKind::Void)
+        throw CompileError("Return value required", s->loc.line, s->loc.col);
+
+      if (s->value) {
+
+        LangType rt = checkExpr(s->value.get());
+
+        if (!isAssignable(currentFunctionReturnType, rt))
+          throw CompileError("Return type mismatch", s->loc.line, s->loc.col);
+      }
+    }
+
+    else if (auto s = dynamic_cast<FunctionStmt *>(stmt)) {
+
+      currentFunctionReturnType = s->returnType;
+      hasReturn = false;
+
+      for (auto &b : s->body->stmts)
+        checkStmt(b.get());
+
+      if (s->returnType.kind != LangTypeKind::Void && !hasReturn)
+        throw CompileError("Non-void function must return a value", s->loc.line,
+                           s->loc.col);
+    }
+  }
+
+  /* ================= EXPRESSIONS ================= */
+
+  LangType checkExpr(Expr *expr) {
+
+    /* ===== NUMBER ===== */
+    if (auto *n = dynamic_cast<NumberExpr *>(expr)) {
+      if (n->isFloat)
+        return expr->type = LangType::Float(64);
+      return expr->type = LangType::Int(32);
+    }
+
+    /* ===== BOOL ===== */
+    if (auto *b = dynamic_cast<BoolExpr *>(expr))
+      return expr->type = LangType::Bool();
+
+    /* ===== STRING ===== */
+    if (auto *s = dynamic_cast<StringExpr *>(expr))
+      return expr->type = LangType::String();
+
+    /* ===== VARIABLE ===== */
+    if (auto *v = dynamic_cast<VariableExpr *>(expr)) {
+
+      if (!v->symbol)
+        throw CompileError("Use of undeclared variable '" + v->name + "'",
+                           v->loc.line, v->loc.col);
+
+      return expr->type = v->symbol->type;
+    }
+
+    /* ===== ARRAY ACCESS (IndexExpr in YOUR AST) ===== */
+    if (auto *idx = dynamic_cast<IndexExpr *>(expr)) {
+
+      LangType arrType = checkExpr(idx->array.get());
+      LangType indexType = checkExpr(idx->index.get());
+
+      if (arrType.kind != LangTypeKind::Array)
+        throw CompileError("Subscripted value is not an array", idx->loc.line,
+                           idx->loc.col);
+
+      if (indexType.kind != LangTypeKind::Integer)
+        throw CompileError("Array index must be integer", idx->loc.line,
+                           idx->loc.col);
+
+      return expr->type = *arrType.element;
+    }
+
+    /* ===== UNARY ===== */
+    if (auto *u = dynamic_cast<UnaryExpr *>(expr)) {
+
+      LangType rt = checkExpr(u->right.get());
+
+      if (u->op == "!") {
+        if (rt.kind != LangTypeKind::Bool && rt.kind != LangTypeKind::Integer)
+          throw CompileError("'!' expects bool or int", u->loc.line,
+                             u->loc.col);
+
+        return expr->type = LangType::Bool();
+      }
+
+      if (u->op == "-") {
+        if (rt.kind != LangTypeKind::Integer &&
+            rt.kind != LangTypeKind::Floating)
+          throw CompileError("Unary '-' expects numeric", u->loc.line,
+                             u->loc.col);
+
+        return expr->type = rt;
+      }
+    }
+
+    /* ===== BINARY ===== */
+    if (auto *b = dynamic_cast<BinaryExpr *>(expr)) {
+
+      LangType L = checkExpr(b->left.get());
+      LangType R = checkExpr(b->right.get());
+
+      if (b->op == "=") {
+
+        // Left must be variable or index
+        if (!dynamic_cast<VariableExpr *>(b->left.get()) &&
+            !dynamic_cast<IndexExpr *>(b->left.get())) {
+          throw CompileError("Invalid assignment target", b->loc.line,
+                             b->loc.col);
+        }
+
+        LangType L = checkExpr(b->left.get());
+        LangType R = checkExpr(b->right.get());
+
+        if (!isAssignable(L, R))
+          throw CompileError("Assignment type mismatch", b->loc.line,
+                             b->loc.col);
+
+        return expr->type = L;
+      }
+
+      if (b->op == "+" || b->op == "-" || b->op == "*" || b->op == "/") {
+
+        if ((L.kind != LangTypeKind::Integer &&
+             L.kind != LangTypeKind::Floating) ||
+            (R.kind != LangTypeKind::Integer &&
+             R.kind != LangTypeKind::Floating))
+          throw CompileError("Arithmetic requires numeric operands",
+                             b->loc.line, b->loc.col);
+
+        if (L.kind == LangTypeKind::Floating ||
+            R.kind == LangTypeKind::Floating)
+          return expr->type = LangType::Float(64);
+
+        return expr->type = LangType::Int(32);
+      }
+
+      if (b->op == "<" || b->op == "<=" || b->op == ">" || b->op == ">=" ||
+          b->op == "==" || b->op == "!=")
+        return expr->type = LangType::Bool();
+
+      if (b->op == "&&" || b->op == "||")
+        return expr->type = LangType::Bool();
+    }
+
+    /* ===== CALL ===== */
+    if (auto *c = dynamic_cast<CallExpr *>(expr)) {
+
+      if (!c->symbol || c->symbol->kind != SymbolKind::Function)
+        throw CompileError("Attempt to call non-function '" + c->callee + "'",
+                           c->loc.line, c->loc.col);
+
+      if (c->args.size() != c->symbol->paramTypes.size())
+        throw CompileError("Incorrect number of arguments", c->loc.line,
+                           c->loc.col);
+
+      for (size_t i = 0; i < c->args.size(); i++) {
+
+        LangType argType = checkExpr(c->args[i].get());
+
+        if (!isAssignable(c->symbol->paramTypes[i], argType))
+          throw CompileError("Argument type mismatch", c->loc.line, c->loc.col);
+      }
+
+      return expr->type =
+                 c->symbol->type.ret ? *c->symbol->type.ret : LangType::Void();
+    }
+
+    return LangType::Unknown();
+  }
+
+  /* ================= ASSIGNMENT RULES ================= */
+
+  bool isAssignable(const LangType &target, const LangType &value) {
+
+    if (sameType(target, value))
+      return true;
+
+    if (target.kind == LangTypeKind::Floating &&
+        value.kind == LangTypeKind::Integer)
+      return true;
+
+    return false;
+  }
 };

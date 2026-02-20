@@ -1,111 +1,110 @@
+#include <fstream>
 #include <iostream>
-#include <vector>
 #include <memory>
+#include <sstream>
 
-using namespace std;
 
-// ===== FRONTEND =====
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/raw_ostream.h>
+
+#include "codegen/llvm_codegen.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
-
-// ===== DESUGARING PASSES =====
-#include "passes/desugar_for.h"
-#include "passes/desugar_plus_assign.h"
-#include "passes/desugar_inc_dec.h"
-#include "passes/desugar_if_else.h"
-#include "passes/desugar_bool.h"
-#include "passes/anf_pass.h"
-
-// ===== SEMANTIC ANALYSIS =====
 #include "sema/resolve_scopes.h"
 #include "sema/type_check.h"
 
-// ===== CPS =====
-#include "passes/cps_pass.h"
-#include "ir/cps.h"
-#include "ir/cps_printer.h"
+extern void lowerStmt(LLVMCodegen &, Stmt *);
 
-// ============================================================
-// MAIN
-// ============================================================
-int main() {
+int main(int argc, char **argv) {
 
-    // ===== DAY 32 TEST PROGRAMS =====
-    vector<string> tests = {
-        "print x;",
-        "if (true) { print 1; }",
-        "a = 1; if (a == 1) { print true; }",
-        "if (true) {print false;}"
-    };
+  if (argc < 2) {
+    std::cerr << "Usage: compiler <file>\n";
+    return 1;
+  }
 
+  std::ifstream file(argv[1]);
+  if (!file) {
+    std::cerr << "Could not open file\n";
+    return 1;
+  }
 
-    for (size_t i = 0; i < tests.size(); i++) {
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  std::string source = buffer.str();
 
-        cout << "\n========================================\n";
-        cout << "TEST " << i + 1 << "\n";
-        cout << "SOURCE:\n" << tests[i] << "\n";
-        cout << "========================================\n";
+  try {
 
-        try {
-            // ===== LEX + PARSE =====
-            Lexer lx(tests[i]);
-            Parser parser(lx.scanTokens());
-            auto program = parser.parseProgram();
+    // -------------------------
+    // LEX
+    // -------------------------
+    Lexer lexer(source);
+    auto tokens = lexer.scanTokens();
 
-            // ===== SCOPE RESOLUTION =====
-            ResolveScopesPass resolver;
-            resolver.resolve(program);
+    // -------------------------
+    // PARSE
+    // -------------------------
+    Parser parser(tokens);
+    auto program = parser.parseProgram();
 
-            // ===== TYPE CHECK =====
-            TypeCheckPass typecheck;
-            typecheck.check(program);
+    // --------------------------------
+    // SEMANTIC ANALYSIS
+    // --------------------------------
+    ResolveScopesPass resolver;
+    resolver.resolve(program);
 
-            // ===== DESUGAR PASSES =====
-            DesugarForPass pass1;
-            DesugarPlusAssignPass pass2;
-            DesugarIncDecPass pass2b;
-            DesugarIfElsePass pass3;
-            DesugarBoolPass passBool;
+    TypeCheckPass typeChecker;
+    typeChecker.check(program);
 
-            vector<unique_ptr<Stmt>> lowered;
+    // --------------------------------
+    // LLVM SETUP (Only if semantic OK)
+    // --------------------------------
+    llvm::LLVMContext ctx;
+    llvm::Module module("nano_module", ctx);
+    LLVMCodegen cg(ctx, &module);
 
-            for (auto& s : program) {
-                auto x = pass1.transform(move(s));
-                x = pass2.transformStmt(move(x));
-                x = pass2b.transformStmt(move(x));
-                x = pass3.transform(move(x));
-                x = passBool.transformStmt(move(x));
-                lowered.push_back(move(x));
-            }
+    bool foundMain = false;
 
-            // ===== ANF =====
-            ANFPass anfPass;
-            vector<unique_ptr<Stmt>> anf;
+    for (auto &stmt : program) {
 
-            for (auto& s : lowered) {
-                auto xs = anfPass.transformStmt(move(s));
-                for (auto& t : xs)
-                    anf.push_back(move(t));
-            }
+      auto *fn = dynamic_cast<FunctionStmt *>(stmt.get());
 
-            // ===== CPS (DAY 30 / 32) =====
-            cout << "\n--- CPS IR ---\n";
+      if (!fn) {
+        std::cerr
+            << "Error: Only function declarations allowed at top level.\n";
+        return 1;
+      }
 
-            CPSPass cps;
-            CPSPrinter printer;
+      if (fn->name == "main")
+        foundMain = true;
 
-            for (auto& s : anf) {
-                auto cpsIR = cps.transformStmt(s.get(), "_halt");
-                printer.print(cpsIR.get());
-            }
-
-            cout << "\nTEST " << i + 1 << " OK\n";
-        }
-        catch (const runtime_error& e) {
-            cout << "ERROR: " << e.what() << "\n";
-        }
+      lowerStmt(cg, stmt.get());
     }
 
-    cout << "\n=== DAY 32 COMPLETE: CPS LOWERING VERIFIED ===\n";
-    return 0;
+    if (!foundMain) {
+      std::cerr << "Error: No 'main' function defined.\n";
+      return 1;
+    }
+
+    // -------------------------
+    // VERIFY
+    // -------------------------
+    if (llvm::verifyModule(module, &llvm::errs())) {
+      llvm::errs() << "LLVM verification failed\n";
+      return 1;
+    }
+
+    module.print(llvm::outs(), nullptr);
+
+  } catch (const CompileError &e) {
+    std::cerr << "Compilation failed:\n";
+    std::cerr << "Error at line " << e.line << ", column " << e.col << ": "
+              << e.message << "\n";
+    return 1;
+  } catch (const std::exception &e) {
+    std::cerr << "Internal compiler error:\n";
+    std::cerr << e.what() << "\n";
+    return 1;
+  }
+
+  return 0;
 }

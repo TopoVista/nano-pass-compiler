@@ -1,89 +1,89 @@
 #pragma once
-#include <memory>
 #include "../ast/expr.h"
 #include "../ast/stmt.h"
+#include <memory>
 
 using namespace std;
 
 struct DesugarBoolPass {
 
-    // ======================================================
-    // BOOL → INT (EXPRESSION LEVEL)
-    // ======================================================
-    unique_ptr<Expr> transformExpr(unique_ptr<Expr> e) {
+  // ======================================================
+  // BOOL → INT (EXPRESSION LEVEL)
+  // ======================================================
+  unique_ptr<Expr> transformExpr(unique_ptr<Expr> e) {
 
-        // 1️⃣ REAL boolean literal node → number
-        if (auto b = dynamic_cast<BoolExpr*>(e.get())) {
-            return make_unique<NumberExpr>(b->value ? 1 : 0);
-        }
-
-        // 2️⃣ Legacy case: "true"/"false" parsed as identifiers
-        if (auto v = dynamic_cast<VariableExpr*>(e.get())) {
-            if (v->name == "true")
-                return make_unique<NumberExpr>(1);
-            if (v->name == "false")
-                return make_unique<NumberExpr>(0);
-            return e;
-        }
-
-        // 3️⃣ Binary expression
-        if (auto b = dynamic_cast<BinaryExpr*>(e.get())) {
-            b->left  = transformExpr(move(b->left));
-            b->right = transformExpr(move(b->right));
-            return e;
-        }
-
-        // 4️⃣ Unary expression
-        if (auto u = dynamic_cast<UnaryExpr*>(e.get())) {
-            u->right = transformExpr(move(u->right));
-            return e;
-        }
-
-        // 5️⃣ Function call
-        if (auto c = dynamic_cast<CallExpr*>(e.get())) {
-            for (auto& a : c->args)
-                a = transformExpr(move(a));
-            return e;
-        }
-
-        return e;
+    // 1️⃣ REAL boolean literal node → number
+    if (auto b = dynamic_cast<BoolExpr *>(e.get())) {
+      return make_unique<NumberExpr>(b->value ? 1 : 0);
     }
 
-    // ======================================================
-    // STATEMENT LEVEL
-    // ======================================================
-    unique_ptr<Stmt> transformStmt(unique_ptr<Stmt> s) {
-
-        if (auto e = dynamic_cast<ExprStmt*>(s.get())) {
-            e->e = transformExpr(move(e->e));
-            return s;
-        }
-
-        if (auto p = dynamic_cast<PrintStmt*>(s.get())) {
-            p->e = transformExpr(move(p->e));
-            return s;
-        }
-
-        if (auto i = dynamic_cast<IfStmt*>(s.get())) {
-            i->condition  = transformExpr(move(i->condition));
-            i->thenBranch = transformStmt(move(i->thenBranch));
-            if (i->elseBranch)
-                i->elseBranch = transformStmt(move(i->elseBranch));
-            return s;
-        }
-
-        if (auto w = dynamic_cast<WhileStmt*>(s.get())) {
-            w->condition = transformExpr(move(w->condition));
-            w->body      = transformStmt(move(w->body));
-            return s;
-        }
-
-        if (auto b = dynamic_cast<BlockStmt*>(s.get())) {
-            for (auto& x : b->stmts)
-                x = transformStmt(move(x));
-            return s;
-        }
-
-        return s;
+    // 2️⃣ Legacy case: "true"/"false" parsed as identifiers
+    if (auto v = dynamic_cast<VariableExpr *>(e.get())) {
+      if (v->name == "true")
+        return make_unique<NumberExpr>(1);
+      if (v->name == "false")
+        return make_unique<NumberExpr>(0);
+      return e;
     }
+
+    // 3️⃣ Binary expression
+    if (auto b = dynamic_cast<BinaryExpr *>(e.get())) {
+      b->left = transformExpr(std::move(b->left));
+      b->right = transformExpr(std::move(b->right));
+      return e;
+    }
+
+    // 4️⃣ Unary expression
+    if (auto u = dynamic_cast<UnaryExpr *>(e.get())) {
+      u->right = transformExpr(std::move(u->right));
+      return e;
+    }
+
+    // 5️⃣ Function call
+    if (auto c = dynamic_cast<CallExpr *>(e.get())) {
+      for (auto &a : c->args)
+        a = transformExpr(std::move(a));
+      return e;
+    }
+
+    return e;
+  }
+
+  // ======================================================
+  // STATEMENT LEVEL
+  // ======================================================
+  unique_ptr<Stmt> transformStmt(unique_ptr<Stmt> s) {
+
+    if (auto e = dynamic_cast<ExprStmt *>(s.get())) {
+      e->e = transformExpr(std::move(e->e));
+      return s;
+    }
+
+    if (auto p = dynamic_cast<PrintStmt *>(s.get())) {
+      p->e = transformExpr(std::move(p->e));
+      return s;
+    }
+
+    if (auto i = dynamic_cast<IfStmt *>(s.get())) {
+      i->condition = transformExpr(std::move(i->condition));
+      i->thenBranch = transformStmt(std::move(i->thenBranch));
+      if (i->elseBranch)
+        i->elseBranch = transformStmt(std::move(i->elseBranch));
+      return s;
+    }
+
+    if (auto w = dynamic_cast<WhileStmt *>(s.get())) {
+      w->condition = transformExpr(std::move(w->condition));
+      w->body = transformStmt(std::move(w->body));
+      return s;
+    }
+
+    if (auto b = dynamic_cast<BlockStmt *>(s.get())) {
+      for (auto &x : b->stmts)
+        x = transformStmt(std::move(x));
+      return s;
+    }
+
+    return s;
+  }
 };

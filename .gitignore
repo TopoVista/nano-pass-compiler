@@ -1,0 +1,21 @@
+# ==============================
+# Ignore all day folders
+# ==============================
+
+# lowercase
+day*/
+*day*/
+
+# uppercase
+DAY*/
+*DAY*/
+
+# days folder
+days/
+
+
+# ==============================
+# Ignore all Markdown files
+# ==============================
+
+*.md

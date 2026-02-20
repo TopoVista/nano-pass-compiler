@@ -264,7 +264,7 @@ This is an **8-week plan (~2 months, 5 hrs/day = ~300 hrs)**. Think of it like a
 
 ---
 
-## **Week 8 – Polish + Demo**
+##  **Week 8 – Polish + Demo**
 
 📖 Goal: Prepare for resume + professor demo.
 
