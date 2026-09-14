@@ -15,6 +15,12 @@ class ResolveScopesPass {
 
 public:
   void resolve(const vector<unique_ptr<Stmt>> &program) {
+    // Establish the complete global function namespace before resolving any
+    // body. This makes forward calls and mutual recursion well-defined.
+    for (const auto &statement : program) {
+      if (auto *function = dynamic_cast<FunctionStmt *>(statement.get()))
+        declareFunction(*function);
+    }
     for (auto &s : program)
       resolveStmt(s.get());
   }
@@ -54,21 +60,6 @@ private:
 
     // ---------------- FUNCTION ----------------
     if (auto s = dynamic_cast<FunctionStmt *>(stmt)) {
-
-      if (table.isDeclaredInCurrentScope(s->name)) {
-        throw CompileError("Redeclaration of function '" + s->name + "'",
-                           s->loc.line, s->loc.col);
-      }
-
-      table.declare(s->name, SymbolKind::Function);
-
-      auto fnSymbol = table.lookup(s->name);
-      fnSymbol->type = s->returnType;
-      fnSymbol->paramTypes.clear();
-
-      for (auto &p : s->params)
-        fnSymbol->paramTypes.push_back(p.second);
-
       table.enterScope();
 
       for (auto &p : s->params) {
@@ -135,6 +126,18 @@ private:
   }
 
   // ---------------- Expressions ----------------
+
+  void declareFunction(const FunctionStmt &function) {
+    if (table.isDeclaredInCurrentScope(function.name)) {
+      throw CompileError("Redeclaration of function '" + function.name + "'",
+                         function.loc.line, function.loc.col);
+    }
+    table.declare(function.name, SymbolKind::Function);
+    auto *symbol = table.lookup(function.name);
+    symbol->type = function.returnType;
+    for (const auto &parameter : function.params)
+      symbol->paramTypes.push_back(parameter.second);
+  }
 
   void resolveExpr(Expr *expr) {
 

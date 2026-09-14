@@ -76,7 +76,7 @@ private:
     }
 
     auto whileStmt = make_unique<WhileStmt>(
-        f->condition ? std::move(f->condition) : make_unique<NumberExpr>(1),
+        f->condition ? std::move(f->condition) : make_unique<NumberExpr>(1LL),
         std::move(newBody));
 
     block->stmts.push_back(std::move(whileStmt));

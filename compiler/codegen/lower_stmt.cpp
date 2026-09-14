@@ -90,7 +90,11 @@ void lowerReturnStmt(LLVMCodegen &cg, ReturnStmt *stmt) {
     Value *retVal = lowerExpr(cg, stmt->value.get());
     cg.builder.CreateRet(retVal);
   } else {
-    cg.builder.CreateRet(ConstantInt::get(Type::getInt32Ty(cg.ctx), 0));
+    if (cg.currentFunction->getReturnType()->isVoidTy())
+      cg.builder.CreateRetVoid();
+    else
+      cg.builder.CreateRet(
+          Constant::getNullValue(cg.currentFunction->getReturnType()));
   }
 }
 
@@ -144,21 +148,27 @@ void lowerForStmt(LLVMCodegen &cg, ForStmt *stmt) {
 
 /* ================= FUNCTION ================= */
 
+Function *declareFunction(LLVMCodegen &cg, FunctionStmt *stmt) {
+  if (Function *existing = cg.module->getFunction(stmt->name))
+    return existing;
+
+  std::vector<Type *> paramTypes;
+  for (const auto &parameter : stmt->params)
+    paramTypes.push_back(cg.toLLVMType(parameter.second));
+
+  FunctionType *functionType =
+      FunctionType::get(cg.toLLVMType(stmt->returnType), paramTypes, false);
+  return Function::Create(functionType, Function::ExternalLinkage, stmt->name,
+                          cg.module);
+}
+
 void lowerFunctionStmt(LLVMCodegen &cg, FunctionStmt *stmt) {
 
   Function *oldFunction = cg.currentFunction;
   BasicBlock *oldInsertBlock = cg.builder.GetInsertBlock();
 
-  std::vector<Type *> paramTypes;
-  for (auto &p : stmt->params)
-    paramTypes.push_back(cg.toLLVMType(p.second));
-
   Type *retType = cg.toLLVMType(stmt->returnType);
-
-  FunctionType *fnType = FunctionType::get(retType, paramTypes, false);
-
-  Function *fn = Function::Create(fnType, Function::ExternalLinkage, stmt->name,
-                                  cg.module);
+  Function *fn = declareFunction(cg, stmt);
 
   cg.currentFunction = fn;
 
@@ -244,12 +254,16 @@ void lowerStmt(LLVMCodegen &cg, Stmt *stmt) {
     Value *v = lowerExpr(cg, s->e.get());
     Type *ty = v->getType();
 
-    if (ty->isIntegerTy(32)) {
+    if (ty->isIntegerTy(1)) {
+      // bool: print as 0 or 1
+      cg.emitPrintfBool(v);
+    } else if (ty->isIntegerTy()) {
       cg.emitPrintfInt(v);
     } else if (ty->isDoubleTy() || ty->isFloatTy()) {
       cg.emitPrintfFloat(v);
-    } else if (ty->isIntegerTy(1)) {
-      cg.emitPrintfBool(v);
+    } else if (ty->isPointerTy()) {
+      // string literal lowers to i8* / ptr
+      cg.emitPrintfStr(v);
     } else {
       llvm_unreachable("Unsupported print type");
     }

@@ -14,15 +14,15 @@ struct DesugarBoolPass {
 
     // 1️⃣ REAL boolean literal node → number
     if (auto b = dynamic_cast<BoolExpr *>(e.get())) {
-      return make_unique<NumberExpr>(b->value ? 1 : 0);
+      return make_unique<NumberExpr>(b->value ? 1LL : 0LL);
     }
 
     // 2️⃣ Legacy case: "true"/"false" parsed as identifiers
     if (auto v = dynamic_cast<VariableExpr *>(e.get())) {
       if (v->name == "true")
-        return make_unique<NumberExpr>(1);
+        return make_unique<NumberExpr>(1LL);
       if (v->name == "false")
-        return make_unique<NumberExpr>(0);
+        return make_unique<NumberExpr>(0LL);
       return e;
     }
 

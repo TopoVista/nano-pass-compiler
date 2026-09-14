@@ -112,8 +112,11 @@ private:
 
   // Needed because we reuse condition twice
   unique_ptr<Expr> cloneExpr(const Expr *e) {
-    if (auto n = dynamic_cast<const NumberExpr *>(e))
-      return make_unique<NumberExpr>(n->value);
+    if (auto n = dynamic_cast<const NumberExpr *>(e)) {
+      if (n->isFloat)
+        return make_unique<NumberExpr>(n->floatValue);
+      return make_unique<NumberExpr>(n->intValue);
+    }
 
     if (auto v = dynamic_cast<const VariableExpr *>(e))
       return make_unique<VariableExpr>(v->name);

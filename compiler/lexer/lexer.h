@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../lexer/token.h"
+#include "../common/error.h"
 #include <cctype>
 #include <stdexcept>
 #include <string>
@@ -13,6 +14,8 @@ class Lexer {
   size_t current = 0;
   int line = 1;
   int col = 1;
+  int tokenLine = 1;
+  int tokenCol = 1;
 
   std::unordered_map<std::string, TokenType> kw;
 
@@ -49,6 +52,8 @@ public:
 
     while (!isAtEnd()) {
       start = current;
+      tokenLine = line;
+      tokenCol = col;
       char c = advance();
 
       switch (c) {
@@ -83,14 +88,14 @@ public:
         if (match('&'))
           tokens.push_back(makeToken(TokenType::AND_AND));
         else
-          throw std::runtime_error("Unexpected character '&'");
+          throw CompileError("Unexpected character '&'", tokenLine, tokenCol);
         break;
 
       case '|':
         if (match('|'))
           tokens.push_back(makeToken(TokenType::OR_OR));
         else
-          throw std::runtime_error("Unexpected character '|'");
+          throw CompileError("Unexpected character '|'", tokenLine, tokenCol);
         break;
 
       case '/':
@@ -105,10 +110,10 @@ public:
             }
             advance();
           }
-          if (!isAtEnd()) {
-            advance();
-            advance();
-          }
+          if (isAtEnd())
+            throw CompileError("Unterminated block comment", line, col);
+          advance();
+          advance();
         } else {
           tokens.push_back(makeToken(TokenType::SLASH));
         }
@@ -171,8 +176,8 @@ public:
         break;
 
       case '"': {
-        int stringLine = line;
-        int stringCol = col;
+        int stringLine = tokenLine;
+        int stringCol = tokenCol;
 
         while (peek() != '"' && !isAtEnd()) {
           if (peek() == '\n') {
@@ -183,7 +188,8 @@ public:
         }
 
         if (isAtEnd())
-          throw std::runtime_error("Unterminated string literal");
+          throw CompileError("Unterminated string literal", stringLine,
+                             stringCol);
 
         advance();
 
@@ -199,7 +205,8 @@ public:
         } else if (isAlpha(c)) {
           identifier(tokens);
         } else {
-          throw std::runtime_error(std::string("Unexpected character: ") + c);
+          throw CompileError(std::string("Unexpected character: ") + c,
+                             tokenLine, tokenCol);
         }
         break;
       }
@@ -236,7 +243,7 @@ private:
 
   Token makeToken(TokenType type) {
     std::string lex = src.substr(start, current - start);
-    return Token{type, lex, line, col};
+    return Token{type, lex, tokenLine, tokenCol};
   }
 
   bool isAlpha(char c) const {
@@ -268,8 +275,8 @@ private:
 
     auto it = kw.find(text);
     if (it != kw.end())
-      tokens.push_back(Token{it->second, text, line, col});
+      tokens.push_back(Token{it->second, text, tokenLine, tokenCol});
     else
-      tokens.push_back(Token{TokenType::IDENTIFIER, text, line, col});
+      tokens.push_back(Token{TokenType::IDENTIFIER, text, tokenLine, tokenCol});
   }
 };

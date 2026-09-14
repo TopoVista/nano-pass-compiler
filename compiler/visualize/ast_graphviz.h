@@ -5,15 +5,19 @@
 #include "../ast/stmt.h"
 #include "../ast/expr.h"
 
+// Emit a Graphviz DOT file representing the AST of a program.
+// Usage:
+//   ASTGraphviz g("ast.dot");
+//   g.draw(program);
 struct ASTGraphviz {
 
     int nodeId = 0;
-    ofstream out;
+    std::ofstream out;
 
-    ASTGraphviz(const string& filename) {
+    ASTGraphviz(const std::string& filename) {
         out.open(filename);
         out << "digraph AST {\n";
-        out << "node [shape=box];\n";
+        out << "  node [shape=box fontname=\"Monospace\"];\n";
     }
 
     ~ASTGraphviz() {
@@ -21,15 +25,12 @@ struct ASTGraphviz {
         out.close();
     }
 
-    /* ===== ENTRY ===== */
-
-    void draw(const vector<unique_ptr<Stmt>>& program) {
+    void draw(const std::vector<std::unique_ptr<Stmt>>& program) {
         for (auto& s : program)
             drawStmt(s.get(), -1);
     }
 
 private:
-
     /* ===== STATEMENTS ===== */
 
     void drawStmt(const Stmt* s, int parent) {
@@ -47,31 +48,38 @@ private:
             for (auto& x : b->stmts)
                 drawStmt(x.get(), id);
         }
-
         else if (auto i = dynamic_cast<const IfStmt*>(s)) {
             drawExpr(i->condition.get(), id);
             drawStmt(i->thenBranch.get(), id);
             if (i->elseBranch)
                 drawStmt(i->elseBranch.get(), id);
         }
-
         else if (auto w = dynamic_cast<const WhileStmt*>(s)) {
             drawExpr(w->condition.get(), id);
             drawStmt(w->body.get(), id);
         }
-
+        else if (auto f = dynamic_cast<const ForStmt*>(s)) {
+            if (f->init)      drawStmt(f->init.get(), id);
+            if (f->condition) drawExpr(f->condition.get(), id);
+            if (f->increment) drawExpr(f->increment.get(), id);
+            drawStmt(f->body.get(), id);
+        }
         else if (auto r = dynamic_cast<const ReturnStmt*>(s)) {
             if (r->value)
                 drawExpr(r->value.get(), id);
         }
-
-        else if (auto f = dynamic_cast<const FunctionStmt*>(s)) {
-            for (auto& p : f->params) {
-                int pid = newNode("Param " + p);
+        else if (auto v = dynamic_cast<const VarDeclStmt*>(s)) {
+            if (v->initializer)
+                drawExpr(v->initializer.get(), id);
+        }
+        else if (auto fn = dynamic_cast<const FunctionStmt*>(s)) {
+            for (auto& p : fn->params) {
+                int pid = newNode("Param " + p.first);
                 link(id, pid);
             }
-            drawStmt(f->body.get(), id);
+            drawStmt(fn->body.get(), id);
         }
+        // BreakStmt, ContinueStmt: leaf nodes — no children.
     }
 
     /* ===== EXPRESSIONS ===== */
@@ -84,43 +92,65 @@ private:
             drawExpr(b->left.get(), id);
             drawExpr(b->right.get(), id);
         }
-
         else if (auto u = dynamic_cast<const UnaryExpr*>(e)) {
             drawExpr(u->right.get(), id);
         }
-
         else if (auto c = dynamic_cast<const CallExpr*>(e)) {
             for (auto& a : c->args)
                 drawExpr(a.get(), id);
         }
+        else if (auto i = dynamic_cast<const IndexExpr*>(e)) {
+            drawExpr(i->array.get(), id);
+            drawExpr(i->index.get(), id);
+        }
+        // Leaf nodes (Number, Bool, String, Variable): no children.
     }
 
     /* ===== HELPERS ===== */
 
-    int newNode(const string& label) {
+    int newNode(const std::string& label) {
         int id = nodeId++;
-        out << "node" << id << " [label=\"" << label << "\"];\n";
+        // Escape backslashes and double-quotes inside labels.
+        std::string escaped;
+        for (char c : label) {
+            if (c == '"' || c == '\\') escaped += '\\';
+            escaped += c;
+        }
+        out << "  node" << id << " [label=\"" << escaped << "\"];\n";
         return id;
     }
 
     void link(int from, int to) {
-        out << "node" << from << " -> node" << to << ";\n";
+        out << "  node" << from << " -> node" << to << ";\n";
     }
 
-    string stmtLabel(const Stmt* s) {
-        if (dynamic_cast<const ExprStmt*>(s))   return "ExprStmt";
-        if (dynamic_cast<const PrintStmt*>(s))  return "PrintStmt";
-        if (dynamic_cast<const BlockStmt*>(s))  return "Block";
-        if (dynamic_cast<const IfStmt*>(s))     return "If";
-        if (dynamic_cast<const WhileStmt*>(s))  return "While";
-        if (dynamic_cast<const ReturnStmt*>(s)) return "Return";
-        if (dynamic_cast<const FunctionStmt*>(s)) return "Function";
+    std::string stmtLabel(const Stmt* s) {
+        if (dynamic_cast<const ExprStmt*>(s))     return "ExprStmt";
+        if (dynamic_cast<const PrintStmt*>(s))    return "PrintStmt";
+        if (dynamic_cast<const BlockStmt*>(s))    return "Block";
+        if (dynamic_cast<const IfStmt*>(s))       return "If";
+        if (dynamic_cast<const WhileStmt*>(s))    return "While";
+        if (dynamic_cast<const ForStmt*>(s))      return "For";
+        if (dynamic_cast<const ReturnStmt*>(s))   return "Return";
+        if (auto v = dynamic_cast<const VarDeclStmt*>(s))
+            return "VarDecl(" + v->name + ")";
+        if (auto f = dynamic_cast<const FunctionStmt*>(s))
+            return "Function(" + f->name + ")";
+        if (dynamic_cast<const BreakStmt*>(s))    return "Break";
+        if (dynamic_cast<const ContinueStmt*>(s)) return "Continue";
         return "Stmt";
     }
 
-    string exprLabel(const Expr* e) {
-        if (auto n = dynamic_cast<const NumberExpr*>(e))
-            return "Number(" + to_string(n->value) + ")";
+    std::string exprLabel(const Expr* e) {
+        if (auto n = dynamic_cast<const NumberExpr*>(e)) {
+            if (n->isFloat)
+                return "Float(" + std::to_string(n->floatValue) + ")";
+            return "Int(" + std::to_string(n->intValue) + ")";
+        }
+        if (auto b = dynamic_cast<const BoolExpr*>(e))
+            return std::string("Bool(") + (b->value ? "true" : "false") + ")";
+        if (auto s = dynamic_cast<const StringExpr*>(e))
+            return "Str(\\\"" + s->value + "\\\")";
         if (auto v = dynamic_cast<const VariableExpr*>(e))
             return "Var(" + v->name + ")";
         if (auto u = dynamic_cast<const UnaryExpr*>(e))
@@ -129,6 +159,8 @@ private:
             return "Binary(" + b->op + ")";
         if (auto c = dynamic_cast<const CallExpr*>(e))
             return "Call(" + c->callee + ")";
+        if (dynamic_cast<const IndexExpr*>(e))
+            return "Index";
         return "Expr";
     }
 };

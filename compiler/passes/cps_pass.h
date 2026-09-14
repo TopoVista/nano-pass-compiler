@@ -56,7 +56,8 @@ struct CPSPass {
 
     // ----- NUMBER -----
     if (auto e = dynamic_cast<NumberExpr *>(expr)) {
-      return make_unique<CPSCall>(k, vector<string>{to_string((int)e->value)});
+      return make_unique<CPSCall>(k, vector<string>{
+          to_string(e->isFloat ? (long long)e->floatValue : e->intValue)});
     }
 
     // ----- VARIABLE -----
@@ -105,7 +106,7 @@ struct CPSPass {
       return v->name;
 
     if (auto n = dynamic_cast<NumberExpr *>(e))
-      return to_string((int)n->value);
+      return to_string(n->isFloat ? (long long)n->floatValue : n->intValue);
 
     // TEMP bridge: unary expressions must have been ANF'd
     if (auto u = dynamic_cast<UnaryExpr *>(e)) {

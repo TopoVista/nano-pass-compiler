@@ -71,7 +71,7 @@ private:
         return make_unique<ExprStmt>(make_unique<BinaryExpr>(
             "=", make_unique<VariableExpr>(name),
             make_unique<BinaryExpr>(op, make_unique<VariableExpr>(name),
-                                    make_unique<NumberExpr>(1))));
+                                    make_unique<NumberExpr>(1LL))));
       }
     }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <stdexcept>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -10,7 +11,10 @@
 using namespace std;
 
 class SymbolTable {
-  vector<unordered_map<string, Symbol>> scopes;
+  vector<unordered_map<string, Symbol *>> scopes;
+  // AST nodes retain non-owning Symbol pointers. Keep the resolver's symbols
+  // alive even after their lexical scope has been popped.
+  vector<unique_ptr<Symbol>> ownedSymbols;
 
 public:
   SymbolTable() {
@@ -38,14 +42,15 @@ public:
       throw CompileError("Redeclaration of symbol '" + name + "'", 0, 0);
     }
 
-    scope.emplace(name, Symbol(name, kind, currentDepth()));
+    ownedSymbols.push_back(make_unique<Symbol>(name, kind, currentDepth()));
+    scope.emplace(name, ownedSymbols.back().get());
   }
 
   Symbol *lookup(const string &name) {
     for (int i = (int)scopes.size() - 1; i >= 0; --i) {
       auto it = scopes[i].find(name);
       if (it != scopes[i].end())
-        return &it->second;
+        return it->second;
     }
     return nullptr;
   }

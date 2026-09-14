@@ -108,8 +108,34 @@ struct TypeCheckPass {
       }
     }
 
-    else if (auto s = dynamic_cast<FunctionStmt *>(stmt)) {
+    else if (auto s = dynamic_cast<ForStmt *>(stmt)) {
 
+      // init may be a VarDeclStmt or ExprStmt — check it if present
+      if (s->init)
+        checkStmt(s->init.get());
+
+      if (s->condition) {
+        LangType cond = checkExpr(s->condition.get());
+        if (cond.kind != LangTypeKind::Bool && cond.kind != LangTypeKind::Integer)
+          throw CompileError("For condition must be bool or int",
+                             s->condition->loc.line, s->condition->loc.col);
+      }
+
+      if (s->increment)
+        checkExpr(s->increment.get());
+
+      checkStmt(s->body.get());
+    }
+
+    else if (dynamic_cast<BreakStmt *>(stmt)) {
+      // nothing to type-check
+    }
+
+    else if (dynamic_cast<ContinueStmt *>(stmt)) {
+      // nothing to type-check
+    }
+
+    else if (auto s = dynamic_cast<FunctionStmt *>(stmt)) {
       currentFunctionReturnType = s->returnType;
       hasReturn = false;
 
@@ -259,8 +285,9 @@ struct TypeCheckPass {
           throw CompileError("Argument type mismatch", c->loc.line, c->loc.col);
       }
 
-      return expr->type =
-                 c->symbol->type.ret ? *c->symbol->type.ret : LangType::Void();
+      // Function symbols currently store their declared return type directly;
+      // parameter types live in Symbol::paramTypes.
+      return expr->type = c->symbol->type;
     }
 
     return LangType::Unknown();

@@ -4,6 +4,7 @@
 #include "ast/stmt.h"
 
 void lowerStmt(LLVMCodegen &cg, Stmt *stmt);
+llvm::Function *declareFunction(LLVMCodegen &cg, FunctionStmt *stmt);
 void lowerIfStmt(LLVMCodegen &cg, IfStmt *stmt);
 void lowerWhileStmt(LLVMCodegen &cg, WhileStmt *stmt);
 void lowerPrintStmt(LLVMCodegen &cg, PrintStmt *stmt);

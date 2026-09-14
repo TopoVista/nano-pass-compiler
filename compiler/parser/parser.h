@@ -2,6 +2,7 @@
 
 #include "../ast/expr.h"
 #include "../ast/stmt.h"
+#include "../common/error.h"
 #include "../lexer/token.h"
 #include <memory>
 #include <stdexcept>
@@ -50,7 +51,8 @@ private:
   Token consume(TokenType type, const string &msg) {
     if (check(type))
       return tokens[current++];
-    throw runtime_error(msg);
+    const Token &token = peek();
+    throw CompileError(msg, token.line, token.col);
   }
 
   // ============================================================
@@ -129,8 +131,10 @@ private:
 
     consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
 
-    return make_unique<VarDeclStmt>(name.lexeme, finalType,
-                                    std::move(initializer));
+    auto statement = make_unique<VarDeclStmt>(name.lexeme, finalType,
+                                              std::move(initializer));
+    statement->loc = SourceLocation(name.line, name.col);
+    return statement;
   }
 
   // ============================================================
@@ -282,9 +286,11 @@ private:
 
     auto body = blockStatement();
 
-    return make_unique<FunctionStmt>(
+    auto statement = make_unique<FunctionStmt>(
         name.lexeme, returnType, std::move(params),
         unique_ptr<BlockStmt>(static_cast<BlockStmt *>(body.release())));
+    statement->loc = SourceLocation(name.line, name.col);
+    return statement;
   }
 
   // ============================================================
@@ -407,28 +413,47 @@ private:
 
   unique_ptr<Expr> primary() {
 
-    if (match({TokenType::STRING}))
-      return make_unique<StringExpr>(previous().lexeme);
+    if (match({TokenType::STRING})) {
+      Token token = previous();
+      auto expression = make_unique<StringExpr>(token.lexeme);
+      expression->loc = SourceLocation(token.line, token.col);
+      return expression;
+    }
 
     if (match({TokenType::NUMBER})) {
 
-      string lex = previous().lexeme;
+      Token token = previous();
+      string lex = token.lexeme;
 
-      if (lex.find('.') != string::npos)
-        return make_unique<NumberExpr>(stod(lex));
+      if (lex.find('.') != string::npos) {
+        auto expression = make_unique<NumberExpr>(stod(lex));
+        expression->loc = SourceLocation(token.line, token.col);
+        return expression;
+      }
 
-      return make_unique<NumberExpr>(stoll(lex));
+      auto expression = make_unique<NumberExpr>(stoll(lex));
+      expression->loc = SourceLocation(token.line, token.col);
+      return expression;
     }
 
-    if (match({TokenType::TRUE}))
-      return make_unique<BoolExpr>(true);
+    if (match({TokenType::TRUE})) {
+      Token token = previous();
+      auto expression = make_unique<BoolExpr>(true);
+      expression->loc = SourceLocation(token.line, token.col);
+      return expression;
+    }
 
-    if (match({TokenType::FALSE}))
-      return make_unique<BoolExpr>(false);
+    if (match({TokenType::FALSE})) {
+      Token token = previous();
+      auto expression = make_unique<BoolExpr>(false);
+      expression->loc = SourceLocation(token.line, token.col);
+      return expression;
+    }
 
     if (match({TokenType::IDENTIFIER})) {
 
-      string name = previous().lexeme;
+      Token token = previous();
+      string name = token.lexeme;
 
       if (match({TokenType::LPAREN})) {
 
@@ -442,10 +467,14 @@ private:
 
         consume(TokenType::RPAREN, "Expected ')'");
 
-        return make_unique<CallExpr>(name, std::move(args));
+        auto expression = make_unique<CallExpr>(name, std::move(args));
+        expression->loc = SourceLocation(token.line, token.col);
+        return expression;
       }
 
-      return make_unique<VariableExpr>(name);
+      auto expression = make_unique<VariableExpr>(name);
+      expression->loc = SourceLocation(token.line, token.col);
+      return expression;
     }
 
     if (match({TokenType::LPAREN})) {
