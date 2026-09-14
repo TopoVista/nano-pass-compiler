@@ -1,21 +1,101 @@
-# ==============================
-# Ignore all day folders
-# ==============================
+# ============================================================
+# NanoPass Compiler Lab — .gitignore
+# ============================================================
 
-# lowercase
-day*/
-*day*/
+# CMake build trees (root and per-subproject)
+/build/
+/compiler/build/
+/_audit_build/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/CTestTestfile.cmake
+compile_commands.json
+CMakeUserPresets.json
 
-# uppercase
-DAY*/
-*DAY*/
+# Ninja / Make artifacts
+Makefile
+build.ninja
+.ninja_deps
+.ninja_log
 
-# days folder
-days/
+# MSVC / MSBuild artifacts
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.recipe
+*.lastbuildstate
+*.tlog/
+ALL_BUILD.vcxproj
+INSTALL.vcxproj
+ZERO_CHECK.vcxproj
 
+# Compiler output binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
 
-# ==============================
-# Ignore all Markdown files
-# ==============================
+# Object / debug files
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.map
 
-*.md
+# LLVM IR / assembly / bitcode — generated, never committed
+*.ll
+*.s
+*.bc
+
+# Graphviz generated output
+*.dot
+*.svg
+*.png   # only generated graph images; source images committed elsewhere are fine
+
+# Nano-specific compiler output
+/compiler/program
+/compiler/prog
+/compiler/test_out
+
+# Test / fuzzing artifacts
+tests/regressions/
+fuzz-artifacts/
+crash-*
+minimized-*
+*.profraw
+*.profdata
+
+# Profile data
+*.nprof
+benchmark-results.json
+fuzz-run-summary.json
+optimization-report.json
+telemetry.json
+
+# IDE state — never source
+.idea/
+.vscode/
+*.code-workspace
+
+# Node / web artifacts
+web/node_modules/
+web/.next/
+web/out/
+web/.env
+web/.env.*
+.env
+.env.*
+
+# Python / misc tooling
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
