@@ -1,18 +1,18 @@
 # NanoPass Compiler Lab
 
 A transparent compiler laboratory that lowers a small C-like language through
-explicit typed intermediate representations, verifies compiler invariants,
-performs real SSA-based optimizations, and visually explains every
-transformation.
+explicit typed intermediate representations, verifies compiler invariants, and
+visually explains every transformation.
 
-> Every pass is small, named, inspectable, measurable, and verifiable.
-> A developer should always be able to answer: "What happened to my program?"
+> Every pass is small, named, inspectable, measurable, verifiable, and
+> observable.  A developer should always be able to answer:
+> "What happened to my program?"
 
 ```
 Source → Lex → Parse → Resolve → TypeCheck
-       → DesugarFor → DesugarIncDec → DesugarPlusAssign
-       → [ANF] → [CFG] → [SSA] → [Optimizer]
-       → LLVM IR → Native / JIT
+       → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]
+       → [CoreIR] → [CFG] → [SSA] → [Optimizer]    (planned)
+       → LLVM IR → Native / JIT                     (native/JIT planned)
 ```
 
 Items in `[brackets]` are planned and under active development.
@@ -27,11 +27,17 @@ then:
 ```sh
 git clone https://github.com/TopoVista/nano-pass-compiler
 cd nano-pass-compiler
-cmake -S . -B build
+cmake -S . -B build -G Ninja -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 cmake --build build -j
+ctest --test-dir build
 ```
 
-The produced binary is `build/nano` (`build/nano.exe` on Windows).
+On WSL with the system LLVM:
+```sh
+cmake -S . -B build -G Ninja -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+```
+
+The produced binary is `build/compiler/nano`.
 
 ---
 
@@ -39,29 +45,119 @@ The produced binary is `build/nano` (`build/nano.exe` on Windows).
 
 ```sh
 # Tokenize
-./build/nano emit examples/factorial.nano --format=tokens
+./build/compiler/nano emit examples/factorial.nano --format=tokens
 
 # Print AST
-./build/nano emit examples/factorial.nano --format=ast
+./build/compiler/nano emit examples/factorial.nano --format=ast
 
-# Print AST after desugaring (for/++/+= eliminated)
-./build/nano emit examples/factorial.nano --format=desugar
+# Desugar and print AST (for / ++ / += eliminated)
+./build/compiler/nano emit examples/factorial.nano --format=desugar
 
 # Emit LLVM IR
-./build/nano emit examples/factorial.nano --format=llvm
+./build/compiler/nano emit examples/factorial.nano --format=llvm
 
 # Verify all available compiler invariants
-./build/nano verify examples/factorial.nano
+./build/compiler/nano verify examples/factorial.nano
 
-# Show full CLI help
-./build/nano --help
+# Show all registered passes
+./build/compiler/nano passes
+
+# Show all registered analyses
+./build/compiler/nano analyses
 ```
 
 Run the generated IR with LLVM's interpreter:
+```sh
+./build/compiler/nano emit examples/factorial.nano --format=llvm -o factorial.ll
+lli factorial.ll
+```
+
+---
+
+## Compiler passes
+
+NanoPass uses a real `PassManager` that runs each pass **once over the full
+program** and tracks analysis caching and invalidation.
+
+```
+$ nano passes
+
+Available compiler passes
+
+Desugaring
+  desugar-for
+    Unit:  program
+    Lower for-loops to equivalent while-loops.
+
+  desugar-inc-dec
+    Unit:  program
+    Lower ++ and -- operators to explicit additions/subtractions.
+
+  desugar-plus-assign
+    Unit:  program
+    Lower += compound assignment to simple assignment.
+```
+
+```
+$ nano analyses
+
+Available compiler analyses
+
+Ast
+  ast-node-count
+    Unit:  program
+    Count total AST nodes (statements, expressions, functions).
+
+  ast-depth
+    Unit:  program
+    Compute maximum nesting depth of the AST.
+```
+
+### Pass pipeline debugging
 
 ```sh
-./build/nano emit examples/factorial.nano --format=llvm -o factorial.ll
-lli factorial.ll
+./build/compiler/nano emit examples/loops.nano --format=desugar \
+    --debug-pass-manager
+```
+
+Output:
+
+```
+[pass-manager] starting pipeline "desugar"
+
+[pass] DesugarFor  (desugar-for)
+  changed:  no
+  duration: 5.0 us
+
+[pass] DesugarIncDec  (desugar-inc-dec)
+  changed:  no
+  duration: 8.6 us
+
+[pass] DesugarPlusAssign  (desugar-plus-assign)
+  changed:  no
+  duration: 7.9 us
+
+[pass-manager] completed "desugar"
+  total duration: 21.5 us
+  any changed:    no
+```
+
+Each pass runs **once** — not once per top-level statement.
+
+### Other pass options
+
+```sh
+# Print the active pass pipeline
+--print-pipeline
+
+# Stop after a named pass (by stable ID)
+--stop-after=desugar-for
+
+# Skip a named pass
+--disable-pass=desugar-inc-dec
+
+# Show analysis cache events
+--debug-analyses
 ```
 
 ---
@@ -77,9 +173,10 @@ lli factorial.ll
 | DesugarFor | ✅ stable | `--format=desugar` |
 | DesugarIncDec | ✅ stable | |
 | DesugarPlusAssign | ✅ stable | |
+| PassManager + AnalysisManager | ✅ stable | |
+| PassRegistry + PipelineBuilder | ✅ stable | `nano passes` |
 | LLVM IR emission | ✅ stable | `--format=llvm` |
-| ANF | 🔬 experimental | |
-| CPS | 🔬 experimental | |
+| CoreIR | 🗓 planned | |
 | CFG / SSA | 🗓 planned | |
 | Optimizer | 🗓 planned | |
 | JIT | 🗓 planned | |
@@ -103,8 +200,6 @@ lli factorial.ll
 ---
 
 ## Language reference
-
-The Nano language is a small C-like language. See [docs/language.md](docs/language.md) (planned).
 
 Current supported constructs:
 
@@ -136,23 +231,39 @@ print expr;
 
 ---
 
+## Pass infrastructure architecture
+
+The pass infrastructure lives in `compiler/passes/` and uses the `nanopass`
+namespace (not `nano`, which collides with `std::nano` from `<ratio>`).
+
+Key types:
+
+| Type | Purpose |
+|---|---|
+| `nanopass::Pass` | Abstract base; `PassInfo info()` + `run(Program&, PassContext&)` |
+| `nanopass::PassManager` | Sequential pipeline; once-per-program execution |
+| `nanopass::AnalysisManager` | Type-safe analysis cache with `get<T>()` |
+| `nanopass::PreservedAnalyses` | Declares which analyses a pass leaves valid |
+| `nanopass::PassResult` | `changed` + `preserved` + `PassStatistics` |
+| `nanopass::PassInstrumentation` | Observer hooks around pass/analysis lifecycle |
+| `nanopass::PassRegistry` | Static registry of known passes and analyses |
+| `nanopass::PipelineBuilder` | Pipeline factory; registry initialisation |
+
+See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the full
+architecture description including the pass lifecycle diagram.
+
+---
+
 ## Build options
 
 | Option | Default | Description |
 |---|---|---|
 | `NANO_BUILD_TESTS` | `ON` | Build the test suite |
 | `NANO_BUILD_JIT` | `OFF` | Build ORC JIT support (planned) |
-| `NANO_BUILD_WEB_SERVER` | `OFF` | Build the JSON API server (planned) |
+| `NANO_BUILD_WEB_SERVER` | `OFF` | Build JSON API server (planned) |
 | `NANO_ENABLE_SANITIZERS` | `OFF` | AddressSanitizer + UBSan |
-| `NANO_ENABLE_FUZZING` | `OFF` | Build libFuzzer targets (planned) |
-| `NANO_ENABLE_ALIVE2` | `OFF` | Optional Alive2 integration (planned) |
-
-Example with sanitizers:
-
-```sh
-cmake -S . -B build -DNANO_ENABLE_SANITIZERS=ON
-cmake --build build -j
-```
+| `NANO_ENABLE_FUZZING` | `OFF` | libFuzzer targets (planned) |
+| `NANO_ENABLE_ALIVE2` | `OFF` | Alive2 integration (planned) |
 
 ---
 
@@ -163,53 +274,24 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Current tests:
-- `nano_help` — verifies the CLI exits cleanly with `--help`
-- `nano_frontend_smoke` — forward calls, unterminated comments, source-location
-  diagnostics for undeclared variables
+Current: **35 tests, 100% passing.**
 
----
-
-## Debug pass manager
-
-```sh
-./build/nano emit examples/loops.nano --format=llvm --debug-pass-manager
-```
-
-Output:
-
-```
-[pass] Lex
-[pass] Parse
-[pass] Resolve
-[pass] TypeCheck
-[pass] DesugarFor
-[pass] DesugarIncDec
-[pass] DesugarPlusAssign
-[pass] LLVMCodegen
-```
+Test categories:
+- CLI smoke (`nano_help`, `nano_version`, `nano_passes_command`, `nano_analyses_command`)
+- Frontend unit (`nano_frontend_smoke`: forward calls, errors, source locations)
+- Pass manager unit (`nano_pass_manager_unit`: 22 tests covering PassManager,
+  AnalysisManager, analysis cache/invalidation, rewrite counts, stop-after,
+  disable-pass, registry lookups, PreservedAnalyses semantics)
+- Per-example integration (`emit_*`, `desugar_*`, `verify_*` for 8 examples)
+- CLI pass-manager smoke (`debug_pass_manager_smoke`, `print_pipeline_smoke`,
+  `stop_after_smoke`, `disable_pass_smoke`, `stop_after_invalid_pass`)
 
 ---
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for a detailed description of
-the compiler's components and design principles.
-
-See [docs/STATUS.md](docs/STATUS.md) for an accurate, up-to-date inventory of
-what is stable, experimental, and planned.
-
+See [docs/architecture.md](docs/architecture.md) for component descriptions.  
+See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the pass
+infrastructure design and lifecycle.  
+See [docs/STATUS.md](docs/STATUS.md) for an accurate feature inventory.  
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased development plan.
-
----
-
-## Contributing
-
-This project is being built incrementally as a research-grade compiler
-platform. Each phase leaves the repository compiling, tested, and documented.
-
-- Build is gated on LLVM being discoverable by CMake.
-- Do not add features that fake compiler correctness, optimization speedups,
-  or benchmark numbers.
-- All AI/ML features sit on top of verified deterministic compiler
-  infrastructure — the compiler is never dependent on an LLM.

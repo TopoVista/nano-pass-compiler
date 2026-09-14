@@ -1,86 +1,116 @@
 # Project Status
 
-Last updated: Phase 1 stabilization complete.
+Last updated: Phase 2 — PassManager + AnalysisManager complete.
 
 ---
 
 ## Stable
 
 ### Frontend
-- **Lexer** — tokenizes the full Nano language surface syntax; correct
-  line/column tracking; unterminated string/comment errors with source
-  locations.
-- **Parser** — recursive-descent; produces typed AST nodes for all language
-  constructs: variables, arrays, functions, if/else, while, for, return,
-  break, continue, print, and all expression forms.
-- **Scope resolution** (`ResolveScopesPass`) — lexical scopes, forward
-  function predeclaration (mutual recursion and forward calls work), stable
-  symbol ownership (no dangling pointers), source-location-attached errors.
-- **Type checker** (`TypeCheckPass`) — arithmetic, comparison, logical,
-  assignment, array indexing, function calls with arity/type checking,
-  if/while/for conditions, void/non-void return checking. All statement kinds
-  including `ForStmt`, `BreakStmt`, `ContinueStmt` handled.
+- **Lexer** — full Nano surface syntax; correct line/column tracking; unterminated
+  string/comment errors with source locations.
+- **Parser** — recursive-descent; produces typed AST for all language constructs:
+  variables, arrays, functions, if/else, while, for, return, break, continue,
+  print, and all expression forms including array indexing.
+- **Scope resolution** (`ResolveScopesPass`) — lexical scopes, forward function
+  predeclaration (mutual recursion and forward calls work), stable symbol
+  ownership (no dangling pointers), source-location-attached errors.
+- **Type checker** (`TypeCheckPass`) — arithmetic, comparison, logical, assignment,
+  array indexing, function calls with arity/type checking, if/while/for
+  conditions, void/non-void return checking.  All statement kinds handled.
 
-### Desugaring passes (wired into main pipeline)
-- **`DesugarForPass`** — `for(init;cond;inc) body` → `{ init; while(cond){ body; inc } }`
-- **`DesugarIncDecPass`** — `x++` / `x--` → `x = x ± 1`
-- **`DesugarPlusAssignPass`** — `x += e` → `x = x + e`
+### Pass infrastructure (`compiler/passes/`)
+- **`nanopass::Pass`** — abstract base class; `PassInfo` with stable string IDs;
+  `run(Program &, PassContext &)` interface.
+- **`nanopass::PassManager`** — sequential pipeline; each pass runs **once over the
+  full program**; `--stop-after` / `--disable-pass` support; instrumentation hooks;
+  analysis invalidation after each pass.
+- **`nanopass::AnalysisManager`** — type-safe `get<T>()` with caching by
+  `std::type_index`; `invalidate(PreservedAnalyses)`; preservation-check
+  registration; debug callbacks.
+- **`nanopass::PreservedAnalyses`** — `all()` / `none()` / `preserve<T>()`;
+  used by passes to declare which analyses remain valid.
+- **`nanopass::PassResult`** — `changed` flag, `PreservedAnalyses`, `PassStatistics`
+  (open named-value map).
+- **`nanopass::PassInstrumentation`** — observer hooks: `onPassStart`, `onPassEnd`,
+  `onAnalysisAccess`, `onAnalysisInvalidated`, `onPipelineStart`, `onPipelineEnd`.
+- **`nanopass::PassTelemetry`** — per-pass structured record: pass ID/name, unit,
+  `changed`, `durationNs`, statistics, invalidated analysis IDs.
+- **`nanopass::PassRegistry`** — static registry; lookup by stable ID; category-
+  grouped `printPasses()` / `printAnalyses()` for CLI output; `validatePassIds()`.
+- **`nanopass::PipelineBuilder`** — single authoritative pipeline factory;
+  `buildDesugarPipeline()`; `initialise()` (idempotent registry population).
 
-All three run in dependency order after type checking, before LLVM lowering.
+### Analyses
+- **`NodeCountAnalysis`** (`ast-node-count`) — total/statement/expression/function
+  counts via full AST traversal.  No raw AST pointers stored; safe to cache.
+- **`ASTDepthAnalysis`** (`ast-depth`) — maximum nesting depth; same guarantees.
+
+### Desugaring passes (wired into PassManager)
+- **`DesugarForPass`** (`desugar-for`) — `for(init;cond;inc) body` →
+  `{ init; while(cond){ body; inc } }`.  Recurses into `FunctionStmt` bodies
+  (Phase 1 bug fixed).  Source locations preserved on synthesised nodes.
+  Returns `changed=false` when no `ForStmt` present.
+- **`DesugarIncDecPass`** (`desugar-inc-dec`) — `x++`/`x--` →
+  `x = x ± 1`.  Recurses into `FunctionStmt` bodies.
+- **`DesugarPlusAssignPass`** (`desugar-plus-assign`) — `x += e` →
+  `x = x + e`.  Recurses into `FunctionStmt` bodies.
+
+All three passes report `rewrites` counts and return accurate `changed` flags.
 
 ### LLVM code generation
-- **`LLVMCodegen` / `lower_expr` / `lower_stmt`** — lowers desugared AST to
-  LLVM IR. Supported: all integer/float/bool arithmetic, comparisons (`<`,
-  `<=`, `>`, `>=`, `==`, `!=`), logical operators (`&&`, `||`) with correct
-  short-circuit phi nodes, unary `-` and `!`, string literals, array
-  declarations and indexed access (with bounds check), function
-  declarations/calls (forward calls included), if/else, while, for (after
-  desugaring), variable declarations and assignment, print (int, float, bool,
-  string), void and non-void returns.
-- **LLVM module verifier** runs after codegen; emits `internal compiler error`
-  on invariant violation.
+- Lowers desugared AST to LLVM IR.  Supported: all integer/float/bool
+  arithmetic, comparisons, logical `&&`/`||` (short-circuit phi), unary
+  `-`/`!`, string literals, arrays with bounds checks, function declarations
+  and calls (including forward calls), if/else, while, variable declarations
+  and assignment, print (int, float, bool, string), void and non-void returns.
+- LLVM module verifier runs after codegen.
 
 ### CLI
 - `nano --help` / `nano --version`
 - `nano emit <file> --format=tokens|ast|desugar|llvm`
 - `nano compile <file> --emit-llvm [-o <file>]`
-- `nano verify <file>` — runs parse → resolve → typecheck → desugar → LLVM
-  verify; reports per-stage PASS.
-- `nano --debug-pass-manager` — prints pass execution log to stderr.
-- Stub commands with clear `not yet implemented` messages: `run`, `explain`,
-  `graph`, `optimize`.
+- `nano verify <file>` — parse → resolve → typecheck → desugar → LLVM verify
+- `nano passes` — list all registered passes with category and description
+- `nano analyses` — list all registered analyses
+- `--print-pipeline` — print the active pass pipeline before execution
+- `--stop-after=<id>` — halt pipeline after the named pass
+- `--disable-pass=<id>` — skip a named pass
+- `--debug-pass-manager` — structured per-pass timing, changed state, stats
+- `--debug-analyses` — analysis cache hit/miss events
+- Stub commands with clear "not yet implemented" messages: `run`, `explain`,
+  `graph`, `optimize`
 
 ### Repository hygiene
-- Generated artifacts (`.ll`, `.s`, `.exe`, `build/`, `.idea/`, `.vscode/`)
-  removed from git history and excluded by `.gitignore`.
-- Examples directory with 8 sample programs.
+- Generated artifacts removed from git; comprehensive `.gitignore`.
+- 8 sample programs in `examples/`.
+- 35 CTest targets; 100% passing.
 
-### Visualization
-- **`ASTGraphviz`** — emits Graphviz DOT for the full AST including all
-  statement and expression node types. Access via
-  `nano emit <file> --format=dot -o out.dot`.
-
-### Tests
-- `nano_frontend_smoke` — covers: forward calls, mutual recursion, unterminated
-  comments, undeclared variable errors with source locations.
+### Tests — 35 total
+| Category | Count |
+|---|---|
+| CLI smoke (help, version, passes, analyses) | 4 |
+| Frontend unit (forward calls, errors, source locations) | 1 |
+| Pass manager unit (22 focused tests) | 1 |
+| Per-example emit/desugar/verify (8 examples × 3) | 24 |
+| CLI pass-manager smoke (debug, print-pipeline, stop-after, disable, invalid) | 5 |
 
 ---
 
 ## Experimental / not wired into production pipeline
 
-- **`ANFPass`** — AST-level ANF normalization prototype. Not yet connected to
-  the main pipeline or LLVM lowering.
-- **`CPSPass` / CPS IR** — teaching/research CPS transformation. Retained as
-  an experimental pipeline; does not affect production compilation.
-- **`IRPrinter`** — flat 3-address IR printer from earlier days; superseded
-  by LLVM IR emission.
+- **`ANFPass`** — AST-level ANF prototype. Not connected to main pipeline.
+- **`CPSPass` / CPS IR** — teaching/research CPS transformation.
+- **`IRPrinter`** — flat 3-address IR printer from earlier experiments.
+- **`DesugarBoolPass`** / **`DesugarIfElsePass`** — exist as headers; not enabled
+  (semantics and tests incomplete).
 
 ---
 
 ## Planned (not yet implemented)
 
 ### IR pipeline
-- Typed `CoreIR` — reduced IR after desugaring, before ANF
+- Typed `CoreIR` — reduced IR after desugaring
 - ANF integration into the real pipeline
 - `CFG` IR — basic blocks, terminators, predecessors/successors
 - CFG verifier and Graphviz output
@@ -92,13 +122,12 @@ All three run in dependency order after type checking, before LLVM lowering.
 - Liveness
 
 ### SSA
-- SSA construction (phi placement via dominance frontiers)
-- SSA value renaming
-- SSA verifier
+- SSA construction via dominance frontiers
+- Phi placement and variable renaming
+- SSA verifier and printer
 - `nano emit --format=ssa`
 
 ### Optimizer
-- Pass manager with analysis caching and invalidation
 - Constant folding / propagation / SCCP
 - Dead-code elimination
 - Copy propagation, CSE
@@ -106,24 +135,23 @@ All three run in dependency order after type checking, before LLVM lowering.
 - Function inlining
 - LICM
 - Optimization levels `-O0` through `-O3`
-- `nano optimize` with custom pass pipelines
 
 ### Runtime
-- Tree-walking interpreter (for differential testing)
+- Tree-walking interpreter (differential testing)
 - LLVM AOT object/executable emission
 - ORC JIT (`nano jit`)
-- Optional tiered adaptive JIT
+- Optional adaptive JIT
 
 ### Observability
 - `nano explain` — full transformation journey
-- Structured diagnostics (rich source spans, fix-it hints, JSON output)
-- Pass telemetry JSON
+- Structured diagnostics with rich source spans and fix-it hints
+- Pass telemetry JSON (`--pass-telemetry=json`)
 - Optimization remarks (`OptimizationApplied` / `OptimizationMissed`)
 - "Why didn't this optimize?" structured reasons
 
 ### Web & API
 - JSON compiler API server (`nano-server`)
-- Next.js compiler lab (Monaco editor, pipeline timeline, CFG/SSA explorer)
+- Next.js compiler lab
 
 ### Research extensions
 - Profile-guided optimization
@@ -137,17 +165,19 @@ All three run in dependency order after type checking, before LLVM lowering.
 
 ## Known limitations
 
-- **LLVM required** — the project cannot configure without a CMake-discoverable
-  LLVM 14+ development installation.
-- **No native executable emission** — only LLVM textual IR is emitted;
-  `nano compile` requires `--emit-llvm`. Link with `clang` or run via `lli`.
-- **Source spans incomplete** — many AST nodes carry locations; however spans
-  are not yet propagated through desugaring or into LLVM IR metadata.
-- **No SSA, CFG, or optimization** — the LLVM backend relies on LLVM's own
-  alloca/mem2reg promotion. Nano-level SSA is planned for Phase 4.
-- **ANF/CPS prototypes are disconnected** — they exist as headers but are not
-  part of the active compilation path.
-- **`break` / `continue` not lowered** — parsed and type-checked but the LLVM
-  backend does not yet emit correct branch targets for these.
-- **String type not fully supported** — string literals can be printed, but
-  variables of string type and string operations are not implemented.
+- **LLVM required** — cannot configure without CMake-discoverable LLVM 14+.
+- **No native executable emission** — only LLVM textual IR; link with `clang`
+  or run via `lli`.
+- **Source spans incomplete** — nodes carry locations; spans are not yet
+  propagated through LLVM IR metadata.
+- **No SSA, CFG, or optimization** — LLVM backend relies on LLVM's own
+  alloca/mem2reg.  Nano-level SSA is planned for Phase 4.
+- **`break`/`continue` not lowered** — parsed and type-checked but LLVM
+  backend does not emit correct branch targets for these.
+- **String type not fully supported** — string literals print correctly, but
+  string variables and operations are not implemented.
+- **ANF/CPS prototypes are disconnected** — exist as headers but are not part
+  of the active compilation path.
+- **`namespace nanopass`** — the compiler pass infrastructure uses the
+  `nanopass` namespace (not `nano`) to avoid collision with `std::nano` from
+  `<ratio>`.  This is intentional and permanent.
