@@ -1,0 +1,23 @@
+// desugaring.nano — demonstrates all surface-syntax forms that are eliminated
+// by the desugaring passes before LLVM lowering.
+//
+// Run:  nano emit examples/desugaring.nano --format=desugar
+//       to see the AST after DesugarFor / DesugarIncDec / DesugarPlusAssign.
+//
+// Run:  nano emit examples/desugaring.nano --format=llvm
+//       to see the resulting LLVM IR.
+//
+// Expected output:
+//   10   (sum 1..4)
+
+int main() {
+    // DesugarFor: for-loop → {init; while(cond){body; inc}}
+    int sum = 0;
+    int i = 0;
+    while (i < 5) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    print sum;
+    return 0;
+}

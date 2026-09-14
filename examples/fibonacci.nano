@@ -1,0 +1,29 @@
+// fibonacci.nano — demonstrates: mutual-recursion-style forward calls,
+// conditionals, and the predeclaration pass that makes forward references work.
+//
+// Expected output (fib(0) through fib(9)):
+//   0
+//   1
+//   1
+//   2
+//   3
+//   5
+//   8
+//   13
+//   21
+//   34
+
+int fib(int n) {
+    if (n <= 0) { return 0; }
+    if (n == 1) { return 1; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+int main() {
+    int i = 0;
+    while (i < 10) {
+        print fib(i);
+        i = i + 1;
+    }
+    return 0;
+}

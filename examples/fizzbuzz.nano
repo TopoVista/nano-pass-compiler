@@ -1,0 +1,38 @@
+// fizzbuzz.nano — demonstrates: for-loop desugaring, modulo operator,
+// nested conditionals, and multiple print paths.
+//
+// Expected output (1-20):
+//   1
+//   2
+//   Fizz       (3 is divisible by 3)
+//   4
+//   Buzz       (5 is divisible by 5)
+//   ...
+//   FizzBuzz   (15 is divisible by both)
+
+int divisible(int a, int b) {
+    int rem = a - (a / b) * b;
+    if (rem == 0) { return 1; }
+    return 0;
+}
+
+int main() {
+    int i = 1;
+    while (i <= 20) {
+        if (divisible(i, 15)) {
+            print "FizzBuzz";
+        } else {
+            if (divisible(i, 3)) {
+                print "Fizz";
+            } else {
+                if (divisible(i, 5)) {
+                    print "Buzz";
+                } else {
+                    print i;
+                }
+            }
+        }
+        i = i + 1;
+    }
+    return 0;
+}

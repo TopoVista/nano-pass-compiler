@@ -1,0 +1,13 @@
+// hello.nano — demonstrates: basic function, print statement, string literal,
+// integer variable, and arithmetic.
+//
+// Expected output:
+//   Hello from NanoPass!
+//   42
+
+int main() {
+    print "Hello from NanoPass!";
+    int x = 6 * 7;
+    print x;
+    return 0;
+}

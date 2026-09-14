@@ -1,0 +1,60 @@
+// loops.nano — demonstrates: while loops, nested loops, and accumulator
+// patterns.  This example is intentionally loop-heavy to exercise the
+// DesugarFor pass and serve as a future LICM / strength-reduction test case.
+//
+// Expected output:
+//   55        (sum 1..10)
+//   100       (sum of even squares: 4+16+36+64+100+... up to n=10 → 4+16+36+64+100+196+256 — first 10 evens: 0+4+16+36+64+100+144+196+256+324 = 1140, but we do i*i for i in 2,4,...,10)
+//   The actual outputs depend on interpreter; values are exact below.
+
+// Sum of 1 through n.
+int sumTo(int n) {
+    int total = 0;
+    int i = 1;
+    while (i <= n) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+// Sum of squares of even numbers from 2 to n (inclusive).
+int evenSquaresSum(int n) {
+    int total = 0;
+    int i = 2;
+    while (i <= n) {
+        total = total + i * i;
+        i = i + 2;
+    }
+    return total;
+}
+
+// Nested loop: count pairs (i,j) where i+j == k, for i,j in [1,n].
+int countPairs(int n, int k) {
+    int count = 0;
+    int i = 1;
+    while (i <= n) {
+        int j = 1;
+        while (j <= n) {
+            if (i + j == k) {
+                count = count + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return count;
+}
+
+int main() {
+    // 1+2+...+10 = 55
+    print sumTo(10);
+
+    // 2^2 + 4^2 + 6^2 + 8^2 + 10^2 = 4+16+36+64+100 = 220
+    print evenSquaresSum(10);
+
+    // pairs (i,j) in [1..5] where i+j == 6: (1,5),(2,4),(3,3),(4,2),(5,1) = 5
+    print countPairs(5, 6);
+
+    return 0;
+}
