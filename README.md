@@ -11,7 +11,7 @@ visually explains every transformation.
 ```
 Source → Lex → Parse → Resolve → TypeCheck
        → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]
-       → [CoreIR] → [CFG] → [SSA] → [Optimizer]    (planned)
+       → [CoreIR] → [ANF] → [CFG] → [SSA] → [Optimizer]
        → LLVM IR → Native / JIT                     (native/JIT planned)
 ```
 
@@ -190,7 +190,8 @@ Each pass runs **once** — not once per top-level statement.
 | **`nano explain`** | ✅ **stable** | `nano explain` |
 | **`nano verify` (10 stages)** | ✅ **stable** | `nano verify` |
 | LLVM IR emission | ✅ stable | `--format=llvm` |
-| SSA / Optimizer | 🗓 planned | Phase 4–5 |
+| **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
+| Optimizer | 🗓 planned | Phase 5 |
 | JIT | 🗓 planned | Phase 7 |
 | Web lab | 🗓 planned | Phase 9 |
 

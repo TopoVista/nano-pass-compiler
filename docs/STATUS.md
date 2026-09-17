@@ -1,10 +1,19 @@
 # Project Status
 
-Last updated: Phase 3 — CoreIR + ANF + CFG complete.
+Last updated: Phase 4 — SSA construction, verification, and inspection complete.
 
 ---
 
 ## Stable
+
+### SSA middle end
+- **Dominator analysis** — deterministic reachable-block RPO plus iterative
+  immediate dominators, dominance frontier, and DOT output.
+- **SSA IR and builder** — explicit parameter definitions, iterated-DF phi
+  placement, dominator-tree renaming, stable ValueIds, and scalar promotion.
+- **Verifier and def-use** — dominance/order and phi-edge checks, known-type
+  compatibility, promotion-residue checks, use indexing, and replacement.
+- **CLI** — `nano emit --format=ssa`; `nano verify` and `nano explain` report SSA.
 
 ### Frontend
 - **Lexer** — full Nano surface syntax; correct line/column tracking; `break`
