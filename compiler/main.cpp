@@ -42,6 +42,7 @@
 // Pass infrastructure
 #include "passes/PipelineBuilder.h"   // brings in all pass headers transitively
 #include "ir/pipeline.h"              // CoreIR, ANF, CFG pipeline
+#include "optimizer/ssa_optimizer.h"
 
 // ============================================================
 // Version
@@ -77,6 +78,9 @@ struct Options {
     bool debugAnalyses      = false;
     bool printPipeline      = false;
     bool verbose            = false;
+    int optimizationLevel   = 2;
+    bool showBeforeAfter    = false;
+    bool remarks            = false;
 };
 
 // ============================================================
@@ -104,6 +108,7 @@ void printHelp(std::ostream &out) {
         << "  --format=anf      Emit ANF IR.\n"
         << "  --format=cfg      Emit Control-Flow Graph IR.\n"
         << "  --format=ssa      Emit verified SSA IR.\n"
+        << "  --format=optimized Emit optimized SSA IR.\n"
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
@@ -114,6 +119,11 @@ void printHelp(std::ostream &out) {
         << "  --disable-pass=<id>      Skip the named pass.\n"
         << "  --debug-pass-manager     Print structured pass execution log.\n"
         << "  --debug-analyses         Print analysis cache hit/miss events.\n\n"
+        << "Optimization options:\n"
+        << "  -O0|-O1|-O2|-O3          Select Nano SSA optimization pipeline.\n"
+        << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
+        << "  --show-before-after      Print SSA before and after optimization.\n"
+        << "  --remarks                Print structured optimization remarks.\n\n"
         << "Graph options:\n"
         << "  --cfg                    Emit Control-Flow Graph DOT.\n"
         << "  --dominator-tree         Emit dominator-tree DOT.\n"
@@ -183,6 +193,12 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.debugAnalyses = true;
         } else if (arg == "--verbose" || arg == "-v") {
             o.verbose = true;
+        } else if (arg == "-O0" || arg == "-O1" || arg == "-O2" || arg == "-O3") {
+            o.optimizationLevel = static_cast<int>(arg[2] - '0');
+        } else if (arg == "--show-before-after") {
+            o.showBeforeAfter = true;
+        } else if (arg == "--remarks") {
+            o.remarks = true;
         } else if (arg == "--cfg") {
             o.graphTarget = "cfg";
         } else if (arg == "--dominator-tree") {
@@ -371,11 +387,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (options.command == Command::Optimize) {
-        std::cerr << "note: 'nano optimize' is planned (SSA optimizer not yet "
-                     "implemented).\n";
-        return 2;
-    }
 
     // ── Validate stop-after / disable-pass IDs ────────────────────────────
     if (!options.stopAfter.empty()
@@ -495,6 +506,56 @@ int main(int argc, char **argv) {
 
         // ── Run middle-end pipeline (CoreIR -> ANF -> CFG) ────────────────
         auto irRes = nanopass::IRPipeline::runAll(program);
+
+        // The Nano SSA optimizer is intentionally independent of the AST LLVM
+        // backend. It is used for inspected optimized SSA only at this stage.
+        const bool optimizeSSA = options.command == Command::Optimize ||
+                                 (options.command == Command::Emit && options.format == "optimized");
+        nanopass::SSAProgram ssaBefore;
+        nanopass::opt::SSAOptimizationContext optimizationContext;
+        nanopass::opt::SSAOptimizationResult optimizationResult;
+        if (optimizeSSA) {
+            ssaBefore = irRes.ssa;
+            for (auto &function : irRes.ssa.functions) {
+                nanopass::opt::SSAOptimizationPipeline pipeline;
+                if (!options.passes.empty()) {
+                    std::stringstream passNames(options.passes);
+                    std::string passName;
+                    while (std::getline(passNames, passName, ',')) {
+                        auto pass = nanopass::opt::makePass(passName);
+                        if (!pass) {
+                            std::cerr << "error: unknown SSA optimization pass '" << passName
+                                      << "'\n       Available: constant-fold, algebraic-simplify, sccp, copy-prop, trivial-phi, cse, simplify-cfg, dce\n";
+                            return 2;
+                        }
+                        pipeline.add(std::move(pass));
+                    }
+                } else {
+                    pipeline = nanopass::opt::buildPipeline(options.optimizationLevel);
+                }
+                const auto one = pipeline.run(function, optimizationContext);
+                optimizationResult.changed |= one.changed;
+                optimizationResult.cfgChanged |= one.cfgChanged;
+                for (const auto &[key, value] : one.statistics.counters)
+                    optimizationResult.statistics.add(key, value);
+            }
+        }
+
+        if (options.command == Command::Optimize ||
+            (options.command == Command::Emit && options.format == "optimized")) {
+            if (options.showBeforeAfter) {
+                std::cout << "Before optimization:\n";
+                nanopass::printSSA(ssaBefore, std::cout);
+                std::cout << "After optimization:\n";
+            }
+            nanopass::printSSA(irRes.ssa, std::cout);
+            std::cout << "Optimization summary\n";
+            for (const auto &[key, value] : optimizationResult.statistics.counters)
+                std::cout << "  " << key << ": " << value << "\n";
+            if (options.remarks) for (const auto &remark : optimizationContext.remarks)
+                std::cout << "  [" << remark.passId << "] " << remark.message << "\n";
+            return 0;
+        }
 
         // ── Emit CoreIR ───────────────────────────────────────────────────
         if (options.command == Command::Emit && options.format == "core") {
