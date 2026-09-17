@@ -510,6 +510,8 @@ int main(int argc, char **argv) {
         // The Nano SSA optimizer is intentionally independent of the AST LLVM
         // backend. It is used for inspected optimized SSA only at this stage.
         const bool optimizeSSA = options.command == Command::Optimize ||
+                                 options.command == Command::Verify ||
+                                 options.command == Command::Explain ||
                                  (options.command == Command::Emit && options.format == "optimized");
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
@@ -655,7 +657,8 @@ int main(int argc, char **argv) {
                          "PASS  CoreIR\n"
                          "PASS  ANF\n"
                          "PASS  CFG\n"
-                         "PASS  SSA\n";
+                         "PASS  SSA\n"
+                         "PASS  OptimizedSSA\n";
         }
 
         // ── Reject unimplemented emit formats ─────────────────────────────
@@ -733,7 +736,11 @@ int main(int argc, char **argv) {
                       << "   loads removed:  " << irRes.ssaStats.loadsRemoved << "\n"
                       << "   stores removed: " << irRes.ssaStats.storesRemoved << "\n"
                       << "   verifier:       PASS\n\n"
-                      << "07 LLVM\n"
+                      << "07 Nano Optimizer\n"
+                      << "   constants:      " << optimizationResult.statistics.get("constantsPropagated") + optimizationResult.statistics.get("instructionsFolded") << "\n"
+                      << "   branches folded:" << optimizationResult.statistics.get("branchesFolded") << "\n"
+                      << "   DCE removed:    " << optimizationResult.statistics.get("instructionsRemoved") << "\n\n"
+                      << "08 LLVM\n"
                       << "   module verified\n";
             return 0;
         }

@@ -270,6 +270,14 @@ if(NANO_BUILD_TESTS)
     )
   endforeach()
 
+  foreach(example optimizer sccp dce cse)
+    add_test(
+        NAME optimized_${example}
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/${example}.nano --format=optimized
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+  endforeach()
+
   # short_circuit.nano — correct && / || lowering in ANF/CFG
   foreach(fmt core anf cfg)
     add_test(

@@ -1073,6 +1073,14 @@ static void test_optimizer_cse_and_side_effect_dce() {
     ASSERT(callPresent);
 }
 
+static void test_optimizer_o2_deterministic_and_verified() {
+    auto result = compileToIR(R"(int main() { int x=4; if(x<10){print 1;}else{print 2;} return 0; })");
+    SSAStatistics stats; SSAProgram first; SSABuilder builder; first=builder.build(result.cfg,&stats); SSAProgram second=first;
+    SSAOptimizationContext a,b; for(auto &function:first.functions)buildPipeline(2).run(function,a); for(auto &function:second.functions)buildPipeline(2).run(function,b);
+    std::ostringstream left,right; printSSA(first,left); printSSA(second,right);
+    ASSERT_EQ(left.str(),right.str()); for(const auto&function:first.functions)ASSERT(verifySSA(function).ok);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1131,6 +1139,7 @@ int main() {
     RUN_TEST(test_optimizer_constant_fold_and_dce);
     RUN_TEST(test_optimizer_sccp_folds_constant_branch);
     RUN_TEST(test_optimizer_cse_and_side_effect_dce);
+    RUN_TEST(test_optimizer_o2_deterministic_and_verified);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
