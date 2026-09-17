@@ -1028,6 +1028,22 @@ static void test_ssa_verifier_phi_and_branch_failures() {
     auto badBranch = malformedPhiSSA(); badBranch.blocks[0].instructions.push_back({SSAInstructionKind::Constant, ValueId{4}, LangType::Char(), CoreConstantVal{'x'}}); badBranch.blocks[0].terminator.value=SSATerminator::Branch{SSAOperand{ValueId{4}}, {1}, {2}}; ASSERT(!verifySSA(badBranch).ok);
 }
 
+static void test_ssa_replace_all_uses_every_operand_kind() {
+    SSAFunction function = malformedPhiSSA();
+    function.returnType=LangType::Int();
+    function.blocks[3].phis.push_back({ValueId{3}, LocalId{"x",0}, LangType::Int(), {{{1},{1}},{{2},{1}}}});
+    SSAInstruction call; call.kind=SSAInstructionKind::Call; call.result=ValueId{5}; call.type=LangType::Int(); call.callee="f"; call.callArgs={ValueId{1}};
+    SSAInstruction binary; binary.kind=SSAInstructionKind::Binary; binary.result=ValueId{6}; binary.type=LangType::Int(); binary.operand1=ValueId{1}; binary.operand2=ValueId{1};
+    SSAInstruction index; index.kind=SSAInstructionKind::StoreIndex; index.local=LocalId{"a",0}; index.operand1=ValueId{1}; index.operand2=ValueId{1};
+    function.blocks[1].instructions.push_back(call); function.blocks[1].instructions.push_back(binary); function.blocks[1].instructions.push_back(index);
+    function.blocks[0].terminator.value=SSATerminator::Branch{SSAOperand{ValueId{1}}, {1}, {2}};
+    function.blocks[3].terminator.value=SSATerminator::Return{SSAOperand{ValueId{1}}};
+    replaceAllUses(function, ValueId{1}, ValueId{2});
+    SSADefUseIndex indexAfter; indexAfter.rebuild(function);
+    ASSERT_EQ(indexAfter.numberOfUses(ValueId{1}), 0u);
+    ASSERT(indexAfter.numberOfUses(ValueId{2}) >= 8u);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1082,6 +1098,7 @@ int main() {
     RUN_TEST(test_ssa_parameter_reassignment_and_array_memory);
     RUN_TEST(test_ssa_nested_and_loop_conditional_phis);
     RUN_TEST(test_ssa_verifier_phi_and_branch_failures);
+    RUN_TEST(test_ssa_replace_all_uses_every_operand_kind);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
