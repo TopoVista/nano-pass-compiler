@@ -1102,6 +1102,15 @@ static void test_optimizer_framework_rejects_invalid_ssa() {
     ASSERT(rejected);
 }
 
+static void test_sccp_lattice_meet_rules() {
+    const SCCPLatticeValue unknown{};
+    const SCCPLatticeValue four{SCCPLatticeKind::Constant, CoreConstantVal{int64_t(4)}};
+    const SCCPLatticeValue seven{SCCPLatticeKind::Constant, CoreConstantVal{int64_t(7)}};
+    ASSERT(meetSCCP(unknown,four).kind == SCCPLatticeKind::Constant);
+    ASSERT(meetSCCP(four,four).kind == SCCPLatticeKind::Constant);
+    ASSERT(meetSCCP(four,seven).kind == SCCPLatticeKind::Overdefined);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1162,6 +1171,7 @@ int main() {
     RUN_TEST(test_optimizer_cse_and_side_effect_dce);
     RUN_TEST(test_optimizer_o2_deterministic_and_verified);
     RUN_TEST(test_optimizer_framework_rejects_invalid_ssa);
+    RUN_TEST(test_sccp_lattice_meet_rules);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
