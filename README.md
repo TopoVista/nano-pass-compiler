@@ -73,6 +73,11 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano emit examples/control_flow.nano --format=ssa
 ./build/compiler/nano graph examples/control_flow.nano --dominator-tree
 
+# Inspect Nano's verified SSA optimizer
+./build/compiler/nano optimize examples/optimizer.nano -O2 --show-before-after
+./build/compiler/nano optimize examples/optimizer.nano --passes=sccp,dce
+./build/compiler/nano emit examples/optimizer.nano --format=optimized
+
 # Explain the full compilation journey
 ./build/compiler/nano explain examples/factorial.nano
 

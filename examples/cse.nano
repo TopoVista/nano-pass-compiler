@@ -1,0 +1,8 @@
+int main() {
+  int a = 3;
+  int b = 4;
+  int x = a + b;
+  int y = a + b;
+  print x + y;
+  return 0;
+}

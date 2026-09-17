@@ -1,0 +1,6 @@
+int main() {
+  int x = 2 + 3;
+  int dead = 4 * 5;
+  if (x < 10) { print x; } else { print 0; }
+  return 0;
+}

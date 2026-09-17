@@ -15,6 +15,11 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
   compatibility, promotion-residue checks, use indexing, and replacement.
 - **CLI** — `nano emit --format=ssa`; `nano verify` and `nano explain` report SSA.
 
+### SSA optimizer
+- **Stable for inspection** — constant folding, algebraic simplification,
+  SCCP, copy/trivial-phi elimination, DCE, CSE, CFG cleanup, and O0–O3
+  pipelines. Optimized SSA is not yet the native LLVM input.
+
 ### Frontend
 - **Lexer** — full Nano surface syntax; correct line/column tracking; `break`
   and `continue` keywords now supported.
