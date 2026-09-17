@@ -46,8 +46,10 @@
 #include "ir/ssa/ssa_def_use.h"
 #include "ir/ssa/ssa_printer.h"
 #include "ir/ssa/ssa_verifier.h"
+#include "optimizer/ssa_optimizer.h"
 
 using namespace nanopass;
+using namespace nanopass::opt;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test harness
@@ -1044,6 +1046,33 @@ static void test_ssa_replace_all_uses_every_operand_kind() {
     ASSERT(indexAfter.numberOfUses(ValueId{2}) >= 8u);
 }
 
+static void test_optimizer_constant_fold_and_dce() {
+    auto result = compileToIR(R"(int main() { int x=2+3; int dead=4*5; print x; return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result, stats);
+    const auto before=instructionCount(function); SSAOptimizationContext context;
+    auto pipeline=buildPipeline(1); auto optimized=pipeline.run(function,context);
+    ASSERT(verifySSA(function).ok); ASSERT(optimized.statistics.get("instructionsFolded") > 0);
+    ASSERT(optimized.changed); ASSERT(instructionCount(function) <= before);
+}
+
+static void test_optimizer_sccp_folds_constant_branch() {
+    auto result = compileToIR(R"(int main() { int x=4; if(x<10) { print 1; } else { print 2; } return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result, stats); SSAOptimizationContext context;
+    SCCPPass sccp; auto changes=sccp.run(function,context); verifyAfter(sccp,function,context);
+    ASSERT(changes.statistics.get("branchesFolded") > 0);
+    SimplifyCFGPass simplify; simplify.run(function,context); verifyAfter(simplify,function,context);
+}
+
+static void test_optimizer_cse_and_side_effect_dce() {
+    auto result = compileToIR(R"(int f(int x) { print x; return x; } int main() { int a=3; int b=4; int x=a+b; int y=a+b; f(y); return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result, stats); SSAOptimizationContext context;
+    CSEPass cse; auto changed=cse.run(function,context); verifyAfter(cse,function,context);
+    ASSERT(changed.statistics.get("expressionsEliminated") > 0);
+    DeadCodeEliminationPass dce; dce.run(function,context); verifyAfter(dce,function,context);
+    bool callPresent=false; for(const auto&b:function.blocks)for(const auto&i:b.instructions)callPresent|=i.kind==SSAInstructionKind::Call;
+    ASSERT(callPresent);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1099,6 +1128,9 @@ int main() {
     RUN_TEST(test_ssa_nested_and_loop_conditional_phis);
     RUN_TEST(test_ssa_verifier_phi_and_branch_failures);
     RUN_TEST(test_ssa_replace_all_uses_every_operand_kind);
+    RUN_TEST(test_optimizer_constant_fold_and_dce);
+    RUN_TEST(test_optimizer_sccp_folds_constant_branch);
+    RUN_TEST(test_optimizer_cse_and_side_effect_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
