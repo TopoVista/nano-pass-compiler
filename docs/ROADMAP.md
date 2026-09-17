@@ -7,6 +7,17 @@
 - [x] SSA verifier, printer, `nano emit --format=ssa`, verify/explain integration
 - [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
 
+## Phase 5 — SSA optimizer
+- [x] Function-level optimizer infrastructure and post-pass verification
+- [x] Folding, algebraic simplification, trivial phis, copy propagation, DCE
+- [x] Executable-edge SCCP, CFG cleanup, and dominance-aware CSE
+- [x] O0–O3 and custom pipelines; optimized SSA CLI inspection
+- [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
+
+## Phase 6 — Advanced optimization (planned)
+- [ ] LoopInfo, preheaders, LICM, strength reduction, inlining
+- [ ] SSA-to-LLVM lowering and differential runtime validation
+
 ## Phase 1 — Stabilize existing compiler ✅
 - [x] Root CMake with LLVM detection and clear error messages
 - [x] Professional CLI (`emit`, `compile`, `verify`, stubs for later commands)

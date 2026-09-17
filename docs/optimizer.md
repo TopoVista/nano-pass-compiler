@@ -4,14 +4,61 @@ NanoPass optimizes verified SSA for inspection; it does not yet lower optimized
 SSA into LLVM. Use `nano optimize examples/optimizer.nano -O2` or
 `nano emit examples/optimizer.nano --format=optimized`.
 
-O0 verifies only. O1 performs constant folding, algebraic simplification,
-copy/trivial-phi elimination, and DCE. O2 adds SCCP, CFG cleanup, and
-dominance-aware CSE. O3 currently repeats the existing cleanup sequence rather
-than claiming new advanced optimizations.
+## Pass architecture and verification
 
-SCCP tracks known SSA constants and executable control-flow. A known branch
-becomes a jump; subsequent CFG simplification removes the unreachable path.
-Arithmetic whose result is unused is removable, while calls and memory stores
-remain because Nano conservatively treats them as observable. CSE only reuses
-pure binary expressions whose earlier definition dominates the later use;
-identical sibling expressions are therefore not merged.
+Each `SSAFunctionPass` receives only an `SSAFunction` plus a small context for
+options and remarks. The optimization pipeline invokes `verifySSA` after every
+pass. A malformed result is an internal compiler error that identifies both
+the pass and function; it is never silently passed to a later optimization.
+
+The effect model is conservative: constants, copies, unary, binary, and phi
+operations are pure; indexed loads read memory; indexed/local stores write
+memory; calls and local loads have unknown effects. DCE may remove only unused
+pure values. CSE only considers pure binary operations.
+
+## Pipelines
+
+- **O0**: verification only.
+- **O1**: constant folding, algebraic simplification, copy propagation,
+  trivial-phi elimination, DCE.
+- **O2**: SCCP, CFG cleanup, O1 simplification, CSE, DCE, cleanup.
+- **O3**: O2 plus one bounded extra local-cleanup sequence; it does not claim
+  LICM, inlining, or an industrial-strength O3.
+
+Custom pipelines use `--passes=sccp,dce`. Pass IDs are `constant-fold`,
+`algebraic-simplify`, `sccp`, `copy-prop`, `trivial-phi`, `cse`,
+`simplify-cfg`, and `dce`.
+
+## Local simplification
+
+Constant folding supports integer and floating arithmetic, comparisons,
+boolean logic, unary negation, and logical-not. Division or modulo by zero is
+left untouched. Algebraic simplification is intentionally limited to identities
+such as `x + 0`, `x - 0`, `x * 1`, and `x / 1`; it never uses `x * 0`.
+
+Trivial phi elimination ignores self-incomings and replaces a phi only when all
+other incoming values agree. Copy propagation replaces all SSA use sites then
+erases the copy. DCE iterates because deleting a dead instruction can expose
+another dead definition.
+
+## SCCP and CFG cleanup
+
+SCCP uses an `Unknown / Constant / Overdefined` lattice. Executable edges are
+tracked independently from value state; a phi meets only incoming values whose
+predecessor edge is executable. When a branch condition becomes constant, SCCP
+records the fact in the branch operand while preserving CFG consistency;
+`simplify-cfg` turns it into a jump, recomputes predecessors, removes
+unreachable blocks, and drops stale phi incomings.
+
+For example, `branch true, bb1, bb2` becomes `jump bb1`; `bb2` is then
+unreachable. A `print` in `bb2` can disappear only because the block itself is
+proven unreachable—not because DCE considers `print` pure.
+
+## CSE and observability
+
+CSE value-numbers binary expressions by opcode, type, and operands. It
+canonicalizes only commutative operations and requires the retained definition
+to dominate the replacement. Thus matching expressions in sibling branches
+are deliberately not merged. `nano optimize --show-before-after --remarks`
+prints deterministic SSA and real counters such as folded instructions,
+executable blocks, branches simplified, and instructions removed.
