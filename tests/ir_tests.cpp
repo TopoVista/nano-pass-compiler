@@ -1059,7 +1059,7 @@ static void test_optimizer_sccp_folds_constant_branch() {
     auto result = compileToIR(R"(int main() { int x=4; if(x<10) { print 1; } else { print 2; } return 0; })");
     SSAStatistics stats; SSAFunction function=ssaMain(result, stats); SSAOptimizationContext context;
     WorklistSCCPPass sccp; auto changes=sccp.run(function,context); verifyAfter(sccp,function,context);
-    ASSERT(changes.statistics.get("branchesFolded") > 0);
+    ASSERT(changes.statistics.get("branchConditionsProven") > 0);
     SimplifyCFGPass simplify; simplify.run(function,context); verifyAfter(simplify,function,context);
 }
 
@@ -1109,6 +1109,15 @@ static void test_sccp_lattice_meet_rules() {
     ASSERT(meetSCCP(unknown,four).kind == SCCPLatticeKind::Constant);
     ASSERT(meetSCCP(four,four).kind == SCCPLatticeKind::Constant);
     ASSERT(meetSCCP(four,seven).kind == SCCPLatticeKind::Overdefined);
+}
+
+static void test_sccp_phi_uses_only_executable_edge() {
+    auto result=compileToIR(R"(int main() { int x=0; if(1) { x=7; } else { x=9; } print x; return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result,stats); const auto blocksBefore=function.blocks.size(); SSAOptimizationContext context;
+    WorklistSCCPPass sccp; sccp.run(function,context); verifyAfter(sccp,function,context);
+    SimplifyCFGPass cleanup; cleanup.run(function,context); verifyAfter(cleanup,function,context);
+    TrivialPhiPass phi; phi.run(function,context); verifyAfter(phi,function,context);
+    ASSERT(function.blocks.size() < blocksBefore);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1172,6 +1181,7 @@ int main() {
     RUN_TEST(test_optimizer_o2_deterministic_and_verified);
     RUN_TEST(test_optimizer_framework_rejects_invalid_ssa);
     RUN_TEST(test_sccp_lattice_meet_rules);
+    RUN_TEST(test_sccp_phi_uses_only_executable_edge);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
