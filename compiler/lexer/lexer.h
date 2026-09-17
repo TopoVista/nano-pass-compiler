@@ -31,6 +31,8 @@ public:
     kw["for"] = TokenType::FOR;
     kw["print"] = TokenType::PRINT;
     kw["return"] = TokenType::RETURN;
+    kw["break"] = TokenType::BREAK;
+    kw["continue"] = TokenType::CONTINUE;
 
     kw["true"] = TokenType::TRUE;
     kw["false"] = TokenType::FALSE;

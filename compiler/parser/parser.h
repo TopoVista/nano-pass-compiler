@@ -96,6 +96,22 @@ private:
       return returnStatement(retToken);
     }
 
+    if (match({TokenType::BREAK})) {
+      Token tok = previous();
+      consume(TokenType::SEMICOLON, "Expected ';' after break");
+      auto stmt = make_unique<BreakStmt>();
+      stmt->loc = SourceLocation(tok.line, tok.col);
+      return stmt;
+    }
+
+    if (match({TokenType::CONTINUE})) {
+      Token tok = previous();
+      consume(TokenType::SEMICOLON, "Expected ';' after continue");
+      auto stmt = make_unique<ContinueStmt>();
+      stmt->loc = SourceLocation(tok.line, tok.col);
+      return stmt;
+    }
+
     return expressionStatement();
   }
 

@@ -27,6 +27,8 @@ enum class TokenType {
   FOR,
   PRINT,
   RETURN,
+  BREAK,
+  CONTINUE,
 
   // Type keywords
   INT,
