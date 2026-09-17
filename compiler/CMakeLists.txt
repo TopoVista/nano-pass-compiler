@@ -246,9 +246,21 @@ if(NANO_BUILD_TESTS)
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     add_test(
+        NAME ssa_${example}
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --format=ssa
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
         NAME graph_cfg_${example}
         COMMAND nano graph ${CMAKE_SOURCE_DIR}/examples/${example}.nano
                          --cfg
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME graph_dominator_${example}
+        COMMAND nano graph ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --dominator-tree
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     add_test(
