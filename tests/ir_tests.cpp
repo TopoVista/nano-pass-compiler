@@ -1081,6 +1081,27 @@ static void test_optimizer_o2_deterministic_and_verified() {
     ASSERT_EQ(left.str(),right.str()); for(const auto&function:first.functions)ASSERT(verifySSA(function).ok);
 }
 
+class BrokenOptimizerPass final : public SSAFunctionPass {
+public:
+    std::string_view id() const override { return "broken-test-pass"; }
+    std::string_view name() const override { return "Broken test pass"; }
+    SSAOptimizationResult run(SSAFunction &function, SSAOptimizationContext &) override {
+        if (!function.blocks.empty() && !function.blocks.front().instructions.empty()) {
+            auto duplicate=function.blocks.front().instructions.front();
+            if (duplicate.result) function.blocks.front().instructions.push_back(std::move(duplicate));
+        }
+        return {.changed=true};
+    }
+};
+
+static void test_optimizer_framework_rejects_invalid_ssa() {
+    auto result=compileToIR(R"(int main() { int x=1; print x; return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result,stats); SSAOptimizationContext context;
+    SSAOptimizationPipeline pipeline; pipeline.add(std::make_unique<BrokenOptimizerPass>());
+    bool rejected=false; try { pipeline.run(function,context); } catch(const std::runtime_error&) { rejected=true; }
+    ASSERT(rejected);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1140,6 +1161,7 @@ int main() {
     RUN_TEST(test_optimizer_sccp_folds_constant_branch);
     RUN_TEST(test_optimizer_cse_and_side_effect_dce);
     RUN_TEST(test_optimizer_o2_deterministic_and_verified);
+    RUN_TEST(test_optimizer_framework_rejects_invalid_ssa);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
