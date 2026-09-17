@@ -17,6 +17,10 @@ Source → Lex → Parse → Resolve → TypeCheck
 
 Items in `[brackets]` are planned and under active development.
 
+The CFG/SSA pipeline powers verified middle-end analysis and inspection.
+Native LLVM emission still uses the established desugared-AST backend until
+SSA-to-LLVM lowering is introduced in a later phase.
+
 ---
 
 ## Quick start
@@ -65,13 +69,17 @@ The produced binary is `build/compiler/nano`.
 # Emit CFG as Graphviz DOT
 ./build/compiler/nano graph examples/loops.nano --cfg
 
+# Emit SSA and the dominator tree
+./build/compiler/nano emit examples/control_flow.nano --format=ssa
+./build/compiler/nano graph examples/control_flow.nano --dominator-tree
+
 # Explain the full compilation journey
 ./build/compiler/nano explain examples/factorial.nano
 
 # Emit LLVM IR
 ./build/compiler/nano emit examples/factorial.nano --format=llvm
 
-# Verify all available compiler invariants (10 stages)
+# Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
 ```
 

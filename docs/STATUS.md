@@ -77,10 +77,10 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
   verification at each stage; throws `std::runtime_error` on internal failure.
 
 ### CLI
-- `nano emit <file> --format=core|anf|cfg|llvm|tokens|ast|desugar`
-- `nano graph <file> --cfg [-o out.dot]` — no longer a stub
+- `nano emit <file> --format=core|anf|cfg|ssa|llvm|tokens|ast|desugar`
+- `nano graph <file> --cfg|--dominator-tree [-o out.dot]` — no longer a stub
 - `nano explain <file>` — real output with per-stage stats and desugar rewrites
-- `nano verify <file>` — 10 stages: Parse/Resolve/TypeCheck/3×Desugar/Core/ANF/CFG/LLVM
+- `nano verify <file>` — 11 stages: Parse/Resolve/TypeCheck/3×Desugar/Core/ANF/CFG/SSA/LLVM
 - `nano passes` / `nano analyses`
 - `--debug-pass-manager`, `--debug-analyses`, `--print-pipeline`,
   `--stop-after`, `--disable-pass`
@@ -89,7 +89,7 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
 - `hello`, `factorial`, `fibonacci`, `fizzbuzz`, `loops`, `branching`,
   `functions`, `desugaring`, `short_circuit`, `control_flow`, `errors`
 
-### Tests — 62 total
+### Tests
 | Category | Count |
 |---|---|
 | CLI smoke (help, version, passes, analyses) | 4 |
@@ -103,7 +103,8 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-All 62 tests pass under both normal build and AddressSanitizer + UBSan.
+LLVM-independent suites are validated locally. Full CTest and sanitizer runs
+remain pending a local LLVM development installation.
 
 ---
 
@@ -120,14 +121,14 @@ All 62 tests pass under both normal build and AddressSanitizer + UBSan.
 
 ## Planned (not yet implemented)
 
-### Phase 4 — SSA
-- Dominator tree (Cooper/Harvey/Kennedy)
-- Dominance frontier
+### Phase 4 — SSA ✅
+- [x] Dominator tree (Cooper/Harvey/Kennedy)
+- [x] Dominance frontier
 - `LoopInfo` (natural loop detection)
-- SSA construction: phi placement via dominance frontiers
-- Variable renaming
-- SSA verifier
-- `nano emit --format=ssa`
+- [x] SSA construction: phi placement via dominance frontiers
+- [x] Variable renaming
+- [x] SSA verifier and def-use index
+- [x] `nano emit --format=ssa`
 
 ### Phase 5 — Optimizer
 - SCCP, DCE, copy propagation, CSE, algebraic simplification, SimplifyCFG

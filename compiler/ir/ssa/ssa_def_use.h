@@ -30,7 +30,7 @@ public:
   size_t numberOfUses(ValueId v) const { return usesOf(v).size(); }
 private:
   void add(const SSAOperand &op, SSAValueUse use) { if(std::holds_alternative<ValueId>(op)) uses_[std::get<ValueId>(op).index].push_back(use); }
-  void addInstructionUses(BlockId b,const SSAInstruction &in,size_t i) { if(in.kind==SSAInstructionKind::Unary||in.kind==SSAInstructionKind::LoadIndex) add(in.operand1,{b,SSAUseKind::Instruction,i,0}); else if(in.kind==SSAInstructionKind::Binary||in.kind==SSAInstructionKind::StoreIndex){add(in.operand1,{b,SSAUseKind::Instruction,i,0});add(in.operand2,{b,SSAUseKind::Instruction,i,1});} else if(in.kind==SSAInstructionKind::Call) for(size_t j=0;j<in.callArgs.size();++j)add(in.callArgs[j],{b,SSAUseKind::Instruction,i,j}); }
+  void addInstructionUses(BlockId b,const SSAInstruction &in,size_t i) { if(in.kind==SSAInstructionKind::Copy||in.kind==SSAInstructionKind::Unary||in.kind==SSAInstructionKind::LoadIndex||in.kind==SSAInstructionKind::StoreLocal) add(in.operand1,{b,SSAUseKind::Instruction,i,0}); else if(in.kind==SSAInstructionKind::Binary||in.kind==SSAInstructionKind::StoreIndex){add(in.operand1,{b,SSAUseKind::Instruction,i,0});add(in.operand2,{b,SSAUseKind::Instruction,i,1});} else if(in.kind==SSAInstructionKind::Call) for(size_t j=0;j<in.callArgs.size();++j)add(in.callArgs[j],{b,SSAUseKind::Instruction,i,j}); }
 };
 
 inline void replaceAllUses(SSAFunction &fn, ValueId oldValue, ValueId newValue) {

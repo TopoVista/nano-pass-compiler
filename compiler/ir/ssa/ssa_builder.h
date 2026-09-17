@@ -165,6 +165,7 @@ private:
       if (inst.dst) { lowered.result = ValueId{next++}; values[inst.dst->index] = *lowered.result; }
       switch (inst.kind) {
       case CFGInstructionKind::Constant: lowered.kind = SSAInstructionKind::Constant; lowered.constantValue = inst.constantVal; break;
+      case CFGInstructionKind::Copy: lowered.kind = SSAInstructionKind::Copy; lowered.operand1 = operand(inst.op1, values); break;
       case CFGInstructionKind::Unary: lowered.kind = SSAInstructionKind::Unary; lowered.unaryOp = inst.unOp; lowered.operand1 = operand(inst.op1, values); break;
       case CFGInstructionKind::Binary: lowered.kind = SSAInstructionKind::Binary; lowered.binaryOp = inst.binOp; lowered.operand1 = operand(inst.op1, values); lowered.operand2 = operand(inst.op2, values); break;
       case CFGInstructionKind::Call: lowered.kind = SSAInstructionKind::Call; for (const auto &arg : inst.callArgs) lowered.callArgs.push_back(operand(arg, values)); break;

@@ -32,7 +32,7 @@ struct PhiInstruction {
   SourceOrigin origin;
 };
 
-enum class SSAInstructionKind { Constant, Unary, Binary, Call, LoadLocal, StoreLocal, LoadIndex, StoreIndex };
+enum class SSAInstructionKind { Constant, Copy, Unary, Binary, Call, LoadLocal, StoreLocal, LoadIndex, StoreIndex };
 
 struct SSAInstruction {
   SSAInstructionKind kind;

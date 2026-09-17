@@ -982,6 +982,52 @@ static void test_ssa_printer_deterministic() {
     ASSERT_EQ(first.str(), second.str()); ASSERT(first.str().find("phi") != std::string::npos);
 }
 
+static void test_ssa_parameter_reassignment_and_array_memory() {
+    auto result = compileToIR(R"(
+int increment(int x) { x = x + 1; return x; }
+int main() { int[2] values; values[0] = increment(4); print values[0]; return 0; }
+)");
+    SSAStatistics stats; SSAProgram program; SSABuilder builder; program = builder.build(result.cfg, &stats);
+    const SSAFunction *increment = nullptr; const SSAFunction *main = nullptr;
+    for (const auto &function : program.functions) { if (function.name == "increment") increment = &function; if (function.name == "main") main = &function; }
+    ASSERT(increment != nullptr); ASSERT(main != nullptr); ASSERT_EQ(increment->parameters.size(), 1u);
+    SSADefUseIndex index; index.rebuild(*increment);
+    ASSERT(index.definitionOf(increment->parameters[0].value).has_value());
+    ASSERT(index.numberOfUses(increment->parameters[0].value) > 0);
+    bool hasIndexedMemory = false;
+    for (const auto &block : main->blocks) for (const auto &instruction : block.instructions)
+        hasIndexedMemory |= instruction.kind == SSAInstructionKind::LoadIndex || instruction.kind == SSAInstructionKind::StoreIndex;
+    ASSERT(hasIndexedMemory);
+}
+
+static void test_ssa_nested_and_loop_conditional_phis() {
+    auto result = compileToIR(R"(
+int main() { int i=0; int x=0; while(i<3) { if(i) { if(i-1) x=1; else x=2; } i=i+1; } print x; return 0; }
+)");
+    SSAStatistics stats; const auto &function = ssaMain(result, stats);
+    ASSERT(verifySSA(function).ok);
+    ASSERT(phiCountFor(function, "i") >= 1u);
+    ASSERT(phiCountFor(function, "x") >= 1u);
+}
+
+static SSAFunction malformedPhiSSA() {
+    SSAFunction f; f.name="phi_bad"; f.returnType=LangType::Void(); f.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.label="entry"; entry.successors={{1},{2}}; entry.terminator.value=SSATerminator::Branch{SSAOperand{CoreConstantVal{true}}, {1}, {2}};
+    SSABlock left; left.id={1}; left.label="left"; left.predecessors={{0}}; left.successors={{3}}; left.instructions.push_back({SSAInstructionKind::Constant, ValueId{1}, LangType::Int(), CoreConstantVal{1}}); left.terminator.value=SSATerminator::Jump{{3}};
+    SSABlock right; right.id={2}; right.label="right"; right.predecessors={{0}}; right.successors={{3}}; right.instructions.push_back({SSAInstructionKind::Constant, ValueId{2}, LangType::Int(), CoreConstantVal{2}}); right.terminator.value=SSATerminator::Jump{{3}};
+    SSABlock merge; merge.id={3}; merge.label="merge"; merge.predecessors={{1},{2}}; merge.terminator.value=SSATerminator::Return{};
+    f.blocks={entry,left,right,merge}; return f;
+}
+
+static void test_ssa_verifier_phi_and_branch_failures() {
+    auto missing = malformedPhiSSA(); missing.blocks[3].phis.push_back({ValueId{3}, LocalId{"x",0}, LangType::Int(), {{{1}, {1}}}}); ASSERT(!verifySSA(missing).ok);
+    auto extra = malformedPhiSSA(); extra.blocks[3].phis.push_back({ValueId{3}, LocalId{"x",0}, LangType::Int(), {{{1}, {1}}, {{2}, {2}}, {{0}, {1}}}}); ASSERT(!verifySSA(extra).ok);
+    auto duplicate = malformedPhiSSA(); duplicate.blocks[3].phis.push_back({ValueId{3}, LocalId{"x",0}, LangType::Int(), {{{1}, {1}}, {{1}, {1}}, {{2}, {2}}}}); ASSERT(!verifySSA(duplicate).ok);
+    auto wrongType = malformedPhiSSA(); wrongType.blocks[2].instructions[0].type=LangType::Char(); wrongType.blocks[3].phis.push_back({ValueId{3}, LocalId{"x",0}, LangType::Int(), {{{1}, {1}}, {{2}, {2}}}}); ASSERT(!verifySSA(wrongType).ok);
+    auto residual = malformedPhiSSA(); residual.promotedLocals.push_back(LocalId{"x",0}); SSAInstruction load; load.kind=SSAInstructionKind::LoadLocal; load.result=ValueId{4}; load.type=LangType::Int(); load.local=LocalId{"x",0}; residual.blocks[0].instructions.push_back(load); ASSERT(!verifySSA(residual).ok);
+    auto badBranch = malformedPhiSSA(); badBranch.blocks[0].instructions.push_back({SSAInstructionKind::Constant, ValueId{4}, LangType::Char(), CoreConstantVal{'x'}}); badBranch.blocks[0].terminator.value=SSATerminator::Branch{SSAOperand{ValueId{4}}, {1}, {2}}; ASSERT(!verifySSA(badBranch).ok);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1033,6 +1079,9 @@ int main() {
     RUN_TEST(test_ssa_def_use_and_replacement);
     RUN_TEST(test_ssa_verifier_rejects_malformed_programs);
     RUN_TEST(test_ssa_printer_deterministic);
+    RUN_TEST(test_ssa_parameter_reassignment_and_array_memory);
+    RUN_TEST(test_ssa_nested_and_loop_conditional_phis);
+    RUN_TEST(test_ssa_verifier_phi_and_branch_failures);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
