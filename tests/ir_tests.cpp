@@ -1120,6 +1120,15 @@ static void test_sccp_phi_uses_only_executable_edge() {
     ASSERT(function.blocks.size() < blocksBefore);
 }
 
+static void test_cse_does_not_cross_sibling_branches() {
+    auto result=compileToIR(R"(int f(int c, int a, int b) { if(c) { return a+b; } else { return a+b; } } int main(){ return f(1,2,3); })");
+    SSAStatistics stats; SSAProgram program; SSABuilder builder; program=builder.build(result.cfg,&stats); SSAFunction *function=nullptr; for(auto &candidate:program.functions)if(candidate.name=="f")function=&candidate;
+    ASSERT(function != nullptr); size_t before=0; for(const auto&block:function->blocks)for(const auto&i:block.instructions)if(i.kind==SSAInstructionKind::Binary)++before;
+    SSAOptimizationContext context; CSEPass cse; cse.run(*function,context); verifyAfter(cse,*function,context);
+    size_t after=0; for(const auto&block:function->blocks)for(const auto&i:block.instructions)if(i.kind==SSAInstructionKind::Binary)++after;
+    ASSERT_EQ(after,before);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1182,6 +1191,7 @@ int main() {
     RUN_TEST(test_optimizer_framework_rejects_invalid_ssa);
     RUN_TEST(test_sccp_lattice_meet_rules);
     RUN_TEST(test_sccp_phi_uses_only_executable_edge);
+    RUN_TEST(test_cse_does_not_cross_sibling_branches);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
