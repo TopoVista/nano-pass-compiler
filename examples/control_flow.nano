@@ -1,0 +1,38 @@
+// control_flow.nano — demonstrates: break and continue in loops, nested loops.
+//
+// Expected output:
+//   0
+//   1
+//   2
+//   3
+//   4
+//   (break exits when i==5; prints 0..4)
+//
+//   3
+//   (break targets only the inner loop; outer runs 3 times, counting to 3)
+
+int main() {
+    // break: exit when i reaches 5
+    int i = 0;
+    while (i < 10) {
+        if (i == 5) { break; }
+        print i;
+        i = i + 1;
+    }
+
+    // nested loop break: inner break must not exit outer loop
+    int outerCount = 0;
+    int outer = 0;
+    while (outer < 3) {
+        int inner = 0;
+        while (inner < 5) {
+            if (inner == 2) { break; }
+            inner = inner + 1;
+        }
+        outerCount = outerCount + 1;
+        outer = outer + 1;
+    }
+    print outerCount;
+
+    return 0;
+}

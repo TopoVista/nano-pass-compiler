@@ -1,0 +1,58 @@
+// short_circuit.nano — demonstrates correct short-circuit evaluation of && and ||.
+//
+// Critical: sideEffect() must NOT be called when the short-circuit applies.
+//
+// Expected output:
+//   0      (false && sideEffect() → false, sideEffect never called)
+//   1      (true || sideEffect()  → true,  sideEffect never called)
+//   1      (true && alwaysTrue()  → alwaysTrue IS called → 1)
+//   0      (false || alwaysFalse() → alwaysFalse IS called → 0)
+
+int sideEffect() {
+    print 999;
+    return 1;
+}
+
+int alwaysTrue() {
+    return 1;
+}
+
+int alwaysFalse() {
+    return 0;
+}
+
+int main() {
+    // false && sideEffect() — sideEffect must NOT execute
+    int r1 = 0;
+    if (r1 && sideEffect()) {
+        print 1;
+    } else {
+        print 0;
+    }
+
+    // true || sideEffect() — sideEffect must NOT execute
+    int r2 = 1;
+    if (r2 || sideEffect()) {
+        print 1;
+    } else {
+        print 0;
+    }
+
+    // true && alwaysTrue() — alwaysTrue IS evaluated
+    int r3 = 1;
+    if (r3 && alwaysTrue()) {
+        print 1;
+    } else {
+        print 0;
+    }
+
+    // false || alwaysFalse() — alwaysFalse IS evaluated
+    int r4 = 0;
+    if (r4 || alwaysFalse()) {
+        print 1;
+    } else {
+        print 0;
+    }
+
+    return 0;
+}

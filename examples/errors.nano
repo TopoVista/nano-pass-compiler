@@ -1,0 +1,13 @@
+// errors.nano — demonstrates: compiler error reporting for common mistakes.
+//
+// This file intentionally contains a semantic error (undeclared variable).
+// Running it through any compilation stage should produce a clear error message
+// and exit with a non-zero status code.  The pipeline must NOT crash.
+//
+// Expected:
+//   error: Use of undeclared variable 'missing' at errors.nano:X:Y
+
+int main() {
+    print missing;
+    return 0;
+}
