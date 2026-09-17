@@ -1058,7 +1058,7 @@ static void test_optimizer_constant_fold_and_dce() {
 static void test_optimizer_sccp_folds_constant_branch() {
     auto result = compileToIR(R"(int main() { int x=4; if(x<10) { print 1; } else { print 2; } return 0; })");
     SSAStatistics stats; SSAFunction function=ssaMain(result, stats); SSAOptimizationContext context;
-    SCCPPass sccp; auto changes=sccp.run(function,context); verifyAfter(sccp,function,context);
+    WorklistSCCPPass sccp; auto changes=sccp.run(function,context); verifyAfter(sccp,function,context);
     ASSERT(changes.statistics.get("branchesFolded") > 0);
     SimplifyCFGPass simplify; simplify.run(function,context); verifyAfter(simplify,function,context);
 }

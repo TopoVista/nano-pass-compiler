@@ -75,9 +75,87 @@ enum class SCCPLatticeKind { Unknown, Constant, Overdefined };
 struct SCCPLatticeValue { SCCPLatticeKind kind=SCCPLatticeKind::Unknown; std::optional<CoreConstantVal> constant; };
 inline SCCPLatticeValue meetSCCP(SCCPLatticeValue a, SCCPLatticeValue b) { if(a.kind==SCCPLatticeKind::Overdefined||b.kind==SCCPLatticeKind::Overdefined)return {SCCPLatticeKind::Overdefined,{}};if(a.kind==SCCPLatticeKind::Unknown)return b;if(b.kind==SCCPLatticeKind::Unknown)return a;if(constantEqual(*a.constant,*b.constant))return a;return {SCCPLatticeKind::Overdefined,{}}; }
 
+class WorklistSCCPPass final: public SSAFunctionPass {
+public:
+  std::string_view id() const override { return "sccp"; }
+  std::string_view name() const override { return "Sparse Conditional Constant Propagation"; }
+  SSAOptimizationResult run(SSAFunction &function, SSAOptimizationContext &) override {
+    SSAOptimizationResult result;
+    std::map<int, SSABlock *> blocks;
+    for (auto &block : function.blocks) blocks[block.id.index] = &block;
+    std::map<int, SCCPLatticeValue> values;
+    std::set<std::pair<int,int>> executableEdges;
+    std::set<int> executableBlocks;
+    std::deque<BlockId> blockWorklist;
+    auto operandValue = [&](const SSAOperand &operand) -> SCCPLatticeValue {
+      if (std::holds_alternative<CoreConstantVal>(operand)) return {SCCPLatticeKind::Constant, std::get<CoreConstantVal>(operand)};
+      auto it = values.find(std::get<ValueId>(operand).index);
+      return it == values.end() ? SCCPLatticeValue{} : it->second;
+    };
+    auto markBlock = [&](BlockId id) { if (executableBlocks.insert(id.index).second) blockWorklist.push_back(id); };
+    auto markEdge = [&](BlockId from, BlockId to) { if (executableEdges.insert({from.index,to.index}).second) markBlock(to); };
+    auto update = [&](ValueId value, SCCPLatticeValue incoming) {
+      const auto next = meetSCCP(values[value.index], incoming);
+      const auto &old = values[value.index];
+      if (next.kind != old.kind || (next.constant && (!old.constant || !constantEqual(*next.constant,*old.constant)))) {
+        values[value.index] = next;
+        // Def-use information is stable during analysis. Revisit only blocks
+        // containing users rather than restarting a whole-function scan.
+        SSADefUseIndex uses; uses.rebuild(function);
+        for (const auto &use : uses.usesOf(value)) if (executableBlocks.contains(use.block.index)) blockWorklist.push_back(use.block);
+      }
+    };
+    markBlock(function.entryBlock);
+    while (!blockWorklist.empty()) {
+      const BlockId id = blockWorklist.front(); blockWorklist.pop_front();
+      auto found = blocks.find(id.index); if (found == blocks.end()) continue;
+      auto &block = *found->second;
+      for (const auto &phi : block.phis) {
+        SCCPLatticeValue merged; bool sawEdge = false;
+        for (const auto &incoming : phi.incoming) if (executableEdges.contains({incoming.predecessor.index, block.id.index})) {
+          merged = meetSCCP(merged, operandValue(SSAOperand{incoming.value})); sawEdge = true;
+        }
+        if (sawEdge) update(phi.result, merged);
+      }
+      for (const auto &instruction : block.instructions) if (instruction.result) {
+        SCCPLatticeValue evaluated{SCCPLatticeKind::Overdefined,{}};
+        if (instruction.kind == SSAInstructionKind::Constant) evaluated = {SCCPLatticeKind::Constant,instruction.constantValue};
+        else if (instruction.kind == SSAInstructionKind::Copy) evaluated = operandValue(instruction.operand1);
+        else if (instruction.kind == SSAInstructionKind::Unary || instruction.kind == SSAInstructionKind::Binary) {
+          auto left = operandValue(instruction.operand1);
+          if (left.kind == SCCPLatticeKind::Unknown) evaluated = left;
+          else if (left.kind == SCCPLatticeKind::Overdefined) evaluated = left;
+          else if (instruction.kind == SSAInstructionKind::Unary) { auto folded=foldUnary(instruction.unaryOp,*left.constant); evaluated=folded?SCCPLatticeValue{SCCPLatticeKind::Constant,*folded}:SCCPLatticeValue{SCCPLatticeKind::Overdefined,{}}; }
+          else { auto right=operandValue(instruction.operand2); if(right.kind==SCCPLatticeKind::Constant){auto folded=foldBinary(instruction.binaryOp,*left.constant,*right.constant);evaluated=folded?SCCPLatticeValue{SCCPLatticeKind::Constant,*folded}:SCCPLatticeValue{SCCPLatticeKind::Overdefined,{}};} else evaluated=right; }
+        }
+        update(*instruction.result, evaluated);
+      }
+      if (auto jump = std::get_if<SSATerminator::Jump>(&block.terminator.value)) markEdge(block.id,jump->target);
+      else if (auto branch = std::get_if<SSATerminator::Branch>(&block.terminator.value)) {
+        auto condition = operandValue(branch->condition);
+        if (condition.kind == SCCPLatticeKind::Constant && truth(*condition.constant)) markEdge(block.id,*truth(*condition.constant) ? branch->thenTarget : branch->elseTarget);
+        else { markEdge(block.id,branch->thenTarget); markEdge(block.id,branch->elseTarget); }
+      }
+    }
+    for (auto &block : function.blocks) if (executableBlocks.contains(block.id.index)) {
+      for (auto &instruction : block.instructions) if (instruction.result) {
+        auto state = values[instruction.result->index].kind == SCCPLatticeKind::Constant ? values[instruction.result->index].constant : std::nullopt;
+        if (state && instruction.kind != SSAInstructionKind::Constant) { instruction.kind=SSAInstructionKind::Constant; instruction.constantValue=*state; result.changed=true; result.statistics.add("constantsPropagated"); }
+      }
+      if (auto branch = std::get_if<SSATerminator::Branch>(&block.terminator.value)) {
+        auto state=operandValue(branch->condition);
+        if(state.kind==SCCPLatticeKind::Constant && truth(*state.constant)) { BlockId target=*truth(*state.constant)?branch->thenTarget:branch->elseTarget; block.terminator.value=SSATerminator::Jump{target}; block.successors={target}; result.changed=result.cfgChanged=true; result.statistics.add("branchesFolded"); }
+      }
+    }
+    result.statistics.add("executableBlocks", executableBlocks.size());
+    result.statistics.add("executableEdges", executableEdges.size());
+    return result;
+  }
+};
+
 class SimplifyCFGPass final: public SSAFunctionPass { public:std::string_view id()const override{return "simplify-cfg";}std::string_view name()const override{return "CFG Simplification";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;std::set<int> reach;std::deque<BlockId> q{f.entryBlock};while(!q.empty()){auto id=q.front();q.pop_front();if(!reach.insert(id.index).second)continue;for(const auto&b:f.blocks)if(b.id==id)for(auto s:b.successors)q.push_back(s);}if(reach.size()!=f.blocks.size()){f.blocks.erase(std::remove_if(f.blocks.begin(),f.blocks.end(),[&](const auto&b){return !reach.contains(b.id.index);}),f.blocks.end());r.changed=r.cfgChanged=true;r.statistics.add("blocksRemoved");}for(auto&b:f.blocks)b.predecessors.clear();for(auto&b:f.blocks)for(auto s:b.successors)for(auto&d:f.blocks)if(d.id==s)d.predecessors.push_back(b.id);for(auto&b:f.blocks)for(auto&p:b.phis)p.incoming.erase(std::remove_if(p.incoming.begin(),p.incoming.end(),[&](const auto&i){return std::find(b.predecessors.begin(),b.predecessors.end(),i.predecessor)==b.predecessors.end();}),p.incoming.end());return r;} };
 
 class SSAOptimizationPipeline { std::vector<std::unique_ptr<SSAFunctionPass>> passes_; public: void add(std::unique_ptr<SSAFunctionPass> p){passes_.push_back(std::move(p));} SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&ctx){SSAOptimizationResult total;for(auto&p:passes_){auto r=p->run(f,ctx);verifyAfter(*p,f,ctx);total.changed|=r.changed;total.cfgChanged|=r.cfgChanged;for(auto&[k,v]:r.statistics.counters)total.statistics.add(k,v);ctx.remarks.insert(ctx.remarks.end(),r.remarks.begin(),r.remarks.end());}return total;} };
-inline std::unique_ptr<SSAFunctionPass> makePass(std::string_view id){if(id=="constant-fold")return std::make_unique<ConstantFoldPass>();if(id=="algebraic-simplify")return std::make_unique<AlgebraicSimplifyPass>();if(id=="sccp")return std::make_unique<SCCPPass>();if(id=="copy-prop")return std::make_unique<CopyPropagationPass>();if(id=="trivial-phi")return std::make_unique<TrivialPhiPass>();if(id=="cse")return std::make_unique<CSEPass>();if(id=="simplify-cfg")return std::make_unique<SimplifyCFGPass>();if(id=="dce")return std::make_unique<DeadCodeEliminationPass>();return nullptr;}
+inline std::unique_ptr<SSAFunctionPass> makePass(std::string_view id){if(id=="constant-fold")return std::make_unique<ConstantFoldPass>();if(id=="algebraic-simplify")return std::make_unique<AlgebraicSimplifyPass>();if(id=="sccp")return std::make_unique<WorklistSCCPPass>();if(id=="copy-prop")return std::make_unique<CopyPropagationPass>();if(id=="trivial-phi")return std::make_unique<TrivialPhiPass>();if(id=="cse")return std::make_unique<CSEPass>();if(id=="simplify-cfg")return std::make_unique<SimplifyCFGPass>();if(id=="dce")return std::make_unique<DeadCodeEliminationPass>();return nullptr;}
 inline SSAOptimizationPipeline buildPipeline(int level){SSAOptimizationPipeline p;if(level<=0)return p;auto add=[&](std::initializer_list<const char*> ids){for(auto id:ids)p.add(makePass(id));};if(level==1)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});else{add({"sccp","simplify-cfg","constant-fold","algebraic-simplify","copy-prop","trivial-phi","cse","dce","simplify-cfg","trivial-phi","dce"});if(level>=3)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});}return p;}
 } // namespace nanopass::opt
