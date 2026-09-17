@@ -93,8 +93,8 @@ void printHelp(std::ostream &out) {
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
         << "  run <file>        Execute (requires JIT; not yet available).\n"
-        << "  explain <file>    Show full transformation journey (planned).\n"
-        << "  graph <file>      Emit Graphviz graph (planned).\n"
+        << "  explain <file>    Show full transformation journey.\n"
+        << "  graph <file>      Emit a Graphviz graph.\n"
         << "  optimize <file>   Run optimizer (planned).\n\n"
         << "Emit formats:\n"
         << "  --format=tokens   Tokenize only.\n"
@@ -103,6 +103,7 @@ void printHelp(std::ostream &out) {
         << "  --format=core     Emit typed CoreIR.\n"
         << "  --format=anf      Emit ANF IR.\n"
         << "  --format=cfg      Emit Control-Flow Graph IR.\n"
+        << "  --format=ssa      Emit verified SSA IR.\n"
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
@@ -115,9 +116,10 @@ void printHelp(std::ostream &out) {
         << "  --debug-analyses         Print analysis cache hit/miss events.\n\n"
         << "Graph options:\n"
         << "  --cfg                    Emit Control-Flow Graph DOT.\n"
-        << "  --dominator-tree / --callgraph (planned)\n\n"
+        << "  --dominator-tree         Emit dominator-tree DOT.\n"
+        << "  --callgraph              Planned.\n\n"
         << "Planned (not yet implemented):\n"
-        << "  --format=ssa / --format=optimized\n"
+        << "  --format=optimized\n"
         << "  --opt=<0|1|2|3>  --passes=<list>\n"
         << "  --diagnostics=json  --telemetry=<file>\n"
         << "  nano jit / profile / benchmark\n";
@@ -362,8 +364,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (options.command == Command::Graph) {
-        if (options.graphTarget != "cfg" && !(options.format == "ast" || options.format == "dot")) {
-            std::cerr << "note: 'nano graph' supports --cfg or AST dot (--format=dot -o out.dot).\n";
+        if (options.graphTarget != "cfg" && options.graphTarget != "dominator-tree" &&
+            !(options.format == "ast" || options.format == "dot")) {
+            std::cerr << "note: 'nano graph' supports --cfg, --dominator-tree, or AST dot (--format=dot -o out.dot).\n";
             return 2;
         }
     }
@@ -480,7 +483,7 @@ int main(int argc, char **argv) {
         }
 
         // ── AST Graphviz ──────────────────────────────────────────────────
-        if ((options.command == Command::Graph && options.graphTarget != "cfg") ||
+        if ((options.command == Command::Graph && options.graphTarget.empty()) ||
             (options.command == Command::Emit && options.format == "dot")) {
             const std::string dotFile =
                 options.output.empty() ? "ast.dot" : options.output;
@@ -538,6 +541,19 @@ int main(int argc, char **argv) {
             return 0;
         }
 
+        // SSA is constructed and verified by IRPipeline::runAll before it is
+        // observable through the CLI.
+        if (options.command == Command::Emit && options.format == "ssa") {
+            if (options.output.empty()) {
+                nanopass::printSSA(irRes.ssa, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) { std::cerr << "error: could not write '" << options.output << "'\n"; return 1; }
+                nanopass::printSSA(irRes.ssa, out);
+            }
+            return 0;
+        }
+
         // ── CFG Graphviz ──────────────────────────────────────────────────
         if (options.command == Command::Graph && options.graphTarget == "cfg") {
             if (options.output.empty()) {
@@ -553,6 +569,20 @@ int main(int argc, char **argv) {
             return 0;
         }
 
+        if (options.command == Command::Graph && options.graphTarget == "dominator-tree") {
+            if (options.output.empty()) {
+                nanopass::emitDominatorTreeGraphviz(irRes.cfg, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) {
+                    std::cerr << "error: could not write '" << options.output << "'\n";
+                    return 1;
+                }
+                nanopass::emitDominatorTreeGraphviz(irRes.cfg, out);
+            }
+            return 0;
+        }
+
         // ── Verify (pre-LLVM stages) ──────────────────────────────────────
         if (options.command == Command::Verify) {
             std::cout << "PASS  Parse\n"
@@ -563,7 +593,8 @@ int main(int argc, char **argv) {
                          "PASS  DesugarPlusAssign\n"
                          "PASS  CoreIR\n"
                          "PASS  ANF\n"
-                         "PASS  CFG\n";
+                         "PASS  CFG\n"
+                         "PASS  SSA\n";
         }
 
         // ── Reject unimplemented emit formats ─────────────────────────────
@@ -571,7 +602,7 @@ int main(int argc, char **argv) {
             options.command != Command::Explain) {
             std::cerr << "error: emit format '" << options.format
                       << "' is planned but not yet implemented.\n"
-                         "       Supported formats: tokens, ast, desugar, core, anf, cfg, llvm\n";
+                         "       Supported formats: tokens, ast, desugar, core, anf, cfg, ssa, llvm\n";
             return 2;
         }
 
@@ -599,7 +630,7 @@ int main(int argc, char **argv) {
 
         if (options.command == Command::Verify) {
             std::cout << "PASS  LLVM\n"
-                         "Total: 10 stages, 0 failures\n";
+                         "Total: 11 stages, 0 failures\n";
             return 0;
         }
 
@@ -635,7 +666,13 @@ int main(int argc, char **argv) {
                       << "   branches:       " << irRes.cfgStats.branches << "\n"
                       << "   calls:          " << irRes.cfgStats.calls << "\n"
                       << "   returns:        " << irRes.cfgStats.returns << "\n\n"
-                      << "06 LLVM\n"
+                      << "06 SSA\n"
+                      << "   values:         " << irRes.ssaStats.values << "\n"
+                      << "   phi nodes:      " << irRes.ssaStats.phiNodes << "\n"
+                      << "   loads removed:  " << irRes.ssaStats.loadsRemoved << "\n"
+                      << "   stores removed: " << irRes.ssaStats.storesRemoved << "\n"
+                      << "   verifier:       PASS\n\n"
+                      << "07 LLVM\n"
                       << "   module verified\n";
             return 0;
         }

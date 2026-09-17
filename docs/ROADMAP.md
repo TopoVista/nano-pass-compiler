@@ -1,5 +1,12 @@
 # Roadmap
 
+## Phase 4 — CFG analyses + SSA ✅
+- [x] Deterministic dominators, dominance frontier, and dominator graph output
+- [x] Iterated-DF phi placement and dominator-tree renaming
+- [x] Def-use index and `replaceAllUses`
+- [x] SSA verifier, printer, `nano emit --format=ssa`, verify/explain integration
+- [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
+
 ## Phase 1 — Stabilize existing compiler ✅
 - [x] Root CMake with LLVM detection and clear error messages
 - [x] Professional CLI (`emit`, `compile`, `verify`, stubs for later commands)

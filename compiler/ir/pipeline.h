@@ -12,10 +12,13 @@
 #include "ir/anf/anf_verifier.h"
 #include "ir/anf/core_to_anf.h"
 #include "ir/cfg/analysis/cfg_stats_analysis.h"
+#include "ir/cfg/analysis/dominance_frontier_analysis.h"
+#include "ir/cfg/analysis/dominator_analysis.h"
 #include "ir/cfg/analysis/reachability_analysis.h"
 #include "ir/cfg/analysis/reverse_postorder_analysis.h"
 #include "ir/cfg/anf_to_cfg.h"
 #include "ir/cfg/cfg_graphviz.h"
+#include "ir/cfg/dominator_graphviz.h"
 #include "ir/cfg/cfg_ir.h"
 #include "ir/cfg/cfg_printer.h"
 #include "ir/cfg/cfg_verifier.h"
@@ -23,6 +26,9 @@
 #include "ir/core/core_ir.h"
 #include "ir/core/core_printer.h"
 #include "ir/core/core_verifier.h"
+#include "ir/ssa/ssa_builder.h"
+#include "ir/ssa/ssa_printer.h"
+#include "ir/ssa/ssa_verifier.h"
 
 namespace nanopass {
 
@@ -34,6 +40,9 @@ struct IRPipelineResult {
   ANFVerifierResult anfVerResult;
   CFGVerifierResult cfgVerResult;
   CFGStats cfgStats;
+  SSAProgram ssa;
+  SSAStatistics ssaStats;
+  SSAVerifierResult ssaVerResult;
 };
 
 class IRPipeline {
@@ -76,6 +85,18 @@ public:
 
     // 4. CFG Stats
     res.cfgStats = CFGStatsAnalysis::run(res.cfg);
+    SSABuilder ssaBuilder;
+    res.ssa = ssaBuilder.build(res.cfg, &res.ssaStats);
+    for (const auto &function : res.ssa.functions) {
+      const auto verified = verifySSA(function);
+      if (!verified.ok) {
+        res.ssaVerResult = verified;
+        std::string message = "internal compiler error: SSA verification failed in @" + function.name + ":\n";
+        for (const auto &error : verified.errors) message += "  " + error + "\n";
+        throw std::runtime_error(message);
+      }
+    }
+    res.ssaVerResult.ok = true;
 
     return res;
   }

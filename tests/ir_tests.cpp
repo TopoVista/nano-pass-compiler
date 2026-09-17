@@ -36,9 +36,16 @@
 #include "ir/cfg/cfg_verifier.h"
 #include "ir/cfg/cfg_printer.h"
 #include "ir/cfg/cfg_graphviz.h"
+#include "ir/cfg/cfg_builder.h"
 #include "ir/cfg/analysis/reachability_analysis.h"
 #include "ir/cfg/analysis/reverse_postorder_analysis.h"
 #include "ir/cfg/analysis/cfg_stats_analysis.h"
+#include "ir/cfg/analysis/dominator_analysis.h"
+#include "ir/cfg/analysis/dominance_frontier_analysis.h"
+#include "ir/ssa/ssa_builder.h"
+#include "ir/ssa/ssa_def_use.h"
+#include "ir/ssa/ssa_printer.h"
+#include "ir/ssa/ssa_verifier.h"
 
 using namespace nanopass;
 
@@ -811,6 +818,170 @@ int main() { print f(5); return 0; }
     }
 }
 
+// Phase 4 regression: a continue belonging to a desugared for-loop must run
+// the generated increment before jumping back to the condition/header.
+static void test_for_continue_preserves_increment() {
+    auto res = compileToIR(R"(
+int main() {
+    for (int i = 0; i < 3; i = i + 1) {
+        if (i == 1) { continue; }
+        print i;
+    }
+    return 0;
+}
+)");
+    ASSERT(res.cfgVerResult.ok);
+    const auto &fn = res.cfg.functions[0];
+    const BasicBlock *header = nullptr;
+    for (const auto &block : fn.blocks) {
+        if (block->label == "loop.header") { header = block.get(); break; }
+    }
+    ASSERT(header != nullptr);
+    size_t incrementingPredecessors = 0;
+    if (header) for (BlockId predecessorId : header->predecessors) {
+        const BasicBlock *predecessor = fn.getBlock(predecessorId);
+        bool storesI = false;
+        for (const auto &instruction : predecessor->instructions)
+            if (instruction.kind == CFGInstructionKind::StoreLocal && instruction.local.name == "i") storesI = true;
+        if (storesI) ++incrementingPredecessors;
+    }
+    ASSERT(incrementingPredecessors >= 2);
+}
+
+static CFGFunction makeDiamondCFG() {
+    CFGFunction fn; fn.name = "diamond"; fn.returnType = LangType::Void();
+    CFGBuilder builder(fn);
+    const BlockId entry = builder.createBlock("entry");
+    const BlockId left = builder.createBlock("left");
+    const BlockId right = builder.createBlock("right");
+    const BlockId merge = builder.createBlock("merge");
+    fn.entryBlock = entry;
+    builder.setInsertPoint(entry);
+    builder.terminateWithBranch(CFGOperand::fromConstant(true, LangType::Bool()), left, right);
+    builder.setInsertPoint(left); builder.terminateWithJump(merge);
+    builder.setInsertPoint(right); builder.terminateWithJump(merge);
+    builder.setInsertPoint(merge); builder.terminateWithReturn();
+    builder.finalizeEdges();
+    return fn;
+}
+
+static void test_dominators_diamond() {
+    const auto fn = makeDiamondCFG(); const auto dom = DominatorAnalysis::run(fn);
+    ASSERT(verifyDominatorTree(fn, dom).ok);
+    ASSERT_EQ(dom.immediateDominator(BlockId{1})->index, 0);
+    ASSERT_EQ(dom.immediateDominator(BlockId{2})->index, 0);
+    ASSERT_EQ(dom.immediateDominator(BlockId{3})->index, 0);
+    ASSERT(dom.dominates(BlockId{0}, BlockId{3}));
+    ASSERT(!dom.dominates(BlockId{1}, BlockId{3}));
+}
+
+static void test_dominance_frontier_diamond() {
+    const auto fn = makeDiamondCFG(); const auto dom = DominatorAnalysis::run(fn);
+    const auto frontier = DominanceFrontierAnalysis::run(fn, dom);
+    ASSERT(frontier.contains(BlockId{1}, BlockId{3}));
+    ASSERT(frontier.contains(BlockId{2}, BlockId{3}));
+    ASSERT(!frontier.contains(BlockId{0}, BlockId{3}));
+}
+
+static const SSAFunction &ssaMain(const IRPipelineResult &result, SSAStatistics &stats) {
+    static SSAProgram program;
+    SSABuilder builder;
+    program = builder.build(result.cfg, &stats);
+    for (const auto &function : program.functions)
+        if (function.name == "main") return function;
+    throw std::runtime_error("missing SSA main");
+}
+
+static size_t phiCountFor(const SSAFunction &function, const std::string &name) {
+    size_t count = 0;
+    for (const auto &block : function.blocks)
+        for (const auto &phi : block.phis)
+            if (phi.originalLocal.name == name) ++count;
+    return count;
+}
+
+static void test_ssa_if_else_phi() {
+    auto result = compileToIR(R"(
+int main() { int c = 1; int x = 0; if (c) { x = 1; } else { x = 2; } print x; return 0; }
+)");
+    SSAStatistics stats;
+    const auto &function = ssaMain(result, stats);
+    ASSERT_EQ(phiCountFor(function, "x"), 1u);
+    ASSERT(stats.loadsRemoved > 0);
+    ASSERT(stats.storesRemoved > 0);
+}
+
+static void test_ssa_loop_carried_locals() {
+    auto result = compileToIR(R"(
+int main() { int i = 0; int sum = 0; while (i < 4) { sum = sum + i; i = i + 1; } print sum; return 0; }
+)");
+    SSAStatistics stats;
+    const auto &function = ssaMain(result, stats);
+    ASSERT_EQ(phiCountFor(function, "i"), 1u);
+    ASSERT_EQ(phiCountFor(function, "sum"), 1u);
+}
+
+static void test_ssa_no_unnecessary_phi() {
+    auto result = compileToIR(R"(
+int main() { int c = 1; int x = 7; if (c) { print 1; } print x; return 0; }
+)");
+    SSAStatistics stats;
+    const auto &function = ssaMain(result, stats);
+    ASSERT_EQ(phiCountFor(function, "x"), 0u);
+}
+
+// A definition in the left dominator child must be popped before the right
+// child is renamed.  This catches the classic sibling-stack-leak bug.
+static void test_ssa_sibling_stack_restoration() {
+    auto result = compileToIR(R"(
+int main() { int c = 1; int x = 4; if (c) { x = 9; print x; } else { print x; } return 0; }
+)");
+    SSAStatistics stats; const auto &function = ssaMain(result, stats);
+    ASSERT(verifySSA(function).ok);
+    // The merge needs x, but the else-path use remains dominated by entry.
+    ASSERT_EQ(phiCountFor(function, "x"), 1u);
+}
+
+static void test_ssa_def_use_and_replacement() {
+    auto result = compileToIR(R"(int main() { int x = 1; int y = x + 2; print y; return 0; })");
+    SSAStatistics stats; SSAFunction function = ssaMain(result, stats);
+    SSADefUseIndex index; index.rebuild(function);
+    ValueId source{-1}, replacement{-1};
+    for (const auto &block : function.blocks) for (const auto &instruction : block.instructions)
+        if (instruction.result) { if (source.index < 0) source = *instruction.result; else replacement = *instruction.result; }
+    ASSERT(index.definitionOf(source).has_value());
+    ASSERT(index.numberOfUses(source) > 0);
+    replaceAllUses(function, source, replacement);
+    SSADefUseIndex changed; changed.rebuild(function);
+    ASSERT_EQ(changed.numberOfUses(source), 0u);
+}
+
+static SSAFunction malformedSSA() {
+    SSAFunction f; f.name = "bad"; f.returnType = LangType::Int(); f.entryBlock = {0};
+    SSABlock entry; entry.id={0}; entry.label="entry"; entry.terminator.value=SSATerminator::Return{SSAOperand{ValueId{7}}};
+    f.blocks.push_back(std::move(entry)); return f;
+}
+
+static void test_ssa_verifier_rejects_malformed_programs() {
+    auto undefined = malformedSSA(); ASSERT(!verifySSA(undefined).ok);
+    auto duplicate = malformedSSA();
+    duplicate.blocks[0].instructions.push_back({SSAInstructionKind::Constant, ValueId{1}, LangType::Int(), CoreConstantVal{1}});
+    duplicate.blocks[0].instructions.push_back({SSAInstructionKind::Constant, ValueId{1}, LangType::Int(), CoreConstantVal{2}});
+    ASSERT(!verifySSA(duplicate).ok);
+    auto useBeforeDef = malformedSSA();
+    SSAInstruction binary; binary.kind=SSAInstructionKind::Binary; binary.result=ValueId{1}; binary.type=LangType::Int(); binary.operand1=ValueId{2}; binary.operand2=CoreConstantVal{1};
+    SSAInstruction definition; definition.kind=SSAInstructionKind::Constant; definition.result=ValueId{2}; definition.type=LangType::Int(); definition.constantValue=1;
+    useBeforeDef.blocks[0].instructions={binary, definition};
+    ASSERT(!verifySSA(useBeforeDef).ok);
+}
+
+static void test_ssa_printer_deterministic() {
+    auto result = compileToIR(R"(int main() { int x=0; while(x<2){x=x+1;} print x; return 0; })");
+    SSAStatistics stats; SSAProgram program; SSABuilder builder; program=builder.build(result.cfg,&stats);
+    std::ostringstream first, second; printSSA(program, first); printSSA(program, second);
+    ASSERT_EQ(first.str(), second.str()); ASSERT(first.str().find("phi") != std::string::npos);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -852,6 +1023,16 @@ int main() {
     RUN_TEST(test_full_pipeline_factorial);
     RUN_TEST(test_cfg_continue);
     RUN_TEST(test_cfg_returnInConditional);
+    RUN_TEST(test_for_continue_preserves_increment);
+    RUN_TEST(test_dominators_diamond);
+    RUN_TEST(test_dominance_frontier_diamond);
+    RUN_TEST(test_ssa_if_else_phi);
+    RUN_TEST(test_ssa_loop_carried_locals);
+    RUN_TEST(test_ssa_no_unnecessary_phi);
+    RUN_TEST(test_ssa_sibling_stack_restoration);
+    RUN_TEST(test_ssa_def_use_and_replacement);
+    RUN_TEST(test_ssa_verifier_rejects_malformed_programs);
+    RUN_TEST(test_ssa_printer_deterministic);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
