@@ -1129,6 +1129,19 @@ static void test_cse_does_not_cross_sibling_branches() {
     ASSERT_EQ(after,before);
 }
 
+static void test_optimizer_preserves_division_by_zero_and_safe_algebra() {
+    SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.label="entry";
+    SSAInstruction div; div.kind=SSAInstructionKind::Binary; div.result=ValueId{0}; div.type=LangType::Int(); div.binaryOp=BinaryOpKind::Div; div.operand1=CoreConstantVal{int64_t(4)}; div.operand2=CoreConstantVal{int64_t(0)};
+    SSAInstruction add; add.kind=SSAInstructionKind::Binary; add.result=ValueId{1}; add.type=LangType::Int(); add.binaryOp=BinaryOpKind::Add; add.operand1=ValueId{0}; add.operand2=CoreConstantVal{int64_t(0)};
+    entry.instructions={div,add}; entry.terminator.value=SSATerminator::Return{SSAOperand{ValueId{1}}}; function.blocks={entry};
+    SSAOptimizationContext context; ConstantFoldPass fold; fold.run(function,context); verifyAfter(fold,function,context);
+    ASSERT(function.blocks[0].instructions[0].kind==SSAInstructionKind::Binary);
+    AlgebraicSimplifyPass algebra; algebra.run(function,context); verifyAfter(algebra,function,context);
+    auto returned=std::get<SSATerminator::Return>(function.blocks[0].terminator.value).value;
+    ASSERT(returned && std::holds_alternative<ValueId>(*returned) && std::get<ValueId>(*returned)==ValueId{0});
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1192,6 +1205,7 @@ int main() {
     RUN_TEST(test_sccp_lattice_meet_rules);
     RUN_TEST(test_sccp_phi_uses_only_executable_edge);
     RUN_TEST(test_cse_does_not_cross_sibling_branches);
+    RUN_TEST(test_optimizer_preserves_division_by_zero_and_safe_algebra);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
