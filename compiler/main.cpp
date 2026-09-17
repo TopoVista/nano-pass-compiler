@@ -41,6 +41,7 @@
 
 // Pass infrastructure
 #include "passes/PipelineBuilder.h"   // brings in all pass headers transitively
+#include "ir/pipeline.h"              // CoreIR, ANF, CFG pipeline
 
 // ============================================================
 // Version
@@ -99,6 +100,9 @@ void printHelp(std::ostream &out) {
         << "  --format=tokens   Tokenize only.\n"
         << "  --format=ast      Parse and print the AST.\n"
         << "  --format=desugar  Desugar and print the resulting AST.\n"
+        << "  --format=core     Emit typed CoreIR.\n"
+        << "  --format=anf      Emit ANF IR.\n"
+        << "  --format=cfg      Emit Control-Flow Graph IR.\n"
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
@@ -109,10 +113,11 @@ void printHelp(std::ostream &out) {
         << "  --disable-pass=<id>      Skip the named pass.\n"
         << "  --debug-pass-manager     Print structured pass execution log.\n"
         << "  --debug-analyses         Print analysis cache hit/miss events.\n\n"
-        << "Graph options (planned):\n"
-        << "  --cfg / --dominator-tree / --callgraph\n\n"
+        << "Graph options:\n"
+        << "  --cfg                    Emit Control-Flow Graph DOT.\n"
+        << "  --dominator-tree / --callgraph (planned)\n\n"
         << "Planned (not yet implemented):\n"
-        << "  --format=anf / --format=cfg / --format=ssa / --format=optimized\n"
+        << "  --format=ssa / --format=optimized\n"
         << "  --opt=<0|1|2|3>  --passes=<list>\n"
         << "  --diagnostics=json  --telemetry=<file>\n"
         << "  nano jit / profile / benchmark\n";
@@ -217,7 +222,7 @@ std::string tokenName(TokenType type) {
 #define TOK(k) case TokenType::k: return #k
         TOK(NUMBER); TOK(IDENTIFIER); TOK(STRING); TOK(TRUE); TOK(FALSE);
         TOK(LET); TOK(FUNCTION); TOK(IF); TOK(ELSE); TOK(WHILE); TOK(FOR);
-        TOK(PRINT); TOK(RETURN);
+        TOK(PRINT); TOK(RETURN); TOK(BREAK); TOK(CONTINUE);
         TOK(INT); TOK(FLOAT); TOK(DOUBLE); TOK(SHORT); TOK(LONG);
         TOK(UNSIGNED); TOK(CHAR); TOK(BOOL); TOK(VOID);
         TOK(PLUS); TOK(MINUS); TOK(STAR); TOK(SLASH); TOK(MOD);
@@ -356,18 +361,13 @@ int main(int argc, char **argv) {
                      "       Use --emit-llvm and run via lli.\n";
         return 2;
     }
-    if (options.command == Command::Explain) {
-        std::cerr << "note: 'nano explain' is planned. "
-                     "Use --format=tokens/ast/desugar/llvm to inspect stages.\n";
-        return 2;
-    }
     if (options.command == Command::Graph) {
-        if (!(options.format == "ast" || options.format == "dot")) {
-            std::cerr << "note: 'nano graph' is planned. "
-                         "Use --format=dot -o out.dot for a basic AST dot.\n";
+        if (options.graphTarget != "cfg" && !(options.format == "ast" || options.format == "dot")) {
+            std::cerr << "note: 'nano graph' supports --cfg or AST dot (--format=dot -o out.dot).\n";
             return 2;
         }
     }
+
     if (options.command == Command::Optimize) {
         std::cerr << "note: 'nano optimize' is planned (SSA optimizer not yet "
                      "implemented).\n";
@@ -439,12 +439,22 @@ int main(int argc, char **argv) {
         // ── Build desugar pipeline ────────────────────────────────────────
         nanopass::PassManager pm = nanopass::PipelineBuilder::buildDesugarPipeline();
 
+        // Collect telemetry for --explain mode
+        std::vector<nanopass::PassTelemetry> desugarTelemetry;
+
         // Install debug instrumentation
-        if (options.debugPassManager || options.debugAnalyses) {
+        if (options.debugPassManager || options.debugAnalyses
+                || options.command == Command::Explain) {
             nanopass::PassInstrumentation instr = makeDebugInstrumentation(
                 std::cerr,
                 options.debugPassManager,
                 options.debugAnalyses);
+            // Always collect telemetry for explain
+            if (options.command == Command::Explain) {
+                instr.onPassEnd = [&desugarTelemetry](const nanopass::PassTelemetry &t) {
+                    desugarTelemetry.push_back(t);
+                };
+            }
             // Wire analysis-specific hooks into the AnalysisManager
             if (instr.onAnalysisAccess)
                 am.setOnAnalysisAccess(instr.onAnalysisAccess);
@@ -470,13 +480,76 @@ int main(int argc, char **argv) {
         }
 
         // ── AST Graphviz ──────────────────────────────────────────────────
-        if (options.command == Command::Graph ||
+        if ((options.command == Command::Graph && options.graphTarget != "cfg") ||
             (options.command == Command::Emit && options.format == "dot")) {
             const std::string dotFile =
                 options.output.empty() ? "ast.dot" : options.output;
             ASTGraphviz viz(dotFile);
             viz.draw(program);
             std::cout << "AST graph written to '" << dotFile << "'\n";
+            return 0;
+        }
+
+        // ── Run middle-end pipeline (CoreIR -> ANF -> CFG) ────────────────
+        auto irRes = nanopass::IRPipeline::runAll(program);
+
+        // ── Emit CoreIR ───────────────────────────────────────────────────
+        if (options.command == Command::Emit && options.format == "core") {
+            if (options.output.empty()) {
+                nanopass::printCoreIR(irRes.core, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) {
+                    std::cerr << "error: could not write '" << options.output << "'\n";
+                    return 1;
+                }
+                nanopass::printCoreIR(irRes.core, out);
+            }
+            return 0;
+        }
+
+        // ── Emit ANF IR ───────────────────────────────────────────────────
+        if (options.command == Command::Emit && options.format == "anf") {
+            if (options.output.empty()) {
+                nanopass::printANF(irRes.anf, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) {
+                    std::cerr << "error: could not write '" << options.output << "'\n";
+                    return 1;
+                }
+                nanopass::printANF(irRes.anf, out);
+            }
+            return 0;
+        }
+
+        // ── Emit CFG IR ───────────────────────────────────────────────────
+        if (options.command == Command::Emit && options.format == "cfg") {
+            if (options.output.empty()) {
+                nanopass::printCFG(irRes.cfg, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) {
+                    std::cerr << "error: could not write '" << options.output << "'\n";
+                    return 1;
+                }
+                nanopass::printCFG(irRes.cfg, out);
+            }
+            return 0;
+        }
+
+        // ── CFG Graphviz ──────────────────────────────────────────────────
+        if (options.command == Command::Graph && options.graphTarget == "cfg") {
+            if (options.output.empty()) {
+                nanopass::emitCFGGraphviz(irRes.cfg, std::cout);
+            } else {
+                std::ofstream out(options.output);
+                if (!out) {
+                    std::cerr << "error: could not write '" << options.output << "'\n";
+                    return 1;
+                }
+                nanopass::emitCFGGraphviz(irRes.cfg, out);
+            }
             return 0;
         }
 
@@ -487,14 +560,18 @@ int main(int argc, char **argv) {
                          "PASS  TypeCheck\n"
                          "PASS  DesugarFor\n"
                          "PASS  DesugarIncDec\n"
-                         "PASS  DesugarPlusAssign\n";
+                         "PASS  DesugarPlusAssign\n"
+                         "PASS  CoreIR\n"
+                         "PASS  ANF\n"
+                         "PASS  CFG\n";
         }
 
         // ── Reject unimplemented emit formats ─────────────────────────────
-        if (options.format != "llvm" && options.command != Command::Verify) {
+        if (options.format != "llvm" && options.command != Command::Verify &&
+            options.command != Command::Explain) {
             std::cerr << "error: emit format '" << options.format
                       << "' is planned but not yet implemented.\n"
-                         "       Supported formats: tokens, ast, desugar, llvm\n";
+                         "       Supported formats: tokens, ast, desugar, core, anf, cfg, llvm\n";
             return 2;
         }
 
@@ -522,7 +599,44 @@ int main(int argc, char **argv) {
 
         if (options.command == Command::Verify) {
             std::cout << "PASS  LLVM\n"
-                         "Total: 7 stages, 0 failures\n";
+                         "Total: 10 stages, 0 failures\n";
+            return 0;
+        }
+
+        // ── Explain command ───────────────────────────────────────────────
+        if (options.command == Command::Explain) {
+            const auto &nodeCount = am.get<nanopass::NodeCountAnalysis>(program);
+            size_t coreStmts = irRes.core.topLevelStmts.size();
+            for (const auto &fn : irRes.core.functions)
+                coreStmts += fn.body.size();
+
+            std::cout << "NanoPass Compilation Journey\n\n"
+                      << "01 Parse\n"
+                      << "   AST nodes: " << nodeCount.total << "\n\n"
+                      << "02 Desugar\n";
+
+            // Show per-pass rewrite counts from telemetry
+            for (const auto &t : desugarTelemetry) {
+                std::cout << "   " << t.passName << ": "
+                          << t.stats.getInt("rewrites") << " rewrites\n";
+            }
+
+            std::cout << "\n03 CoreIR\n"
+                      << "   functions: " << irRes.core.functions.size() << "\n"
+                      << "   statements: " << coreStmts << "\n\n"
+                      << "04 ANF\n"
+                      << "   functions: " << irRes.anf.functions.size() << "\n"
+                      << "   (instructions counted via CFG)\n\n"
+                      << "05 CFG\n"
+                      << "   functions:      " << irRes.cfgStats.functions << "\n"
+                      << "   basic blocks:   " << irRes.cfgStats.basicBlocks << "\n"
+                      << "   edges:          " << irRes.cfgStats.edges << "\n"
+                      << "   instructions:   " << irRes.cfgStats.instructions << "\n"
+                      << "   branches:       " << irRes.cfgStats.branches << "\n"
+                      << "   calls:          " << irRes.cfgStats.calls << "\n"
+                      << "   returns:        " << irRes.cfgStats.returns << "\n\n"
+                      << "06 LLVM\n"
+                      << "   module verified\n";
             return 0;
         }
 

@@ -100,6 +100,27 @@ if(NANO_BUILD_TESTS)
       -fsanitize=address,undefined)
   endif()
 
+  # ── IR pipeline unit tests ─────────────────────────────────────────────
+  # Also does not link LLVM — the IR pipeline headers are header-only;
+  # no LLVM types appear in ir_tests.cpp.
+  add_executable(nano_ir_tests
+      ${CMAKE_SOURCE_DIR}/tests/ir_tests.cpp
+  )
+  target_compile_features(nano_ir_tests PRIVATE cxx_std_20)
+  target_include_directories(nano_ir_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_ir_tests PRIVATE
+      -Wall -Wextra -Wno-unused-parameter)
+  endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_ir_tests PRIVATE
+      -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano_ir_tests PRIVATE
+      -fsanitize=address,undefined)
+  endif()
+
   # ── CTest registrations ────────────────────────────────────────────────
   add_test(
       NAME nano_help
@@ -129,6 +150,11 @@ if(NANO_BUILD_TESTS)
   add_test(
       NAME nano_pass_manager_unit
       COMMAND nano_pass_manager_tests
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  add_test(
+      NAME nano_ir_unit
+      COMMAND nano_ir_tests
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 
@@ -198,5 +224,67 @@ if(NANO_BUILD_TESTS)
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
   set_tests_properties(stop_after_invalid_pass PROPERTIES WILL_FAIL TRUE)
+
+  # ── Phase 3 IR format tests ────────────────────────────────────────────
+  foreach(example factorial loops branching functions)
+    add_test(
+        NAME core_${example}
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --format=core
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME anf_${example}
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --format=anf
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME cfg_${example}
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --format=cfg
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME graph_cfg_${example}
+        COMMAND nano graph ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+                         --cfg
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_test(
+        NAME explain_${example}
+        COMMAND nano explain ${CMAKE_SOURCE_DIR}/examples/${example}.nano
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+  endforeach()
+
+  # short_circuit.nano — correct && / || lowering in ANF/CFG
+  foreach(fmt core anf cfg)
+    add_test(
+        NAME ${fmt}_short_circuit
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/short_circuit.nano
+                         --format=${fmt}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+  endforeach()
+
+  # control_flow.nano — break/continue parsing and CFG lowering
+  foreach(fmt core cfg)
+    add_test(
+        NAME ${fmt}_control_flow
+        COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/control_flow.nano
+                         --format=${fmt}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+  endforeach()
+
+  # errors.nano — semantic error must exit non-zero and not crash
+  add_test(
+      NAME errors_reject
+      COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/errors.nano
+                       --format=core
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  set_tests_properties(errors_reject PROPERTIES WILL_FAIL TRUE)
 
 endif() # NANO_BUILD_TESTS
