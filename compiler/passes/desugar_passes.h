@@ -117,6 +117,98 @@ private:
         return blk;
     }
 
+    static std::unique_ptr<Expr> cloneASTExpr(const Expr *e) {
+        if (!e) return nullptr;
+        if (const auto *n = dynamic_cast<const NumberExpr *>(e)) {
+            auto cl = n->isFloat ? std::make_unique<NumberExpr>(n->floatValue)
+                                 : std::make_unique<NumberExpr>(n->intValue);
+            cl->loc = n->loc;
+            cl->type = n->type;
+            return cl;
+        }
+        if (const auto *b = dynamic_cast<const BoolExpr *>(e)) {
+            auto cl = std::make_unique<BoolExpr>(b->value);
+            cl->loc = b->loc;
+            cl->type = b->type;
+            return cl;
+        }
+        if (const auto *s = dynamic_cast<const StringExpr *>(e)) {
+            auto cl = std::make_unique<StringExpr>(s->value);
+            cl->loc = s->loc;
+            cl->type = s->type;
+            return cl;
+        }
+        if (const auto *v = dynamic_cast<const VariableExpr *>(e)) {
+            auto cl = std::make_unique<VariableExpr>(v->name);
+            cl->symbol = v->symbol;
+            cl->loc = v->loc;
+            cl->type = v->type;
+            return cl;
+        }
+        if (const auto *idx = dynamic_cast<const IndexExpr *>(e)) {
+            auto cl = std::make_unique<IndexExpr>(cloneASTExpr(idx->array.get()),
+                                                  cloneASTExpr(idx->index.get()));
+            cl->loc = idx->loc;
+            cl->type = idx->type;
+            return cl;
+        }
+        if (const auto *u = dynamic_cast<const UnaryExpr *>(e)) {
+            auto cl = std::make_unique<UnaryExpr>(u->op, cloneASTExpr(u->right.get()));
+            cl->loc = u->loc;
+            cl->type = u->type;
+            return cl;
+        }
+        if (const auto *b = dynamic_cast<const BinaryExpr *>(e)) {
+            auto cl = std::make_unique<BinaryExpr>(b->op,
+                                                  cloneASTExpr(b->left.get()),
+                                                  cloneASTExpr(b->right.get()));
+            cl->loc = b->loc;
+            cl->type = b->type;
+            return cl;
+        }
+        if (const auto *c = dynamic_cast<const CallExpr *>(e)) {
+            std::vector<std::unique_ptr<Expr>> args;
+            for (const auto &a : c->args)
+                args.push_back(cloneASTExpr(a.get()));
+            auto cl = std::make_unique<CallExpr>(c->callee, std::move(args));
+            cl->symbol = c->symbol;
+            cl->loc = c->loc;
+            cl->type = c->type;
+            return cl;
+        }
+        return nullptr;
+    }
+
+    static std::unique_ptr<Stmt> rewriteContinueInFor(std::unique_ptr<Stmt> s,
+                                                      const Expr *incExpr,
+                                                      SourceLocation loc) {
+        if (!s) return s;
+        if (dynamic_cast<ContinueStmt *>(s.get())) {
+            auto cblk = std::make_unique<BlockStmt>();
+            cblk->loc = loc;
+            auto incStmt = std::make_unique<ExprStmt>(cloneASTExpr(incExpr));
+            incStmt->loc = loc;
+            cblk->stmts.push_back(std::move(incStmt));
+            auto cstmt = std::make_unique<ContinueStmt>();
+            cstmt->loc = loc;
+            cblk->stmts.push_back(std::move(cstmt));
+            return cblk;
+        }
+        if (auto *blk = dynamic_cast<BlockStmt *>(s.get())) {
+            for (auto &child : blk->stmts)
+                child = rewriteContinueInFor(std::move(child), incExpr, loc);
+            return s;
+        }
+        if (auto *ifs = dynamic_cast<IfStmt *>(s.get())) {
+            ifs->thenBranch = rewriteContinueInFor(std::move(ifs->thenBranch), incExpr, loc);
+            if (ifs->elseBranch)
+                ifs->elseBranch = rewriteContinueInFor(std::move(ifs->elseBranch), incExpr, loc);
+            return s;
+        }
+        // Nested loops define their own continue target — do not rewrite
+        return s;
+    }
+
     std::unique_ptr<Stmt>
     desugarFor(ForStmt *f, std::unique_ptr<Stmt> orig) {
         ++rewrites_;
@@ -125,9 +217,10 @@ private:
         // Build the new body: original body + increment expression
         std::unique_ptr<Stmt> newBody;
         if (f->increment) {
+            auto bodyWithContinue = rewriteContinueInFor(std::move(f->body), f->increment.get(), loc);
             auto bodyBlock = std::make_unique<BlockStmt>();
             bodyBlock->loc = loc;
-            bodyBlock->stmts.push_back(transformStmt(std::move(f->body)));
+            bodyBlock->stmts.push_back(transformStmt(std::move(bodyWithContinue)));
             auto incStmt = std::make_unique<ExprStmt>(std::move(f->increment));
             incStmt->loc = loc;
             bodyBlock->stmts.push_back(std::move(incStmt));
@@ -152,9 +245,6 @@ private:
             block->stmts.push_back(transformStmt(std::move(f->init)));
         block->stmts.push_back(std::move(whileStmt));
         return block;
-        // orig (ForStmt) is destroyed here — its remaining fields have been
-        // moved out; destroying the partially-empty ForStmt is safe because
-        // unique_ptr fields that were moved from are null.
     }
 };
 

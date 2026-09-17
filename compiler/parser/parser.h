@@ -248,9 +248,17 @@ private:
     unique_ptr<Stmt> init = nullptr;
 
     if (!check(TokenType::SEMICOLON)) {
-      auto initExpr = expression();
-      consume(TokenType::SEMICOLON, "Expected ';'");
-      init = make_unique<ExprStmt>(std::move(initExpr));
+      // A for initializer has the same declaration grammar as a normal local
+      // declaration. varDeclaration consumes its trailing semicolon itself.
+      if (check(TokenType::INT) || check(TokenType::FLOAT) ||
+          check(TokenType::DOUBLE) || check(TokenType::BOOL) ||
+          check(TokenType::CHAR) || check(TokenType::VOID)) {
+        init = varDeclaration();
+      } else {
+        auto initExpr = expression();
+        consume(TokenType::SEMICOLON, "Expected ';'");
+        init = make_unique<ExprStmt>(std::move(initExpr));
+      }
     } else {
       consume(TokenType::SEMICOLON, "Expected ';'");
     }
