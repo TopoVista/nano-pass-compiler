@@ -31,19 +31,24 @@
 - [x] `docs/pass-manager-design.md`
 
 ## Phase 3 — Explicit IR pipeline (CoreIR → CFG)
-- [ ] Define `CoreIR` — reduced typed IR after all desugaring
-- [ ] `CoreIR` verifier: all names resolved, all expressions typed,
-      no high-level syntax remaining
-- [ ] `CoreIR` printer and `nano emit --format=core`
-- [ ] Lower `CoreIR` to `CFG` IR: `BasicBlock`, `Terminator`, `Branch`,
-      `ConditionalBranch`, `Return`
-- [ ] CFG verifier: every block ends in terminator, predecessor/successor
-      consistency, no unreachable blocks
-- [ ] CFG Graphviz output + `nano graph --cfg`
-- [ ] ANF integration into the production pipeline
-- [ ] `nano emit --format=anf` / `--format=cfg`
-- [ ] Wire new IR stages through `PassManager`
-- [ ] Update all 35 existing tests; add CFG-specific tests
+## Phase 3 — CoreIR + ANF + CFG ✅
+- [x] `CoreIR` — typed tree IR; `LocalId` disambiguation; operator enums
+- [x] `ASTToCoreLowering` — all AST constructs including break/continue
+- [x] `CorePrinter` / `CoreVerifier`
+- [x] `ANFIR` — atoms, temporaries, short-circuit via control flow
+- [x] `CoreToANFLowering` — evaluation order preserved; no binary &&/||
+- [x] `ANFPrinter` / `ANFVerifier`
+- [x] `CFG IR` — BasicBlock, Terminator variant, BlockId/ValueId/LocalId
+- [x] `CFGBuilder` — loop context stack; break/continue; edge finalization
+- [x] `ANFToCFGLowering` — all structured control flow
+- [x] `CFGPrinter` / `CFGVerifier` / `CFGGraphviz`
+- [x] `ReachabilityAnalysis`, `ReversePostOrderAnalysis`, `CFGStatsAnalysis`
+- [x] `IRPipeline::runAll()` — verified Core → ANF → CFG pipeline
+- [x] break/continue keywords in lexer and parser
+- [x] CLI: `--format=core/anf/cfg`, `nano graph --cfg`, real `nano explain`
+- [x] `nano verify` — 10 stages including Core/ANF/CFG
+- [x] 62/62 tests (normal + ASan+UBSan)
+- [x] `docs/ir.md`, `docs/ir-design.md`
 
 ## Phase 4 — SSA
 - [ ] Implement dominator tree (Cooper/Harvey/Kennedy algorithm)

@@ -53,17 +53,26 @@ The produced binary is `build/compiler/nano`.
 # Desugar and print AST (for / ++ / += eliminated)
 ./build/compiler/nano emit examples/factorial.nano --format=desugar
 
+# Emit CoreIR — typed tree IR with LocalId disambiguation
+./build/compiler/nano emit examples/factorial.nano --format=core
+
+# Emit ANF — evaluation order explicit, temporaries named
+./build/compiler/nano emit examples/factorial.nano --format=anf
+
+# Emit CFG — basic blocks, explicit jumps, no structured control flow
+./build/compiler/nano emit examples/loops.nano --format=cfg
+
+# Emit CFG as Graphviz DOT
+./build/compiler/nano graph examples/loops.nano --cfg
+
+# Explain the full compilation journey
+./build/compiler/nano explain examples/factorial.nano
+
 # Emit LLVM IR
 ./build/compiler/nano emit examples/factorial.nano --format=llvm
 
-# Verify all available compiler invariants
+# Verify all available compiler invariants (10 stages)
 ./build/compiler/nano verify examples/factorial.nano
-
-# Show all registered passes
-./build/compiler/nano passes
-
-# Show all registered analyses
-./build/compiler/nano analyses
 ```
 
 Run the generated IR with LLVM's interpreter:
@@ -175,12 +184,15 @@ Each pass runs **once** — not once per top-level statement.
 | DesugarPlusAssign | ✅ stable | |
 | PassManager + AnalysisManager | ✅ stable | |
 | PassRegistry + PipelineBuilder | ✅ stable | `nano passes` |
+| **CoreIR** | ✅ **stable** | `--format=core` |
+| **ANFIR** | ✅ **stable** | `--format=anf` |
+| **CFG IR + Graphviz** | ✅ **stable** | `--format=cfg`, `nano graph --cfg` |
+| **`nano explain`** | ✅ **stable** | `nano explain` |
+| **`nano verify` (10 stages)** | ✅ **stable** | `nano verify` |
 | LLVM IR emission | ✅ stable | `--format=llvm` |
-| CoreIR | 🗓 planned | |
-| CFG / SSA | 🗓 planned | |
-| Optimizer | 🗓 planned | |
-| JIT | 🗓 planned | |
-| Web lab | 🗓 planned | |
+| SSA / Optimizer | 🗓 planned | Phase 4–5 |
+| JIT | 🗓 planned | Phase 7 |
+| Web lab | 🗓 planned | Phase 9 |
 
 ---
 
