@@ -527,7 +527,10 @@ int main(int argc, char **argv) {
                         auto pass = nanopass::opt::makePass(passName);
                         if (!pass) {
                             std::cerr << "error: unknown SSA optimization pass '" << passName
-                                      << "'\n       Available: constant-fold, algebraic-simplify, sccp, copy-prop, trivial-phi, cse, simplify-cfg, dce\n";
+                                      << "'\n       Available:";
+                            for (const auto &info : nanopass::opt::availablePasses())
+                                std::cerr << " " << info.id;
+                            std::cerr << "\n";
                             return 2;
                         }
                         pipeline.add(std::move(pass));
@@ -540,6 +543,8 @@ int main(int argc, char **argv) {
                 optimizationResult.cfgChanged |= one.cfgChanged;
                 for (const auto &[key, value] : one.statistics.counters)
                     optimizationResult.statistics.add(key, value);
+                optimizationResult.telemetry.insert(optimizationResult.telemetry.end(),
+                                                    one.telemetry.begin(), one.telemetry.end());
             }
         }
 
@@ -554,6 +559,12 @@ int main(int argc, char **argv) {
             std::cout << "Optimization summary\n";
             for (const auto &[key, value] : optimizationResult.statistics.counters)
                 std::cout << "  " << key << ": " << value << "\n";
+            std::cout << "Pass telemetry\n";
+            for (const auto &pass : optimizationResult.telemetry)
+                std::cout << "  " << pass.passId << ": "
+                          << pass.instructionsBefore << " -> " << pass.instructionsAfter
+                          << " instructions, " << pass.blocksBefore << " -> "
+                          << pass.blocksAfter << " blocks, " << pass.durationUs << " us\n";
             if (options.remarks) for (const auto &remark : optimizationContext.remarks)
                 std::cout << "  [" << remark.passId << "] " << remark.message << "\n";
             return 0;
@@ -738,7 +749,10 @@ int main(int argc, char **argv) {
                       << "   verifier:       PASS\n\n"
                       << "07 Nano Optimizer\n"
                       << "   constants:      " << optimizationResult.statistics.get("constantsPropagated") + optimizationResult.statistics.get("instructionsFolded") << "\n"
-                      << "   branches folded:" << optimizationResult.statistics.get("branchesFolded") << "\n"
+                      << "   branches simplified:"
+                      << optimizationResult.statistics.get("branchesSimplified") << "\n"
+                      << "   conditions proven: "
+                      << optimizationResult.statistics.get("branchConditionsProven") << "\n"
                       << "   DCE removed:    " << optimizationResult.statistics.get("instructionsRemoved") << "\n\n"
                       << "08 LLVM\n"
                       << "   module verified\n";

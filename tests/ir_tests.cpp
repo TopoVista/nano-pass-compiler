@@ -1142,6 +1142,66 @@ static void test_optimizer_preserves_division_by_zero_and_safe_algebra() {
     ASSERT(returned && std::holds_alternative<ValueId>(*returned) && std::get<ValueId>(*returned)==ValueId{0});
 }
 
+static void test_optimizer_preserves_memory_writes_and_exposes_remarks() {
+    SSAFunction function; function.name="manual_store"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.label="entry";
+    SSAInstruction store; store.kind=SSAInstructionKind::StoreIndex; store.local=LocalId{"array",0};
+    store.operand1=CoreConstantVal{int64_t(0)}; store.operand2=CoreConstantVal{int64_t(42)};
+    SSAInstruction dead; dead.kind=SSAInstructionKind::Binary; dead.result=ValueId{0}; dead.type=LangType::Int(); dead.binaryOp=BinaryOpKind::Add;
+    dead.operand1=CoreConstantVal{int64_t(1)}; dead.operand2=CoreConstantVal{int64_t(2)};
+    entry.instructions={store,dead}; entry.terminator.value=SSATerminator::Return{SSAOperand{CoreConstantVal{int64_t(0)}}}; function.blocks={entry};
+    SSAOptimizationContext context; DeadCodeEliminationPass dce; auto result=dce.run(function,context);
+    ASSERT(result.changed); ASSERT_EQ(function.blocks[0].instructions.size(),1u);
+    ASSERT(function.blocks[0].instructions[0].kind==SSAInstructionKind::StoreIndex);
+    ASSERT(!result.remarks.empty());
+}
+
+static void test_optimizer_pass_registry_and_levels() {
+    ASSERT(makePass("sccp") != nullptr); ASSERT(makePass("not-a-pass") == nullptr);
+    ASSERT_EQ(availablePasses().size(),8u); ASSERT(!availablePasses()[0].description.empty());
+    ASSERT(!availablePasses()[6].preservesCFG);
+    SSAFunction function; function.name="empty"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.terminator.value=SSATerminator::Return{SSAOperand{CoreConstantVal{int64_t(0)}}}; function.blocks={entry};
+    SSAOptimizationContext context; auto o0=buildPipeline(0).run(function,context);
+    ASSERT(!o0.changed); ASSERT(verifySSA(function).ok);
+}
+
+static void test_sccp_unknown_branch_and_loop_converge() {
+    auto result=compileToIR(R"(int choose(int condition) { int x=1; if(condition) { x=2; } else { x=3; } return x; } int main(){ int x=0; while(x<3) { x=x+1; } return choose(x); })");
+    SSAStatistics stats; SSABuilder builder; SSAProgram program=builder.build(result.cfg,&stats);
+    SSAFunction *choose=nullptr; SSAFunction *main=nullptr;
+    for(auto &candidate:program.functions) { if(candidate.name=="choose") choose=&candidate; if(candidate.name=="main") main=&candidate; }
+    ASSERT(choose && main); SSAOptimizationContext context; WorklistSCCPPass sccp;
+    auto choice=sccp.run(*choose,context); verifyAfter(sccp,*choose,context);
+    size_t branches=0; for(const auto &block:choose->blocks) branches+=std::holds_alternative<SSATerminator::Branch>(block.terminator.value);
+    ASSERT_EQ(branches,1u); ASSERT(choice.statistics.get("branchConditionsProven")==0u);
+    auto loop=sccp.run(*main,context); verifyAfter(sccp,*main,context);
+    ASSERT(loop.statistics.get("executableBlocks") > 0u);
+}
+
+static void test_optimizer_o3_reaches_bounded_fixpoint() {
+    auto result=compileToIR(R"(int main() { int x=1+2; int y=x+0; int dead=y*7; print y; return 0; })");
+    SSAStatistics stats; SSAFunction function=ssaMain(result,stats); SSAOptimizationContext context;
+    auto optimized=buildPipeline(3).run(function,context);
+    ASSERT(optimized.statistics.get("pipelineIterations") >= 2u);
+    ASSERT(optimized.statistics.get("pipelineIterations") <= 4u);
+    ASSERT(verifySSA(function).ok);
+}
+
+static void test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge() {
+    SSAFunction function; function.name="forward"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.successors={{1}};
+    entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(9)}});
+    entry.terminator.value=SSATerminator::Jump{{1}};
+    SSABlock middle; middle.id={1}; middle.predecessors={{0}}; middle.successors={{2}}; middle.terminator.value=SSATerminator::Jump{{2}};
+    SSABlock exit; exit.id={2}; exit.predecessors={{1}};
+    exit.phis.push_back({ValueId{1},LocalId{"x",0},LangType::Int(),{{{1},{0}}}});
+    exit.terminator.value=SSATerminator::Return{SSAOperand{ValueId{1}}}; function.blocks={entry,middle,exit};
+    SSAOptimizationContext context; SimplifyCFGPass simplify; auto result=simplify.run(function,context); verifyAfter(simplify,function,context);
+    ASSERT_EQ(result.statistics.get("blocksForwarded"),1u); ASSERT_EQ(function.blocks.size(),2u);
+    ASSERT_EQ(function.blocks[1].phis[0].incoming[0].predecessor.index,0);
+}
+
 static void test_trivial_phi_and_iterative_dce() {
     SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
     SSABlock entry; entry.id={0}; entry.successors={{1}}; entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(4)}}); entry.terminator.value=SSATerminator::Jump{{1}};
@@ -1223,6 +1283,11 @@ int main() {
     RUN_TEST(test_sccp_phi_uses_only_executable_edge);
     RUN_TEST(test_cse_does_not_cross_sibling_branches);
     RUN_TEST(test_optimizer_preserves_division_by_zero_and_safe_algebra);
+    RUN_TEST(test_optimizer_preserves_memory_writes_and_exposes_remarks);
+    RUN_TEST(test_optimizer_pass_registry_and_levels);
+    RUN_TEST(test_sccp_unknown_branch_and_loop_converge);
+    RUN_TEST(test_optimizer_o3_reaches_bounded_fixpoint);
+    RUN_TEST(test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -11,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -38,11 +41,55 @@ inline bool mayHaveSideEffects(const SSAInstruction &i) { return !isPureInstruct
 enum class OptimizationRemarkKind { Applied, Missed, Analysis };
 struct OptimizationRemark { OptimizationRemarkKind kind; std::string passId; std::string message; std::optional<BlockId> block; std::optional<ValueId> value; SourceOrigin origin; };
 struct SSAOptimizationStatistics { std::map<std::string, size_t> counters; void add(std::string key, size_t value=1) { counters[std::move(key)] += value; } size_t get(const std::string &key) const { auto it=counters.find(key); return it==counters.end()?0:it->second; } };
-struct SSAOptimizationResult { bool changed=false; bool cfgChanged=false; SSAOptimizationStatistics statistics; std::vector<OptimizationRemark> remarks; };
+struct SSAOptimizationPassTelemetry {
+  std::string passId;
+  bool changed = false;
+  size_t instructionsBefore = 0;
+  size_t instructionsAfter = 0;
+  size_t blocksBefore = 0;
+  size_t blocksAfter = 0;
+  size_t valuesBefore = 0;
+  size_t valuesAfter = 0;
+  long long durationUs = 0;
+  SSAOptimizationStatistics statistics;
+};
+struct SSAOptimizationResult { bool changed=false; bool cfgChanged=false; SSAOptimizationStatistics statistics; std::vector<OptimizationRemark> remarks; std::vector<SSAOptimizationPassTelemetry> telemetry; };
 struct SSAOptimizationOptions { bool verifyAfterPass=true; bool verboseRemarks=false; };
 struct SSAOptimizationContext { SSAOptimizationOptions options; std::vector<OptimizationRemark> remarks; };
 
+// CSE keys are intentionally structural rather than printer strings: formatting
+// must never affect optimization identity.  Binary CSE currently applies only
+// to scalar SSA expressions, for which these type fields are sufficient.
+struct CSEOperandKey {
+  bool isConstant = false;
+  CoreConstantVal constant = int64_t(0);
+  ValueId value{};
+  bool operator<(const CSEOperandKey &other) const {
+    if (isConstant != other.isConstant) return isConstant < other.isConstant;
+    return isConstant ? constant < other.constant : value < other.value;
+  }
+};
+inline CSEOperandKey cseOperandKey(const SSAOperand &operand) {
+  if (std::holds_alternative<CoreConstantVal>(operand))
+    return {true, std::get<CoreConstantVal>(operand), {}};
+  return {false, int64_t(0), std::get<ValueId>(operand)};
+}
+struct CSEExpressionKey {
+  BinaryOpKind operation;
+  CSEOperandKey left;
+  CSEOperandKey right;
+  LangTypeKind typeKind;
+  int bitWidth;
+  bool isUnsigned;
+  bool operator<(const CSEExpressionKey &other) const {
+    return std::tie(operation, left, right, typeKind, bitWidth, isUnsigned) <
+           std::tie(other.operation, other.left, other.right, other.typeKind,
+                    other.bitWidth, other.isUnsigned);
+  }
+};
+
 inline size_t instructionCount(const SSAFunction &f) { size_t n=0; for(const auto &b:f.blocks)n+=b.instructions.size()+b.phis.size(); return n; }
+inline size_t valueCount(const SSAFunction &f) { size_t n=f.parameters.size(); for(const auto &b:f.blocks){n+=b.phis.size();for(const auto&i:b.instructions)if(i.result)++n;}return n; }
 inline std::optional<CoreConstantVal> constantOf(const SSAOperand &operand, const std::map<int,CoreConstantVal> &constants) { if(std::holds_alternative<CoreConstantVal>(operand)) return std::get<CoreConstantVal>(operand); auto it=constants.find(std::get<ValueId>(operand).index); return it==constants.end()?std::nullopt:std::optional<CoreConstantVal>(it->second); }
 inline bool constantEqual(const CoreConstantVal&a,const CoreConstantVal&b){ return a==b; }
 inline std::optional<bool> truth(const CoreConstantVal &v) { if(auto p=std::get_if<bool>(&v))return *p; if(auto p=std::get_if<int64_t>(&v))return *p!=0; return std::nullopt; }
@@ -65,9 +112,72 @@ class TrivialPhiPass final: public SSAFunctionPass { public: std::string_view id
 
 class CopyPropagationPass final: public SSAFunctionPass { public:std::string_view id()const override{return "copy-prop";}std::string_view name()const override{return "Copy Propagation";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;for(auto&b:f.blocks)for(auto it=b.instructions.begin();it!=b.instructions.end();){if(it->kind==SSAInstructionKind::Copy&&it->result&&std::holds_alternative<ValueId>(it->operand1)){replaceAllUses(f,*it->result,std::get<ValueId>(it->operand1));r.changed=true;r.statistics.add("copiesRemoved");it=b.instructions.erase(it);}else ++it;}return r;} };
 
-class DeadCodeEliminationPass final: public SSAFunctionPass { public:std::string_view id()const override{return "dce";}std::string_view name()const override{return "Dead Code Elimination";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;bool again=true;while(again){again=false;SSADefUseIndex du;du.rebuild(f);for(auto&b:f.blocks){for(auto it=b.phis.begin();it!=b.phis.end();){if(du.numberOfUses(it->result)==0){it=b.phis.erase(it);r.changed=again=true;r.statistics.add("phisRemoved");}else ++it;}for(auto it=b.instructions.begin();it!=b.instructions.end();){if(it->result&&du.numberOfUses(*it->result)==0&&isPureInstruction(*it)){it=b.instructions.erase(it);r.changed=again=true;r.statistics.add("instructionsRemoved");}else ++it;}}}return r;} };
+class DeadCodeEliminationPass final: public SSAFunctionPass { public:std::string_view id()const override{return "dce";}std::string_view name()const override{return "Dead Code Elimination";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;bool again=true;while(again){again=false;SSADefUseIndex du;du.rebuild(f);for(auto&b:f.blocks){for(auto it=b.phis.begin();it!=b.phis.end();){if(du.numberOfUses(it->result)==0){r.remarks.push_back({OptimizationRemarkKind::Applied,"dce","removed unused phi "+it->result.str(),b.id,it->result,it->origin});it=b.phis.erase(it);r.changed=again=true;r.statistics.add("phisRemoved");}else ++it;}for(auto it=b.instructions.begin();it!=b.instructions.end();){if(it->result&&du.numberOfUses(*it->result)==0&&isPureInstruction(*it)){r.remarks.push_back({OptimizationRemarkKind::Applied,"dce","removed unused pure value "+it->result->str(),b.id,*it->result,it->origin});it=b.instructions.erase(it);r.changed=again=true;r.statistics.add("instructionsRemoved");}else ++it;}}}return r;} };
 
-class CSEPass final: public SSAFunctionPass { public:std::string_view id()const override{return "cse";}std::string_view name()const override{return "Common Subexpression Elimination";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;CFGFunction view;view.entryBlock=f.entryBlock;for(auto&b:f.blocks){auto x=std::make_unique<BasicBlock>();x->id=b.id;x->predecessors=b.predecessors;x->successors=b.successors;view.blockIndexMap[b.id.index]=view.blocks.size();view.blocks.push_back(std::move(x));}auto dom=DominatorAnalysis::run(view);std::map<std::string,std::pair<ValueId,BlockId>> seen;auto op=[](const SSAOperand&o){if(std::holds_alternative<ValueId>(o))return std::get<ValueId>(o).str();const auto&v=std::get<CoreConstantVal>(o);if(auto x=std::get_if<int64_t>(&v))return std::string("i")+std::to_string(*x);if(auto x=std::get_if<double>(&v))return std::string("f")+std::to_string(*x);if(auto x=std::get_if<bool>(&v))return std::string(*x?"true":"false");return std::string("s")+std::get<std::string>(v);};for(auto&b:f.blocks)for(auto it=b.instructions.begin();it!=b.instructions.end();){if(it->kind!=SSAInstructionKind::Binary||!it->result){++it;continue;}std::string a=op(it->operand1),z=op(it->operand2);if(it->binaryOp==BinaryOpKind::Add||it->binaryOp==BinaryOpKind::Mul||it->binaryOp==BinaryOpKind::Eq||it->binaryOp==BinaryOpKind::Ne)if(z<a)std::swap(a,z);auto key=std::to_string((int)it->binaryOp)+":"+a+":"+z+":"+std::to_string((int)it->type.kind);auto found=seen.find(key);if(found!=seen.end()&&dom.dominates(found->second.second,b.id)){replaceAllUses(f,*it->result,found->second.first);it=b.instructions.erase(it);r.changed=true;r.statistics.add("expressionsEliminated");}else{seen[key]={*it->result,b.id};++it;}}return r;} };
+class CSEPass final : public SSAFunctionPass {
+public:
+  std::string_view id() const override { return "cse"; }
+  std::string_view name() const override { return "Common Subexpression Elimination"; }
+
+  SSAOptimizationResult run(SSAFunction &function, SSAOptimizationContext &) override {
+    SSAOptimizationResult result;
+    CFGFunction view;
+    view.entryBlock = function.entryBlock;
+    std::map<int, SSABlock *> blocks;
+    for (auto &block : function.blocks) {
+      blocks[block.id.index] = &block;
+      auto cfgBlock = std::make_unique<BasicBlock>();
+      cfgBlock->id = block.id;
+      cfgBlock->predecessors = block.predecessors;
+      cfgBlock->successors = block.successors;
+      view.blockIndexMap[block.id.index] = view.blocks.size();
+      view.blocks.push_back(std::move(cfgBlock));
+    }
+    const auto dominators = DominatorAnalysis::run(view);
+    using AvailableExpressions = std::map<CSEExpressionKey, ValueId>;
+    const auto commutative = [](BinaryOpKind operation) {
+      return operation == BinaryOpKind::Add || operation == BinaryOpKind::Mul ||
+             operation == BinaryOpKind::Eq || operation == BinaryOpKind::Ne;
+    };
+    std::function<void(BlockId, AvailableExpressions)> visit =
+        [&](BlockId id, AvailableExpressions available) {
+          auto foundBlock = blocks.find(id.index);
+          if (foundBlock == blocks.end()) return;
+          auto &block = *foundBlock->second;
+          for (auto instruction = block.instructions.begin();
+               instruction != block.instructions.end();) {
+            if (instruction->kind != SSAInstructionKind::Binary || !instruction->result) {
+              ++instruction;
+              continue;
+            }
+            CSEOperandKey left = cseOperandKey(instruction->operand1);
+            CSEOperandKey right = cseOperandKey(instruction->operand2);
+            if (commutative(instruction->binaryOp) && right < left) std::swap(left, right);
+            const CSEExpressionKey key{instruction->binaryOp, left, right,
+                                       instruction->type.kind, instruction->type.bitWidth,
+                                       instruction->type.isUnsigned};
+            auto availableValue = available.find(key);
+            if (availableValue != available.end()) {
+              const ValueId eliminated = *instruction->result;
+              replaceAllUses(function, eliminated, availableValue->second);
+              result.remarks.push_back({OptimizationRemarkKind::Applied, "cse",
+                                        "reused " + availableValue->second.str() +
+                                            " for " + eliminated.str(),
+                                        block.id, eliminated, instruction->origin});
+              instruction = block.instructions.erase(instruction);
+              result.changed = true;
+              result.statistics.add("expressionsEliminated");
+              continue;
+            }
+            available.emplace(key, *instruction->result);
+            ++instruction;
+          }
+          for (BlockId child : dominators.children(id)) visit(child, available);
+        };
+    visit(function.entryBlock, {});
+    return result;
+  }
+};
 
 class SCCPPass final: public SSAFunctionPass { public:std::string_view id()const override{return "sccp";}std::string_view name()const override{return "Sparse Conditional Constant Propagation";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;std::map<int,CoreConstantVal> constants;std::set<int> executable{f.entryBlock.index};bool progress=true;while(progress){progress=false;for(auto&b:f.blocks){if(!executable.contains(b.id.index))continue;for(auto&i:b.instructions){if(i.kind==SSAInstructionKind::Constant&&i.result)constants[i.result->index]=i.constantValue;else if(i.result&&(i.kind==SSAInstructionKind::Unary||i.kind==SSAInstructionKind::Binary)){auto a=constantOf(i.operand1,constants);std::optional<CoreConstantVal>x;if(a){if(i.kind==SSAInstructionKind::Unary)x=foldUnary(i.unaryOp,*a);else{auto z=constantOf(i.operand2,constants);if(z)x=foldBinary(i.binaryOp,*a,*z);}}if(x&&(!constants.contains(i.result->index)||!constantEqual(constants[i.result->index],*x))){constants[i.result->index]=*x;progress=true;}}}for(auto&p:b.phis){std::optional<CoreConstantVal>x;bool same=true;for(auto in:p.incoming){auto z=constantOf(SSAOperand{in.value},constants);if(!z){same=false;break;}if(x&&!constantEqual(*x,*z)){same=false;break;}x=*z;}if(same&&x&&(!constants.contains(p.result.index)||!constantEqual(constants[p.result.index],*x))){constants[p.result.index]=*x;progress=true;}}if(auto branch=std::get_if<SSATerminator::Branch>(&b.terminator.value)){auto x=constantOf(branch->condition,constants);if(x&&truth(*x)){auto target=*truth(*x)?branch->thenTarget:branch->elseTarget;if(executable.insert(target.index).second)progress=true;}else{if(executable.insert(branch->thenTarget.index).second)progress=true;if(executable.insert(branch->elseTarget.index).second)progress=true;}}else if(auto jump=std::get_if<SSATerminator::Jump>(&b.terminator.value))if(executable.insert(jump->target.index).second)progress=true;}}for(auto&b:f.blocks)if(executable.contains(b.id.index)){for(auto&i:b.instructions)if(i.result&&constants.contains(i.result->index)&&i.kind!=SSAInstructionKind::Constant){i.kind=SSAInstructionKind::Constant;i.constantValue=constants[i.result->index];r.changed=true;r.statistics.add("constantsPropagated");}if(auto branch=std::get_if<SSATerminator::Branch>(&b.terminator.value)){auto x=constantOf(branch->condition,constants);if(x&&truth(*x)){BlockId target=*truth(*x)?branch->thenTarget:branch->elseTarget;b.terminator.value=SSATerminator::Jump{target};b.successors={target};r.changed=r.cfgChanged=true;r.statistics.add("branchesFolded");}}}r.statistics.add("executableBlocks",executable.size());return r;} };
 
@@ -153,9 +263,164 @@ public:
   }
 };
 
-class SimplifyCFGPass final: public SSAFunctionPass { public:std::string_view id()const override{return "simplify-cfg";}std::string_view name()const override{return "CFG Simplification";}SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&)override{SSAOptimizationResult r;for(auto&b:f.blocks)if(auto branch=std::get_if<SSATerminator::Branch>(&b.terminator.value))if(std::holds_alternative<CoreConstantVal>(branch->condition)){auto known=truth(std::get<CoreConstantVal>(branch->condition));if(known){BlockId target=*known?branch->thenTarget:branch->elseTarget;b.terminator.value=SSATerminator::Jump{target};b.successors={target};r.changed=r.cfgChanged=true;r.statistics.add("branchesSimplified");}}std::set<int> reach;std::deque<BlockId> q{f.entryBlock};while(!q.empty()){auto id=q.front();q.pop_front();if(!reach.insert(id.index).second)continue;for(const auto&b:f.blocks)if(b.id==id)for(auto s:b.successors)q.push_back(s);}if(reach.size()!=f.blocks.size()){f.blocks.erase(std::remove_if(f.blocks.begin(),f.blocks.end(),[&](const auto&b){return !reach.contains(b.id.index);}),f.blocks.end());r.changed=r.cfgChanged=true;r.statistics.add("blocksRemoved");}for(auto&b:f.blocks)b.predecessors.clear();for(auto&b:f.blocks)for(auto s:b.successors)for(auto&d:f.blocks)if(d.id==s)d.predecessors.push_back(b.id);for(auto&b:f.blocks)for(auto&p:b.phis)p.incoming.erase(std::remove_if(p.incoming.begin(),p.incoming.end(),[&](const auto&i){return std::find(b.predecessors.begin(),b.predecessors.end(),i.predecessor)==b.predecessors.end();}),p.incoming.end());return r;} };
+class SimplifyCFGPass final : public SSAFunctionPass {
+public:
+  std::string_view id() const override { return "simplify-cfg"; }
+  std::string_view name() const override { return "CFG Simplification"; }
+  SSAOptimizationResult run(SSAFunction &function, SSAOptimizationContext &) override {
+    SSAOptimizationResult result;
+    for (auto &block : function.blocks) {
+      auto branch = std::get_if<SSATerminator::Branch>(&block.terminator.value);
+      if (!branch || !std::holds_alternative<CoreConstantVal>(branch->condition)) continue;
+      const auto known = truth(std::get<CoreConstantVal>(branch->condition));
+      if (!known) continue;
+      const BlockId target = *known ? branch->thenTarget : branch->elseTarget;
+      block.terminator.value = SSATerminator::Jump{target};
+      block.successors = {target};
+      result.changed = result.cfgChanged = true;
+      result.statistics.add("branchesSimplified");
+      result.remarks.push_back({OptimizationRemarkKind::Applied, "simplify-cfg",
+                                "replaced constant branch with jump to " + target.str(),
+                                block.id, {}, {}});
+    }
+    auto recomputePredecessors = [&] {
+      for (auto &block : function.blocks) block.predecessors.clear();
+      for (auto &block : function.blocks) for (BlockId successor : block.successors)
+        for (auto &destination : function.blocks) if (destination.id == successor)
+          destination.predecessors.push_back(block.id);
+    };
+    auto removeUnreachable = [&] {
+      std::set<int> reachable; std::deque<BlockId> worklist{function.entryBlock};
+      while (!worklist.empty()) {
+        const BlockId id = worklist.front(); worklist.pop_front();
+        if (!reachable.insert(id.index).second) continue;
+        for (const auto &block : function.blocks) if (block.id == id)
+          for (BlockId successor : block.successors) worklist.push_back(successor);
+      }
+      if (reachable.size() == function.blocks.size()) return;
+      function.blocks.erase(std::remove_if(function.blocks.begin(), function.blocks.end(),
+          [&](const SSABlock &block) { return !reachable.contains(block.id.index); }),
+          function.blocks.end());
+      result.changed = result.cfgChanged = true;
+      result.statistics.add("blocksRemoved");
+    };
+    removeUnreachable(); recomputePredecessors();
+    // Forward only an empty, non-entry, single-predecessor jump block. This
+    // avoids inventing phi values or changing control-flow multiplicity.
+    bool forwarded = true;
+    while (forwarded) {
+      forwarded = false;
+      for (size_t index = 0; index < function.blocks.size(); ++index) {
+        auto &middle = function.blocks[index];
+        auto jump = std::get_if<SSATerminator::Jump>(&middle.terminator.value);
+        if (middle.id == function.entryBlock || !middle.phis.empty() ||
+            !middle.instructions.empty() || middle.predecessors.size() != 1 || !jump ||
+            jump->target == middle.id) continue;
+        const BlockId predecessor = middle.predecessors.front();
+        const BlockId destination = jump->target;
+        auto destinationIt = std::find_if(function.blocks.begin(), function.blocks.end(),
+            [&](const SSABlock &block) { return block.id == destination; });
+        if (destinationIt == function.blocks.end()) continue;
+        bool wouldDuplicatePhiPredecessor = false;
+        for (const auto &phi : destinationIt->phis) {
+          bool fromMiddle = false, fromPredecessor = false;
+          for (const auto &incoming : phi.incoming) {
+            fromMiddle |= incoming.predecessor == middle.id;
+            fromPredecessor |= incoming.predecessor == predecessor;
+          }
+          wouldDuplicatePhiPredecessor |= fromMiddle && fromPredecessor;
+        }
+        if (wouldDuplicatePhiPredecessor) continue;
+        auto predecessorIt = std::find_if(function.blocks.begin(), function.blocks.end(),
+            [&](const SSABlock &block) { return block.id == predecessor; });
+        if (predecessorIt == function.blocks.end()) continue;
+        if (auto predJump = std::get_if<SSATerminator::Jump>(&predecessorIt->terminator.value)) {
+          if (predJump->target != middle.id) continue;
+          predJump->target = destination;
+        } else if (auto predBranch = std::get_if<SSATerminator::Branch>(&predecessorIt->terminator.value)) {
+          if (predBranch->thenTarget == middle.id) predBranch->thenTarget = destination;
+          if (predBranch->elseTarget == middle.id) predBranch->elseTarget = destination;
+        } else continue;
+        for (auto &successor : predecessorIt->successors) if (successor == middle.id) successor = destination;
+        for (auto &phi : destinationIt->phis) for (auto &incoming : phi.incoming)
+          if (incoming.predecessor == middle.id) incoming.predecessor = predecessor;
+        function.blocks.erase(function.blocks.begin() + static_cast<std::ptrdiff_t>(index));
+        result.changed = result.cfgChanged = forwarded = true;
+        result.statistics.add("blocksForwarded");
+        break;
+      }
+      if (forwarded) recomputePredecessors();
+    }
+    recomputePredecessors();
+    for (auto &block : function.blocks) for (auto &phi : block.phis)
+      phi.incoming.erase(std::remove_if(phi.incoming.begin(), phi.incoming.end(),
+          [&](const PhiIncoming &incoming) {
+            return std::find(block.predecessors.begin(), block.predecessors.end(),
+                             incoming.predecessor) == block.predecessors.end();
+          }), phi.incoming.end());
+    return result;
+  }
+};
 
-class SSAOptimizationPipeline { std::vector<std::unique_ptr<SSAFunctionPass>> passes_; public: void add(std::unique_ptr<SSAFunctionPass> p){passes_.push_back(std::move(p));} SSAOptimizationResult run(SSAFunction&f,SSAOptimizationContext&ctx){SSAOptimizationResult total;for(auto&p:passes_){auto r=p->run(f,ctx);verifyAfter(*p,f,ctx);total.changed|=r.changed;total.cfgChanged|=r.cfgChanged;for(auto&[k,v]:r.statistics.counters)total.statistics.add(k,v);ctx.remarks.insert(ctx.remarks.end(),r.remarks.begin(),r.remarks.end());}return total;} };
+class SSAOptimizationPipeline {
+  std::vector<std::unique_ptr<SSAFunctionPass>> passes_;
+  size_t maxIterations_ = 1;
+public:
+  void add(std::unique_ptr<SSAFunctionPass> pass) { passes_.push_back(std::move(pass)); }
+  void repeatUntilStable(size_t maxIterations) { maxIterations_ = std::max<size_t>(1, maxIterations); }
+  SSAOptimizationResult run(SSAFunction &function, SSAOptimizationContext &context) {
+    SSAOptimizationResult total;
+    for (size_t iteration = 0; iteration < maxIterations_; ++iteration) {
+      bool changedThisIteration = false;
+      total.statistics.add("pipelineIterations");
+      for (auto &pass : passes_) {
+        SSAOptimizationPassTelemetry telemetry;
+        telemetry.passId = std::string(pass->id());
+        telemetry.instructionsBefore = instructionCount(function);
+        telemetry.blocksBefore = function.blocks.size();
+        telemetry.valuesBefore = valueCount(function);
+        const auto start = std::chrono::steady_clock::now();
+        auto result = pass->run(function, context);
+        telemetry.durationUs = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - start).count();
+        verifyAfter(*pass, function, context);
+        telemetry.changed = result.changed;
+        telemetry.instructionsAfter = instructionCount(function);
+        telemetry.blocksAfter = function.blocks.size();
+        telemetry.valuesAfter = valueCount(function);
+        telemetry.statistics = result.statistics;
+        total.telemetry.push_back(std::move(telemetry));
+        total.changed |= result.changed;
+        total.cfgChanged |= result.cfgChanged;
+        changedThisIteration |= result.changed;
+        for (auto &[key, value] : result.statistics.counters) total.statistics.add(key, value);
+        total.remarks.insert(total.remarks.end(), result.remarks.begin(), result.remarks.end());
+        context.remarks.insert(context.remarks.end(), result.remarks.begin(), result.remarks.end());
+      }
+      if (!changedThisIteration) break;
+    }
+    return total;
+  }
+};
 inline std::unique_ptr<SSAFunctionPass> makePass(std::string_view id){if(id=="constant-fold")return std::make_unique<ConstantFoldPass>();if(id=="algebraic-simplify")return std::make_unique<AlgebraicSimplifyPass>();if(id=="sccp")return std::make_unique<WorklistSCCPPass>();if(id=="copy-prop")return std::make_unique<CopyPropagationPass>();if(id=="trivial-phi")return std::make_unique<TrivialPhiPass>();if(id=="cse")return std::make_unique<CSEPass>();if(id=="simplify-cfg")return std::make_unique<SimplifyCFGPass>();if(id=="dce")return std::make_unique<DeadCodeEliminationPass>();return nullptr;}
-inline SSAOptimizationPipeline buildPipeline(int level){SSAOptimizationPipeline p;if(level<=0)return p;auto add=[&](std::initializer_list<const char*> ids){for(auto id:ids)p.add(makePass(id));};if(level==1)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});else{add({"sccp","simplify-cfg","constant-fold","algebraic-simplify","copy-prop","trivial-phi","cse","dce","simplify-cfg","trivial-phi","dce"});if(level>=3)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});}return p;}
+struct SSAOptimizationPassInfo {
+  std::string_view id;
+  std::string_view name;
+  std::string_view description;
+  bool preservesCFG;
+};
+inline const std::array<SSAOptimizationPassInfo, 8> &availablePasses() {
+  static const std::array<SSAOptimizationPassInfo, 8> passes{{
+      {"constant-fold", "Constant Folding", "Fold literal unary and binary expressions.", true},
+      {"algebraic-simplify", "Algebraic Simplification", "Apply conservative scalar identities.", true},
+      {"sccp", "Sparse Conditional Constant Propagation", "Propagate constants over executable edges.", true},
+      {"copy-prop", "Copy Propagation", "Replace scalar copies with their sources.", true},
+      {"trivial-phi", "Trivial Phi Elimination", "Remove phis with one effective incoming value.", true},
+      {"cse", "Common Subexpression Elimination", "Reuse dominating pure binary expressions.", true},
+      {"simplify-cfg", "CFG Simplification", "Fold constant branches and remove unreachable blocks.", false},
+      {"dce", "Dead Code Elimination", "Remove unused pure instructions and phis.", true},
+  }};
+  return passes;
+}
+inline SSAOptimizationPipeline buildPipeline(int level){SSAOptimizationPipeline p;if(level<=0)return p;auto add=[&](std::initializer_list<const char*> ids){for(auto id:ids)p.add(makePass(id));};if(level==1)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});else{add({"sccp","simplify-cfg","constant-fold","algebraic-simplify","copy-prop","trivial-phi","cse","dce","simplify-cfg","trivial-phi","dce"});if(level>=3)p.repeatUntilStable(4);}return p;}
 } // namespace nanopass::opt

@@ -278,6 +278,20 @@ if(NANO_BUILD_TESTS)
     )
   endforeach()
 
+  add_test(
+      NAME optimize_custom_pipeline
+      COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/optimizer.nano
+                       --passes=constant-fold,dce
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  add_test(
+      NAME optimize_unknown_pass
+      COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/optimizer.nano
+                       --passes=not-a-real-ssa-pass
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  set_tests_properties(optimize_unknown_pass PROPERTIES WILL_FAIL TRUE)
+
   # short_circuit.nano — correct && / || lowering in ANF/CFG
   foreach(fmt core anf cfg)
     add_test(
