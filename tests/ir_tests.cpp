@@ -1142,6 +1142,23 @@ static void test_optimizer_preserves_division_by_zero_and_safe_algebra() {
     ASSERT(returned && std::holds_alternative<ValueId>(*returned) && std::get<ValueId>(*returned)==ValueId{0});
 }
 
+static void test_trivial_phi_and_iterative_dce() {
+    SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.successors={{1}}; entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(4)}}); entry.terminator.value=SSATerminator::Jump{{1}};
+    SSABlock loop; loop.id={1}; loop.predecessors={{0},{1}}; loop.successors={{1}}; loop.phis.push_back({ValueId{1},LocalId{"x",0},LangType::Int(),{{{0},{0}},{{1},{1}}}}); loop.terminator.value=SSATerminator::Return{SSAOperand{ValueId{1}}};
+    function.blocks={entry,loop}; SSAOptimizationContext context;
+    TrivialPhiPass phi; auto result=phi.run(function,context); verifyAfter(phi,function,context);
+    ASSERT(result.statistics.get("phisRemoved") == 1u); ASSERT(function.blocks[1].phis.empty());
+    auto returned=std::get<SSATerminator::Return>(function.blocks[1].terminator.value).value;
+    ASSERT(returned && std::holds_alternative<ValueId>(*returned) && std::get<ValueId>(*returned)==ValueId{0});
+
+    SSAInstruction dead1; dead1.kind=SSAInstructionKind::Binary; dead1.result=ValueId{2}; dead1.type=LangType::Int(); dead1.binaryOp=BinaryOpKind::Add; dead1.operand1=ValueId{0}; dead1.operand2=CoreConstantVal{int64_t(1)};
+    SSAInstruction dead2; dead2.kind=SSAInstructionKind::Binary; dead2.result=ValueId{3}; dead2.type=LangType::Int(); dead2.binaryOp=BinaryOpKind::Mul; dead2.operand1=ValueId{2}; dead2.operand2=CoreConstantVal{int64_t(2)};
+    function.blocks[0].instructions.push_back(dead1); function.blocks[0].instructions.push_back(dead2);
+    DeadCodeEliminationPass dce; auto dceResult=dce.run(function,context); verifyAfter(dce,function,context);
+    ASSERT(dceResult.statistics.get("instructionsRemoved") >= 2u);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1206,6 +1223,7 @@ int main() {
     RUN_TEST(test_sccp_phi_uses_only_executable_edge);
     RUN_TEST(test_cse_does_not_cross_sibling_branches);
     RUN_TEST(test_optimizer_preserves_division_by_zero_and_safe_algebra);
+    RUN_TEST(test_trivial_phi_and_iterative_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"
