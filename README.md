@@ -77,6 +77,8 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano optimize examples/optimizer.nano -O2 --show-before-after
 ./build/compiler/nano optimize examples/optimizer.nano --passes=sccp,dce
 ./build/compiler/nano emit examples/optimizer.nano --format=optimized
+./build/compiler/nano optimize examples/licm.nano -O3 --why-not-optimized
+./build/compiler/nano graph examples/nested_loops.nano --loops
 
 # Explain the full compilation journey
 ./build/compiler/nano explain examples/factorial.nano

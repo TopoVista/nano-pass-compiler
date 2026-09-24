@@ -43,6 +43,7 @@
 #include "passes/PipelineBuilder.h"   // brings in all pass headers transitively
 #include "ir/pipeline.h"              // CoreIR, ANF, CFG pipeline
 #include "optimizer/ssa_optimizer.h"
+#include "optimizer/advanced_optimizer.h"
 
 // ============================================================
 // Version
@@ -81,6 +82,7 @@ struct Options {
     int optimizationLevel   = 2;
     bool showBeforeAfter    = false;
     bool remarks            = false;
+    bool whyNotOptimized    = false;
 };
 
 // ============================================================
@@ -124,9 +126,11 @@ void printHelp(std::ostream &out) {
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
         << "  --remarks                Print structured optimization remarks.\n\n"
+        << "  --why-not-optimized      Print recorded advanced optimization rejections.\n\n"
         << "Graph options:\n"
         << "  --cfg                    Emit Control-Flow Graph DOT.\n"
         << "  --dominator-tree         Emit dominator-tree DOT.\n"
+        << "  --loops                  Emit natural-loop annotated DOT.\n"
         << "  --callgraph              Planned.\n\n"
         << "Planned (not yet implemented):\n"
         << "  --format=optimized\n"
@@ -199,10 +203,14 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.showBeforeAfter = true;
         } else if (arg == "--remarks") {
             o.remarks = true;
+        } else if (arg == "--why-not-optimized") {
+            o.whyNotOptimized = true;
         } else if (arg == "--cfg") {
             o.graphTarget = "cfg";
         } else if (arg == "--dominator-tree") {
             o.graphTarget = "dominator-tree";
+        } else if (arg == "--loops") {
+            o.graphTarget = "loops";
         } else if (arg == "--callgraph") {
             o.graphTarget = "callgraph";
         } else if (!arg.empty() && arg.front() == '-') {
@@ -380,9 +388,9 @@ int main(int argc, char **argv) {
         return 2;
     }
     if (options.command == Command::Graph) {
-        if (options.graphTarget != "cfg" && options.graphTarget != "dominator-tree" &&
+        if (options.graphTarget != "cfg" && options.graphTarget != "dominator-tree" && options.graphTarget != "loops" &&
             !(options.format == "ast" || options.format == "dot")) {
-            std::cerr << "note: 'nano graph' supports --cfg, --dominator-tree, or AST dot (--format=dot -o out.dot).\n";
+            std::cerr << "note: 'nano graph' supports --cfg, --dominator-tree, --loops, or AST dot (--format=dot -o out.dot).\n";
             return 2;
         }
     }
@@ -518,18 +526,38 @@ int main(int argc, char **argv) {
         nanopass::opt::SSAOptimizationResult optimizationResult;
         if (optimizeSSA) {
             ssaBefore = irRes.ssa;
+            const bool requestInline = options.passes.empty()
+                ? options.optimizationLevel >= 2
+                : options.passes.find("inline") != std::string::npos;
+            if (requestInline) {
+                nanopass::opt::SSAProgramInliner inliner;
+                const auto inlineResult = inliner.run(irRes.ssa);
+                optimizationResult.changed |= inlineResult.changed;
+                for (const auto &[key, value] : inlineResult.statistics.counters)
+                    optimizationResult.statistics.add(key, value);
+                optimizationContext.remarks.insert(optimizationContext.remarks.end(),
+                                                  inlineResult.remarks.begin(), inlineResult.remarks.end());
+                for (const auto &function : irRes.ssa.functions) {
+                    const auto verified = nanopass::verifySSA(function);
+                    if (!verified.ok)
+                        throw std::runtime_error("internal compiler error: SSA verification failed after pass `inline`");
+                }
+            }
             for (auto &function : irRes.ssa.functions) {
                 nanopass::opt::SSAOptimizationPipeline pipeline;
                 if (!options.passes.empty()) {
                     std::stringstream passNames(options.passes);
                     std::string passName;
                     while (std::getline(passNames, passName, ',')) {
+                        if (passName == "inline") continue;
                         auto pass = nanopass::opt::makePass(passName);
+                        if (!pass) pass = nanopass::opt::makeAdvancedPass(passName);
                         if (!pass) {
                             std::cerr << "error: unknown SSA optimization pass '" << passName
                                       << "'\n       Available:";
                             for (const auto &info : nanopass::opt::availablePasses())
                                 std::cerr << " " << info.id;
+                            std::cerr << " loop-simplify licm strength-reduce inline";
                             std::cerr << "\n";
                             return 2;
                         }
@@ -537,6 +565,12 @@ int main(int argc, char **argv) {
                     }
                 } else {
                     pipeline = nanopass::opt::buildPipeline(options.optimizationLevel);
+                    if (options.optimizationLevel >= 2) {
+                        pipeline.add(nanopass::opt::makeAdvancedPass("loop-simplify"));
+                        pipeline.add(nanopass::opt::makeAdvancedPass("licm"));
+                    }
+                    if (options.optimizationLevel >= 3)
+                        pipeline.add(nanopass::opt::makeAdvancedPass("strength-reduce"));
                 }
                 const auto one = pipeline.run(function, optimizationContext);
                 optimizationResult.changed |= one.changed;
@@ -567,6 +601,12 @@ int main(int argc, char **argv) {
                           << pass.blocksAfter << " blocks, " << pass.durationUs << " us\n";
             if (options.remarks) for (const auto &remark : optimizationContext.remarks)
                 std::cout << "  [" << remark.passId << "] " << remark.message << "\n";
+            if (options.whyNotOptimized) {
+                std::cout << "Missed optimizations\n";
+                for (const auto &remark : optimizationContext.remarks)
+                    if (remark.kind == nanopass::opt::OptimizationRemarkKind::Missed)
+                        std::cout << "  [" << remark.passId << "] " << remark.message << "\n";
+            }
             return 0;
         }
 
@@ -654,6 +694,24 @@ int main(int argc, char **argv) {
                 }
                 nanopass::emitDominatorTreeGraphviz(irRes.cfg, out);
             }
+            return 0;
+        }
+
+        if (options.command == Command::Graph && options.graphTarget == "loops") {
+            std::ostringstream dot;
+            dot << "digraph NanoLoops {\n  node [shape=box,fontname=\"monospace\"];\n";
+            for (const auto &function : irRes.ssa.functions) {
+                const auto loops = nanopass::LoopInfoAnalysis::run(function);
+                for (const auto &loop : loops.loops)
+                    dot << "  \"" << function.name << ":" << loop.header.str()
+                        << "\" [label=\"" << function.name << " " << loop.header.str()
+                        << "\\nloop L" << loop.id.index << " depth " << loop.depth
+                        << (loop.preheader ? "\\npreheader " + loop.preheader->str() : "")
+                        << "\"];\n";
+            }
+            dot << "}\n";
+            if (options.output.empty()) std::cout << dot.str();
+            else { std::ofstream out(options.output); if(!out){std::cerr<<"error: could not write '"<<options.output<<"'\n";return 1;} out<<dot.str(); }
             return 0;
         }
 

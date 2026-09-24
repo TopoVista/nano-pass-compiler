@@ -1,0 +1,12 @@
+int guarded_division(int n, int a, int b) {
+  int i = 0;
+  int result = 0;
+  while (i < n) {
+    int candidate = a / b;
+    result = result + candidate;
+    i = i + 1;
+  }
+  return result;
+}
+
+int main() { return guarded_division(3, 12, 2); }

@@ -47,6 +47,7 @@
 #include "ir/ssa/ssa_printer.h"
 #include "ir/ssa/ssa_verifier.h"
 #include "optimizer/ssa_optimizer.h"
+#include "optimizer/advanced_optimizer.h"
 
 using namespace nanopass;
 using namespace nanopass::opt;
@@ -1202,6 +1203,33 @@ static void test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge() {
     ASSERT_EQ(function.blocks[1].phis[0].incoming[0].predecessor.index,0);
 }
 
+static void test_loop_info_nesting_exits_and_preheaders() {
+    auto result=compileToIR(R"(int f(int n) { int i=0; int j=0; while(i<n) { j=0; while(j<n) { j=j+1; } i=i+1; } return i; } int main(){return f(2);})");
+    SSAStatistics stats; SSABuilder builder; SSAProgram program=builder.build(result.cfg,&stats); SSAFunction *function=nullptr;
+    for(auto &candidate:program.functions)if(candidate.name=="f")function=&candidate; ASSERT(function);
+    auto loops=LoopInfoAnalysis::run(*function); auto verified=verifyLoopInfo(*function,loops);
+    ASSERT(verified.ok); ASSERT_EQ(loops.loops.size(),2u); size_t nested=0; for(const auto&loop:loops.loops){ASSERT(!loop.blocks.empty());ASSERT(!loop.backedgeSources.empty());ASSERT(loop.preheader.has_value());if(loop.parent)++nested;}
+    ASSERT_EQ(nested,1u);
+}
+
+static void test_licm_hoists_only_safe_invariants() {
+    auto result=compileToIR(R"(int f(int n, int a, int b) { int i=0; int total=0; while(i<n) { int x=a*b; int y=a/b; total=total+x; i=i+1; } return total; } int main(){return f(3,2,4);})");
+    SSAStatistics stats; SSABuilder builder; SSAProgram program=builder.build(result.cfg,&stats); SSAFunction *function=nullptr;for(auto&candidate:program.functions)if(candidate.name=="f")function=&candidate;ASSERT(function);
+    SSAOptimizationContext context; LICMPass licm; auto changed=licm.run(*function,context); verifyAfter(licm,*function,context);
+    ASSERT(changed.statistics.get("instructionsHoisted")>0u); bool divisionStillPresent=false;for(const auto&block:function->blocks)for(const auto&instruction:block.instructions)divisionStillPresent|=instruction.kind==SSAInstructionKind::Binary&&instruction.binaryOp==BinaryOpKind::Div;ASSERT(divisionStillPresent);
+}
+
+static void test_strength_reduction_and_call_graph_recursion() {
+    SSAFunction function;function.name="strength";function.returnType=LangType::Int();function.entryBlock={0};SSABlock entry;entry.id={0};SSAInstruction multiply;multiply.kind=SSAInstructionKind::Binary;multiply.result=ValueId{0};multiply.type=LangType::Int();multiply.binaryOp=BinaryOpKind::Mul;multiply.operand1=CoreConstantVal{int64_t(2)};multiply.operand2=CoreConstantVal{int64_t(7)};entry.instructions={multiply};entry.terminator.value=SSATerminator::Return{SSAOperand{ValueId{0}}};function.blocks={entry};SSAOptimizationContext context;StrengthReducePass reduce;auto reduced=reduce.run(function,context);verifyAfter(reduce,function,context);ASSERT_EQ(reduced.statistics.get("multipliesReduced"),1u);ASSERT(function.blocks[0].instructions[0].binaryOp==BinaryOpKind::Add);
+    auto result=compileToIR(R"(int a(int x){return b(x);} int b(int x){return a(x);} int c(int x){return x+1;} int main(){return c(1);})");SSAStatistics stats;SSABuilder builder;SSAProgram program=builder.build(result.cfg,&stats);auto calls=CallGraphAnalysis::run(program);ASSERT(calls.recursive("a"));ASSERT(calls.recursive("b"));ASSERT(!calls.recursive("c"));ASSERT_EQ(calls.callees("main").size(),1u);
+}
+
+static void test_single_block_inliner_remaps_values_and_rejects_recursion() {
+    auto result=compileToIR(R"(int add1(int x){ return x+1; } int self(int x){ return self(x); } int main(){ int y=add1(4); return y; })");
+    SSAStatistics stats;SSABuilder builder;SSAProgram program=builder.build(result.cfg,&stats);SSAProgramInliner inliner;auto changed=inliner.run(program);ASSERT(changed.statistics.get("callsInlined")>0u);for(const auto&function:program.functions)ASSERT(verifySSA(function).ok);
+    bool addCall=false;bool selfCall=false;for(const auto&function:program.functions)for(const auto&block:function.blocks)for(const auto&instruction:block.instructions)if(instruction.kind==SSAInstructionKind::Call){addCall|=instruction.callee=="add1";selfCall|=instruction.callee=="self";}ASSERT(!addCall);ASSERT(selfCall);
+}
+
 static void test_trivial_phi_and_iterative_dce() {
     SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
     SSABlock entry; entry.id={0}; entry.successors={{1}}; entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(4)}}); entry.terminator.value=SSATerminator::Jump{{1}};
@@ -1288,6 +1316,10 @@ int main() {
     RUN_TEST(test_sccp_unknown_branch_and_loop_converge);
     RUN_TEST(test_optimizer_o3_reaches_bounded_fixpoint);
     RUN_TEST(test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge);
+    RUN_TEST(test_loop_info_nesting_exits_and_preheaders);
+    RUN_TEST(test_licm_hoists_only_safe_invariants);
+    RUN_TEST(test_strength_reduction_and_call_graph_recursion);
+    RUN_TEST(test_single_block_inliner_remaps_values_and_rejects_recursion);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"

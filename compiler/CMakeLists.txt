@@ -113,6 +113,11 @@ if(NANO_BUILD_TESTS)
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_ir_tests PRIVATE
       -Wall -Wextra -Wno-unused-parameter)
+    # Header-only SSA analyses make the Windows/MinGW test translation unit
+    # exceed COFF's default section count; this affects only that toolchain.
+    if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      target_compile_options(nano_ir_tests PRIVATE -Wa,-mbig-obj)
+    endif()
   endif()
   if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_ir_tests PRIVATE
