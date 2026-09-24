@@ -2,12 +2,34 @@
 
 #include <map>
 #include <set>
+#include <any>
+#include <tuple>
+#include <typeindex>
 
 #include "ir/ssa/call_graph.h"
 #include "ir/ssa/loop_analysis.h"
 #include "optimizer/ssa_optimizer.h"
+#include "passes/AnalysisManager.h"
 
 namespace nanopass::opt {
+
+// SSA analyses share the established AnalysisManager invalidation vocabulary,
+// but need identities richer than the AST Program alias can express.  Program
+// address is a lifetime token; function name is the stable subject identity.
+class SSAAnalysisManager {
+  struct Key { std::type_index type; const SSAProgram *program; std::string function; bool operator<(const Key&o)const{return std::tie(type,program,function)<std::tie(o.type,o.program,o.function);} };
+  std::map<Key,std::any> cache_;
+public:
+  template<class Analysis> const typename Analysis::Result &get(const SSAProgram &program) { Key key{typeid(Analysis),&program,{}};auto it=cache_.find(key);if(it==cache_.end())it=cache_.emplace(key,Analysis::compute(program)).first;return std::any_cast<const typename Analysis::Result&>(it->second); }
+  template<class Analysis> const typename Analysis::Result &get(const SSAProgram &program,const SSAFunction &function) { Key key{typeid(Analysis),&program,function.name};auto it=cache_.find(key);if(it==cache_.end())it=cache_.emplace(key,Analysis::compute(function)).first;return std::any_cast<const typename Analysis::Result&>(it->second); }
+  template<class Analysis> void invalidate(const SSAProgram &program,const SSAFunction &function){cache_.erase(Key{typeid(Analysis),&program,function.name});}
+  template<class Analysis> bool isCached(const SSAProgram &program,const SSAFunction &function)const{return cache_.contains(Key{typeid(Analysis),&program,function.name});}
+  template<class Analysis> bool isCached(const SSAProgram &program)const{return cache_.contains(Key{typeid(Analysis),&program,{}});}
+  void invalidateFunction(const SSAProgram &program,const SSAFunction &function){for(auto it=cache_.begin();it!=cache_.end();)if(it->first.program==&program&&it->first.function==function.name)it=cache_.erase(it);else ++it;}
+  void invalidateProgram(const SSAProgram &program){for(auto it=cache_.begin();it!=cache_.end();)if(it->first.program==&program)it=cache_.erase(it);else ++it;}
+};
+struct CachedLoopInfoAnalysis { using Result=LoopInfo; static Result compute(const SSAFunction&f){return LoopInfoAnalysis::run(f);} };
+struct CachedCallGraphAnalysis { using Result=CallGraph; static Result compute(const SSAProgram&p){return CallGraphAnalysis::run(p);} };
 
 enum class OptimizationReasonCode { SideEffects, LoopVariantOperand, UnsafeToSpeculate, NoPreheader, RecursiveCallee, InlineCostTooHigh, BudgetExceeded, UnsupportedControlFlow, MemoryDependenceUnknown };
 inline const char *reasonCodeName(OptimizationReasonCode code) { switch(code){case OptimizationReasonCode::SideEffects:return "SIDE_EFFECTS";case OptimizationReasonCode::LoopVariantOperand:return "LOOP_VARIANT_OPERAND";case OptimizationReasonCode::UnsafeToSpeculate:return "UNSAFE_TO_SPECULATE";case OptimizationReasonCode::NoPreheader:return "NO_PREHEADER";case OptimizationReasonCode::RecursiveCallee:return "INLINE_RECURSIVE";case OptimizationReasonCode::InlineCostTooHigh:return "INLINE_COST_TOO_HIGH";case OptimizationReasonCode::BudgetExceeded:return "INLINE_BUDGET_EXCEEDED";case OptimizationReasonCode::UnsupportedControlFlow:return "UNSUPPORTED_CONTROL_FLOW";case OptimizationReasonCode::MemoryDependenceUnknown:return "MEMORY_DEPENDENCE_UNKNOWN";}return "UNKNOWN"; }

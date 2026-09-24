@@ -1240,6 +1240,10 @@ static void test_loop_simplify_synthesizes_preheader_and_repairs_phi() {
     SSABlock exit;exit.id={5};exit.predecessors={{3}};exit.terminator.value=SSATerminator::Return{SSAOperand{ValueId{3}}};function.blocks={entry,left,right,header,latch,exit};SSAOptimizationContext context;LoopSimplifyPass simplify;auto changed=simplify.run(function,context);verifyAfter(simplify,function,context);ASSERT_EQ(changed.statistics.get("preheadersCreated"),1u);auto loops=LoopInfoAnalysis::run(function);ASSERT_EQ(loops.loops.size(),1u);ASSERT(loops.loops[0].preheader.has_value());ASSERT(!function.blocks.back().phis.empty());
 }
 
+static void test_ssa_analysis_cache_scopes_and_invalidation() {
+    auto result=compileToIR(R"(int f(int n){int i=0;while(i<n){i=i+1;}return i;} int g(int n){int i=0;while(i<n){i=i+1;}return i;} int main(){return f(2);})");SSAStatistics stats;SSABuilder builder;SSAProgram program=builder.build(result.cfg,&stats);SSAAnalysisManager analyses;auto &first=analyses.get<CachedLoopInfoAnalysis>(program,program.functions[0]);auto &again=analyses.get<CachedLoopInfoAnalysis>(program,program.functions[0]);ASSERT(&first==&again);ASSERT(analyses.isCached<CachedLoopInfoAnalysis>(program,program.functions[0]));auto &other=analyses.get<CachedLoopInfoAnalysis>(program,program.functions[1]);ASSERT(&first!=&other);auto &calls=analyses.get<CachedCallGraphAnalysis>(program);ASSERT(analyses.isCached<CachedCallGraphAnalysis>(program));ASSERT(!calls.callees("main").empty());analyses.invalidateFunction(program,program.functions[0]);ASSERT(!analyses.isCached<CachedLoopInfoAnalysis>(program,program.functions[0]));ASSERT(analyses.isCached<CachedLoopInfoAnalysis>(program,program.functions[1]));analyses.invalidateProgram(program);ASSERT(!analyses.isCached<CachedCallGraphAnalysis>(program));
+}
+
 static void test_trivial_phi_and_iterative_dce() {
     SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
     SSABlock entry; entry.id={0}; entry.successors={{1}}; entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(4)}}); entry.terminator.value=SSATerminator::Jump{{1}};
@@ -1331,6 +1335,7 @@ int main() {
     RUN_TEST(test_strength_reduction_and_call_graph_recursion);
     RUN_TEST(test_single_block_inliner_remaps_values_and_rejects_recursion);
     RUN_TEST(test_loop_simplify_synthesizes_preheader_and_repairs_phi);
+    RUN_TEST(test_ssa_analysis_cache_scopes_and_invalidation);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
