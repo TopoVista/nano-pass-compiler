@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: Phase 4 — SSA construction, verification, and inspection complete.
+Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validation pending local tooling.
 
 ---
 
@@ -16,9 +16,11 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
 - **CLI** — `nano emit --format=ssa`; `nano verify` and `nano explain` report SSA.
 
 ### SSA optimizer
-- **Stable for inspection** — constant folding, algebraic simplification,
-  SCCP, copy/trivial-phi elimination, DCE, CSE, CFG cleanup, and O0–O3
-  pipelines. Optimized SSA is not yet the native LLVM input.
+- **Verified structural optimizer** — constant folding, conservative algebraic
+  simplification, executable-edge SCCP, copy/trivial-phi elimination, DCE,
+  dominance-aware CSE, CFG cleanup, bounded O3 fixpoint iteration, pass
+  telemetry, and factual optimization remarks. Optimized SSA is not yet the
+  native LLVM input.
 
 ### Frontend
 - **Lexer** — full Nano surface syntax; correct line/column tracking; `break`
@@ -100,7 +102,7 @@ Last updated: Phase 4 — SSA construction, verification, and inspection complet
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager unit (22 tests) | 1 |
-| IR pipeline unit (28 tests) | 1 |
+| IR/SSA/optimizer assertions | 188 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -135,10 +137,12 @@ remain pending a local LLVM development installation.
 - [x] SSA verifier and def-use index
 - [x] `nano emit --format=ssa`
 
-### Phase 5 — Optimizer
-- SCCP, DCE, copy propagation, CSE, algebraic simplification, SimplifyCFG
-- Function inlining, LICM
-- `-O0` through `-O3` optimization levels
+### Phase 5 — Optimizer ✅
+- [x] Constant folding, algebraic simplification, executable-edge SCCP,
+  copy propagation, trivial phis, DCE, CSE, and CFG cleanup
+- [x] Verified O0/O1/O2/O3 and custom SSA pass pipelines
+- [x] Optimized SSA CLI emission, `nano optimize`, explain/verify integration,
+  remarks, and per-pass structural telemetry
 
 ### Phase 6 — Reliability
 - Tree-walking reference interpreter (for differential testing)
@@ -165,8 +169,6 @@ remain pending a local LLVM development installation.
 
 - **Canonical LLVM path** still uses AST → LLVM (not via CFG).  CFG → LLVM
   lowering is planned for Phase 7.
-- **`continue` in desugared for-loops** skips the increment (see
-  `docs/ir.md`).
 - **`bool` not assignable to `int`** in the type checker — short-circuit
   expressions produce `bool`; assigning to `int` is a type error.  Use
   `if/else` to convert.

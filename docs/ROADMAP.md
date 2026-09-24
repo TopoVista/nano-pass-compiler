@@ -81,18 +81,12 @@
       multiple exits, unreachable blocks)
 
 ## Phase 5 — Optimizer
-- [ ] Constant folding
-- [ ] Constant propagation / SCCP with lattice states
-- [ ] Dead-code elimination
-- [ ] Copy propagation
-- [ ] Common subexpression elimination
-- [ ] Algebraic simplification
-- [ ] `SimplifyCFG` (constant branch folding, trivial block elimination)
-- [ ] Function inlining (small-function heuristic)
-- [ ] Loop invariant code motion (LICM)
-- [ ] Optimization levels `-O0` through `-O3`
-- [ ] `nano optimize --passes=sccp,dce,licm`
-- [ ] `--print-pipeline` for optimization pipelines
+- [x] Constant folding and conservative algebraic simplification
+- [x] Sparse conditional constant propagation with executable edges
+- [x] Copy propagation, trivial phi elimination, and iterative DCE
+- [x] Dominance-aware pure-expression CSE and conservative CFG cleanup
+- [x] O0–O3 Nano pipelines, bounded O3 fixpoint behavior, custom pass lists
+- [x] Optimizer verification, telemetry, remarks, CLI/explain/verify integration
 
 ## Phase 6 — Reliability
 - [ ] Tree-walking reference interpreter

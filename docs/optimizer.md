@@ -22,8 +22,9 @@ pure values. CSE only considers pure binary operations.
 - **O1**: constant folding, algebraic simplification, copy propagation,
   trivial-phi elimination, DCE.
 - **O2**: SCCP, CFG cleanup, O1 simplification, CSE, DCE, cleanup.
-- **O3**: O2 plus one bounded extra local-cleanup sequence; it does not claim
-  LICM, inlining, or an industrial-strength O3.
+- **O3**: O2 repeated to a bounded four-iteration fixed point; it stops early
+  when no pass changes the function. It does not claim LICM, inlining, or an
+  industrial-strength O3.
 
 Custom pipelines use `--passes=sccp,dce`. Pass IDs are `constant-fold`,
 `algebraic-simplify`, `sccp`, `copy-prop`, `trivial-phi`, `cse`,
@@ -62,3 +63,9 @@ to dominate the replacement. Thus matching expressions in sibling branches
 are deliberately not merged. `nano optimize --show-before-after --remarks`
 prints deterministic SSA and real counters such as folded instructions,
 executable blocks, branches simplified, and instructions removed.
+
+Each pass also records elapsed microseconds and before/after instruction,
+block, and SSA-value counts. These are structural compiler telemetry, not
+runtime performance claims. `simplify-cfg` additionally forwards only an
+empty non-entry jump block with exactly one predecessor, and only if rewriting
+successor phi predecessors cannot create a duplicate phi edge.
