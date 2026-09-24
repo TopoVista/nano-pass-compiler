@@ -22,6 +22,15 @@ Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validatio
   telemetry, and factual optimization remarks. Optimized SSA is not yet the
   native LLVM input.
 
+### Advanced optimizer (Phase 6 foundation)
+- **LoopInfo** — dominance-qualified natural loops, latches, exits, stable
+  nesting/depth, and reusable preheader discovery.
+- **LICM / strength reduction** — conservative scalar LICM and integer
+  multiply-by-two reduction; unsafe/speculative operations are rejected.
+- **Interprocedural analysis** — direct call graph and recursive-SCC detection.
+- **Inlining** — verified tiny direct single-block/single-return inlining with
+  deterministic ValueId remapping and explicit cost/budget rejections.
+
 ### Frontend
 - **Lexer** — full Nano surface syntax; correct line/column tracking; `break`
   and `continue` keywords now supported.
