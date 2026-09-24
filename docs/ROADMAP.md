@@ -15,10 +15,10 @@
 - [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
 
 ## Phase 6 — Advanced optimization (planned)
-- [x] Natural-loop discovery, nesting, exits, and preheader discovery
+- [x] Natural-loop discovery, nesting, exits, deterministic preheader synthesis, and phi repair
 - [x] Conservative LICM and scalar strength reduction
 - [x] Direct call graph, recursive SCC detection, and tiny SSA inlining
-- [ ] General preheader creation, multi-block/multi-return inlining
+- [ ] Multi-block/multi-return inlining
 - [ ] SSA-to-LLVM lowering and differential runtime validation
 
 ## Phase 1 — Stabilize existing compiler ✅

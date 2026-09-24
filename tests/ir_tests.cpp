@@ -1230,6 +1230,16 @@ static void test_single_block_inliner_remaps_values_and_rejects_recursion() {
     bool addCall=false;bool selfCall=false;for(const auto&function:program.functions)for(const auto&block:function.blocks)for(const auto&instruction:block.instructions)if(instruction.kind==SSAInstructionKind::Call){addCall|=instruction.callee=="add1";selfCall|=instruction.callee=="self";}ASSERT(!addCall);ASSERT(selfCall);
 }
 
+static void test_loop_simplify_synthesizes_preheader_and_repairs_phi() {
+    SSAFunction function;function.name="preheader";function.returnType=LangType::Int();function.entryBlock={0};
+    SSABlock entry;entry.id={0};entry.successors={{1},{2}};entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Bool(),CoreConstantVal{true}});entry.terminator.value=SSATerminator::Branch{SSAOperand{ValueId{0}},{1},{2}};
+    SSABlock left;left.id={1};left.predecessors={{0}};left.successors={{3}};left.instructions.push_back({SSAInstructionKind::Constant,ValueId{1},LangType::Int(),CoreConstantVal{int64_t(1)}});left.terminator.value=SSATerminator::Jump{{3}};
+    SSABlock right;right.id={2};right.predecessors={{0}};right.successors={{3}};right.instructions.push_back({SSAInstructionKind::Constant,ValueId{2},LangType::Int(),CoreConstantVal{int64_t(2)}});right.terminator.value=SSATerminator::Jump{{3}};
+    SSABlock header;header.id={3};header.predecessors={{1},{2},{4}};header.successors={{4},{5}};header.phis.push_back({ValueId{3},LocalId{"i",0},LangType::Int(),{{{1},{1}},{{2},{2}},{{4},{4}}}});header.terminator.value=SSATerminator::Branch{SSAOperand{ValueId{0}},{4},{5}};
+    SSABlock latch;latch.id={4};latch.predecessors={{3}};latch.successors={{3}};SSAInstruction next;next.kind=SSAInstructionKind::Binary;next.result=ValueId{4};next.type=LangType::Int();next.binaryOp=BinaryOpKind::Add;next.operand1=ValueId{3};next.operand2=CoreConstantVal{int64_t(1)};latch.instructions={next};latch.terminator.value=SSATerminator::Jump{{3}};
+    SSABlock exit;exit.id={5};exit.predecessors={{3}};exit.terminator.value=SSATerminator::Return{SSAOperand{ValueId{3}}};function.blocks={entry,left,right,header,latch,exit};SSAOptimizationContext context;LoopSimplifyPass simplify;auto changed=simplify.run(function,context);verifyAfter(simplify,function,context);ASSERT_EQ(changed.statistics.get("preheadersCreated"),1u);auto loops=LoopInfoAnalysis::run(function);ASSERT_EQ(loops.loops.size(),1u);ASSERT(loops.loops[0].preheader.has_value());ASSERT(!function.blocks.back().phis.empty());
+}
+
 static void test_trivial_phi_and_iterative_dce() {
     SSAFunction function; function.name="manual"; function.returnType=LangType::Int(); function.entryBlock={0};
     SSABlock entry; entry.id={0}; entry.successors={{1}}; entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(4)}}); entry.terminator.value=SSATerminator::Jump{{1}};
@@ -1320,6 +1330,7 @@ int main() {
     RUN_TEST(test_licm_hoists_only_safe_invariants);
     RUN_TEST(test_strength_reduction_and_call_graph_recursion);
     RUN_TEST(test_single_block_inliner_remaps_values_and_rejects_recursion);
+    RUN_TEST(test_loop_simplify_synthesizes_preheader_and_repairs_phi);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
