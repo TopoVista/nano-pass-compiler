@@ -91,11 +91,11 @@
 - [x] O0–O3 Nano pipelines, bounded O3 fixpoint behavior, custom pass lists
 - [x] Optimizer verification, telemetry, remarks, CLI/explain/verify integration
 
-## Phase 7 — Correctness, differential testing, and fuzzing
-- [ ] Tree-walking reference interpreter
-- [ ] Differential testing: interpreter vs O0 vs O2
-- [ ] Grammar-aware fuzzing with program generator
-- [ ] Failure minimization (delta-debugging)
+## Phase 7 — Correctness, differential testing, and fuzzing ✅
+- [x] CoreIR reference execution and independent SSA execution
+- [x] Differential O0–O3 fixture corpus and deterministic 1,000-case campaign
+- [x] Typed grammar-aware source generator and seed reproducibility
+- [x] Failure persistence and deterministic bounded source reducer
 - [ ] Sanitizer CI (AddressSanitizer + UBSan on Linux/Clang)
 - [ ] GitHub Actions CI (Linux build + tests + sanitizers)
 

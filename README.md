@@ -25,6 +25,11 @@ The inspected SSA optimizer includes deterministic CFG-cloning direct-call
 inlining: multi-block, loop, phi, multi-return, and void callees are expanded
 only after cost, growth, recursion, and verifier checks succeed.
 
+NanoPass also differentially tests supported programs: CoreIR execution is
+compared with independently executed SSA O0–O3 programs. This is empirical
+semantic testing, not formal proof; LLVM execution remains optional until the
+local LLVM development package is repaired.
+
 ---
 
 ## Quick start
@@ -327,5 +332,8 @@ See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the pass
 infrastructure design and lifecycle.
 See [docs/analysis-manager.md](docs/analysis-manager.md) for AST/SSA analysis
 cache scopes and invalidation.
+See [docs/interpreter.md](docs/interpreter.md),
+[docs/differential-testing.md](docs/differential-testing.md), and
+[docs/fuzzing.md](docs/fuzzing.md) for execution and reliability testing.
 See [docs/STATUS.md](docs/STATUS.md) for an accurate feature inventory.
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased development plan.

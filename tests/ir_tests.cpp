@@ -48,6 +48,11 @@
 #include "ir/ssa/ssa_verifier.h"
 #include "optimizer/ssa_optimizer.h"
 #include "optimizer/advanced_optimizer.h"
+#include "interpreter/core_interpreter.h"
+#include "interpreter/ssa_interpreter.h"
+#include "testing/differential_runner.h"
+#include "testing/nano_generator.h"
+#include "testing/fuzz_runner.h"
 
 using namespace nanopass;
 using namespace nanopass::opt;
@@ -1298,6 +1303,29 @@ static void test_trivial_phi_and_iterative_dce() {
     ASSERT(dceResult.statistics.get("instructionsRemoved") >= 2u);
 }
 
+static void test_interpreters_differential_core_and_ssa() {
+    auto result=compileToIR(R"(int add(int x){return x+1;} int main(){int i=0;int total=0;while(i<4){total=total+add(i);i=i+1;}print(total);return total;})");
+    CoreInterpreter core; SSAInterpreter ssa; auto reference=core.run(result.core); auto o0=ssa.run(result.ssa);
+    ASSERT(reference.status==ExecutionStatus::Success); ASSERT(o0.status==ExecutionStatus::Success); ASSERT(sameObservableResult(reference,o0)); ASSERT_EQ(reference.stdoutText,"10\n");
+    for(int level=1;level<=3;++level){SSAProgram optimized=result.ssa;for(auto&function:optimized.functions){SSAOptimizationContext context;buildPipeline(level).run(function,context);ASSERT(verifySSA(function).ok);}auto executed=ssa.run(optimized);ASSERT(sameObservableResult(reference,executed));}
+}
+
+static void test_ssa_interpreter_parallel_phi_and_limits() {
+    SSAFunction function;function.name="main";function.returnType=LangType::Int();function.entryBlock={0};
+    SSABlock entry;entry.id={0};entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Int(),CoreConstantVal{int64_t(1)}});entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{1},LangType::Int(),CoreConstantVal{int64_t(2)}});entry.terminator.value=SSATerminator::Jump{{1}};
+    SSABlock merge;merge.id={1};merge.phis.push_back({ValueId{2},LocalId{"a",0},LangType::Int(),{{{0},{1}}}});merge.phis.push_back({ValueId{3},LocalId{"b",0},LangType::Int(),{{{0},{0}}}});SSAInstruction sum;sum.kind=SSAInstructionKind::Binary;sum.result=ValueId{4};sum.type=LangType::Int();sum.binaryOp=BinaryOpKind::Sub;sum.operand1=ValueId{2};sum.operand2=ValueId{3};merge.instructions={sum};merge.terminator.value=SSATerminator::Return{SSAOperand{ValueId{4}}};function.blocks={entry,merge};rebuildSSAEdges(function);SSAProgram program;program.functions={function};SSAInterpreter interpreter;auto ok=interpreter.run(program);ASSERT(ok.status==ExecutionStatus::Success);ASSERT_EQ(runtimeValueText(*ok.returnValue),"1");ExecutionLimits limits;limits.maxSteps=1;auto limited=interpreter.run(program,"main",limits);ASSERT(limited.status==ExecutionStatus::StepLimitExceeded);
+}
+
+static void test_differential_runner_and_deterministic_generator() {
+    NanoProgramGenerator first({42,3,8}), second({42,3,8}); DifferentialRunner runner; size_t compared=0;
+    for(size_t index=0;index<1000;++index){auto a=first.generate(index),b=second.generate(index);ASSERT_EQ(a.source,b.source);auto outcome=runner.run(a.source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);++compared;}ASSERT_EQ(compared,1000u);
+}
+
+static void test_fuzz_summary_and_deterministic_reducer() {
+    DifferentialFuzzRunner fuzz;auto summary=fuzz.run({99,2,6},32);ASSERT_EQ(summary.generated,32u);ASSERT_EQ(summary.valid,32u);ASSERT_EQ(summary.compared,128u);ASSERT_EQ(summary.mismatches,0u);ASSERT_EQ(summary.crashes,0u);ASSERT(fuzzSummaryJson(summary).find("\"seed\":99")!=std::string::npos);
+    SourceReducer reducer;const std::string input="keep\nremove-a\nremove-b\n";auto faulty=[](const std::string&candidate){return candidate.find("keep")!=std::string::npos;};auto first=reducer.reduce(input,faulty);auto second=reducer.reduce(input,faulty);ASSERT_EQ(first,second);ASSERT(first.find("keep")!=std::string::npos);ASSERT(first.size()<input.size());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1381,6 +1409,10 @@ int main() {
     RUN_TEST(test_loop_simplify_synthesizes_preheader_and_repairs_phi);
     RUN_TEST(test_ssa_analysis_cache_scopes_and_invalidation);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
+    RUN_TEST(test_interpreters_differential_core_and_ssa);
+    RUN_TEST(test_ssa_interpreter_parallel_phi_and_limits);
+    RUN_TEST(test_differential_runner_and_deterministic_generator);
+    RUN_TEST(test_fuzz_summary_and_deterministic_reducer);
 
     std::cout << "\n=== IR Pipeline Tests ===\n"
               << "  total:  " << g_tests  << "\n"

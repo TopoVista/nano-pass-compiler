@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: Phase 6 — advanced verified SSA optimization complete; LLVM-backed validation pending local tooling.
+Last updated: Phase 7 — LLVM-independent differential execution and seeded semantic fuzzing complete; LLVM-backed validation pending local tooling.
 
 ---
 
@@ -21,6 +21,15 @@ Last updated: Phase 6 — advanced verified SSA optimization complete; LLVM-back
   dominance-aware CSE, CFG cleanup, bounded O3 fixpoint iteration, pass
   telemetry, and factual optimization remarks. Optimized SSA is not yet the
   native LLVM input.
+
+### Correctness testing (Phase 7)
+- **CoreIR reference interpreter** — scalar expressions, control flow, calls,
+  recursion limits, print, and explicit runtime error categories.
+- **SSA interpreter** — independent frames/registers; predecessor-sensitive,
+  parallel phi assignment; optimized O0–O3 execution.
+- **Differential runner and fuzzing** — real frontend-to-IR execution
+  comparison, deterministic seeded typed-subset generation, result summaries,
+  failure persistence, and deterministic reduction hooks.
 
 ### Advanced optimizer (Phase 6 complete)
 - **LoopInfo** — dominance-qualified natural loops, latches, exits, stable
@@ -112,7 +121,7 @@ Last updated: Phase 6 — advanced verified SSA optimization complete; LLVM-back
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer assertions | 296 |
+| IR/SSA/optimizer/correctness assertions | 4,322 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -160,10 +169,11 @@ remain pending a local LLVM development installation.
 - [x] Deterministic general CFG inlining with multi-return/void continuations,
   edge rebuilding, analysis invalidation, and verifier gates
 
-### Phase 7 — Correctness, differential testing, and fuzzing
-- Tree-walking reference interpreter (for differential testing)
-- Grammar-aware fuzzing
-- GitHub Actions CI
+### Phase 7 — Correctness, differential testing, and fuzzing ✅
+- [x] CoreIR and SSA interpreters with shared execution limits/results
+- [x] Differential O0–O3 semantic checks and fixed-seed grammar-aware campaign
+- [x] Mismatch persistence and deterministic source reduction hook
+- [ ] Sanitizer/CI execution remains externally blocked by the LLVM package
 
 ### Phase 7 — LLVM/JIT
 - CFG → LLVM lowering (currently AST → LLVM is canonical)
