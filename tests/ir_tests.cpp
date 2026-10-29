@@ -1230,6 +1230,14 @@ static void test_single_block_inliner_remaps_values_and_rejects_recursion() {
     bool addCall=false;bool selfCall=false;for(const auto&function:program.functions)for(const auto&block:function.blocks)for(const auto&instruction:block.instructions)if(instruction.kind==SSAInstructionKind::Call){addCall|=instruction.callee=="add1";selfCall|=instruction.callee=="self";}ASSERT(!addCall);ASSERT(selfCall);
 }
 
+static void test_cfg_inliner_branching_multi_return() {
+ auto result=compileToIR(R"(int choose(int x){if(x>0){return 1;}return 2;} int main(){int y=choose(1);return y+1;})");SSAStatistics stats;SSABuilder builder;SSAProgram p=builder.build(result.cfg,&stats);SSAProgramInliner inliner;auto r=inliner.run(p);ASSERT(r.statistics.get("callsInlined")>0u);for(const auto&f:p.functions)ASSERT(verifySSA(f).ok);bool call=false,phi=false;for(const auto&b:p.functions.back().blocks){call|=std::any_of(b.instructions.begin(),b.instructions.end(),[](const auto&i){return i.kind==SSAInstructionKind::Call;});phi|=!b.phis.empty();}ASSERT(!call);ASSERT(phi);
+}
+
+static void test_cfg_inliner_void_returns_nested_call_and_determinism() {
+ auto result=compileToIR(R"(int helper(int x){return x+1;} void choose(int x){if(x>0){print helper(x);return;}print helper(x);return;} int main(){choose(1);return 0;})");SSAStatistics stats;SSABuilder builder;SSAProgram first=builder.build(result.cfg,&stats),second=first;SSAProgramInliner inliner;auto one=inliner.run(first),two=inliner.run(second);ASSERT(one.statistics.get("callsInlined")>0u);ASSERT(two.statistics.get("callsInlined")>0u);std::ostringstream a,b;printSSA(first,a);printSSA(second,b);ASSERT_EQ(a.str(),b.str());for(const auto&f:first.functions)ASSERT(verifySSA(f).ok);
+}
+
 static void test_loop_simplify_synthesizes_preheader_and_repairs_phi() {
     SSAFunction function;function.name="preheader";function.returnType=LangType::Int();function.entryBlock={0};
     SSABlock entry;entry.id={0};entry.successors={{1},{2}};entry.instructions.push_back({SSAInstructionKind::Constant,ValueId{0},LangType::Bool(),CoreConstantVal{true}});entry.terminator.value=SSATerminator::Branch{SSAOperand{ValueId{0}},{1},{2}};
@@ -1334,6 +1342,8 @@ int main() {
     RUN_TEST(test_licm_hoists_only_safe_invariants);
     RUN_TEST(test_strength_reduction_and_call_graph_recursion);
     RUN_TEST(test_single_block_inliner_remaps_values_and_rejects_recursion);
+    RUN_TEST(test_cfg_inliner_branching_multi_return);
+    RUN_TEST(test_cfg_inliner_void_returns_nested_call_and_determinism);
     RUN_TEST(test_loop_simplify_synthesizes_preheader_and_repairs_phi);
     RUN_TEST(test_ssa_analysis_cache_scopes_and_invalidation);
     RUN_TEST(test_trivial_phi_and_iterative_dce);
