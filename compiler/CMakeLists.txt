@@ -72,6 +72,15 @@ if(NANO_BUILD_TESTS)
     target_compile_options(nano_frontend_tests PRIVATE
       -Wall -Wextra -Wno-unused-parameter)
   endif()
+
+# LLVM-independent Phase 7 execution tool.  It is intentionally separate from
+# `nano` so semantic testing remains usable when an LLVM package is absent.
+add_executable(nano_correctness ${CMAKE_SOURCE_DIR}/tools/nano-correctness.cpp)
+target_compile_features(nano_correctness PRIVATE cxx_std_20)
+target_include_directories(nano_correctness PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(nano_correctness PRIVATE -Wall -Wextra -Wno-unused-parameter)
+endif()
   if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_frontend_tests PRIVATE
       -fsanitize=address,undefined -fno-omit-frame-pointer)
