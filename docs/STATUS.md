@@ -28,8 +28,9 @@ Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validatio
 - **LICM / strength reduction** — conservative scalar LICM and integer
   multiply-by-two reduction; unsafe/speculative operations are rejected.
 - **Interprocedural analysis** — direct call graph and recursive-SCC detection.
-- **Inlining** — verified tiny direct single-block/single-return inlining with
-  deterministic ValueId remapping and explicit cost/budget rejections.
+- **Inlining** — verifier-gated direct CFG cloning with deterministic block/value
+  remapping, caller splitting, successor-phi repair, and multi-/void-return
+  continuations under explicit cost/budget rejections.
 
 ### Frontend
 - **Lexer** — full Nano surface syntax; correct line/column tracking; `break`

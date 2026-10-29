@@ -17,8 +17,8 @@
 ## Phase 6 — Advanced optimization (planned)
 - [x] Natural-loop discovery, nesting, exits, deterministic preheader synthesis, and phi repair
 - [x] Conservative LICM and scalar strength reduction
-- [x] Direct call graph, recursive SCC detection, and tiny SSA inlining
-- [ ] Multi-block/multi-return inlining
+- [x] Direct call graph, recursive SCC detection, and deterministic SSA CFG inlining
+- [x] Multi-block/multi-return and void-return continuation handling
 - [ ] SSA-to-LLVM lowering and differential runtime validation
 
 ## Phase 1 — Stabilize existing compiler ✅
