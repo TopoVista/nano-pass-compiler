@@ -184,6 +184,10 @@ public:
               if (decision.reason == OptimizationReasonCode::InlineCostTooHigh) result.statistics.add("callsRejectedCost");
               if (decision.reason == OptimizationReasonCode::BudgetExceeded) result.statistics.add("callsRejectedBudget");
               if (decision.reason == OptimizationReasonCode::InlineDepthLimit) result.statistics.add("callsRejectedDepth");
+              if (decision.reason == OptimizationReasonCode::RecursiveCallee) result.statistics.add("rejectedRecursive");
+              if (decision.reason == OptimizationReasonCode::InlineCostTooHigh) result.statistics.add("rejectedCost");
+              if (decision.reason == OptimizationReasonCode::BudgetExceeded) result.statistics.add("rejectedBudget");
+              if (decision.reason == OptimizationReasonCode::InlineDepthLimit) result.statistics.add("rejectedDepth");
               continue;
             }
             if (callee.parameters.size() != call.callArgs.size()) {
@@ -358,9 +362,15 @@ public:
               }
             }
             rebuildSSAEdges(caller);
+            // Def-use is not a persistent inliner-owned analysis, but rebuild
+            // it here so the transformed representation is checked through
+            // the same use-indexing path consumed by later optimizer passes.
+            SSADefUseIndex defUse;
+            defUse.rebuild(caller);
             const auto verified = verifySSA(caller);
             if (!verified.ok) {
-              std::string message = "internal compiler error: invalid SSA after inline @" + caller.name + " <- @" + callee.name;
+              std::string message = "internal compiler error: invalid SSA after pass `inline` in @" + caller.name +
+                                    " while inlining @" + callee.name + " from " + original.id.str();
               for (const auto &error : verified.errors) message += "\n  " + error;
               throw std::runtime_error(message);
             }

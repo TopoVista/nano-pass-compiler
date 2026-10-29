@@ -112,7 +112,7 @@ Last updated: Phase 6 — advanced verified SSA optimization complete; LLVM-back
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer assertions | 278 |
+| IR/SSA/optimizer assertions | 296 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
