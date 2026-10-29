@@ -69,3 +69,14 @@ block, and SSA-value counts. These are structural compiler telemetry, not
 runtime performance claims. `simplify-cfg` additionally forwards only an
 empty non-entry jump block with exactly one predecessor, and only if rewriting
 successor phi predecessors cannot create a duplicate phi edge.
+
+## Interprocedural CFG inlining
+
+At O2 and above, direct calls can be expanded by the verifier-gated SSA CFG
+inliner before function-local cleanup. It supports multi-block callees,
+branches, loop backedges, internal phis, value-returning and void multi-return
+paths. Each inline operation splits the caller around the call and rebuilds
+edges from terminators; it does not rely on cleanup passes to repair invalid
+SSA. Recursive SCC members, oversized callees, exhausted growth budgets,
+non-returning callees, and malformed call shapes are rejected with structured
+remarks. Cloned nested calls remain calls during the same inliner invocation.

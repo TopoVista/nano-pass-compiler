@@ -17,10 +17,15 @@ outside-loop definitions, or previously hoisted invariants. Calls, memory,
 division, and modulo are never speculated.
 
 The call graph records direct call sites by function name and detects recursive
-strongly connected components. The initial inliner is deliberately limited to
-single-block, single-return callees; it remaps every ValueId and reconnects the
-caller continuation. A centralized budget/cost model rejects recursion, large
-callees, caller-growth overflow, and unsupported shapes.
+strongly connected components. The inliner is a deterministic CFG-cloning
+transform: it splits a caller block at a direct call, clones every callee block
+with preallocated fresh IDs, remaps parameters, phis, operands, and terminators,
+and reconnects all cloned returns through a continuation. Multi-return callees
+produce a continuation phi; void callees only reconnect control flow. Original
+caller-successor phi edges are retargeted to the continuation before CFG edges
+are rebuilt from terminators. A centralized cost model rejects recursion,
+large callees, caller/program growth overflow, depth limits, and unsupported
+or non-returning shapes before mutating the caller.
 
 Advanced passes emit structured applied/missed decisions with reason codes.
 Those records are the source of `--why-not-optimized`; human wording is only a

@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validation pending local tooling.
+Last updated: Phase 6 — advanced verified SSA optimization complete; LLVM-backed validation pending local tooling.
 
 ---
 
@@ -22,7 +22,7 @@ Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validatio
   telemetry, and factual optimization remarks. Optimized SSA is not yet the
   native LLVM input.
 
-### Advanced optimizer (Phase 6 foundation)
+### Advanced optimizer (Phase 6 complete)
 - **LoopInfo** — dominance-qualified natural loops, latches, exits, stable
   nesting/depth, and reusable preheader discovery.
 - **LICM / strength reduction** — conservative scalar LICM and integer
@@ -111,8 +111,8 @@ Last updated: Phase 5 — verified SSA optimizer complete; LLVM-backed validatio
 |---|---|
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
-| Pass manager unit (22 tests) | 1 |
-| IR/SSA/optimizer assertions | 188 |
+| Pass manager assertions | 90 |
+| IR/SSA/optimizer assertions | 278 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -154,7 +154,13 @@ remain pending a local LLVM development installation.
 - [x] Optimized SSA CLI emission, `nano optimize`, explain/verify integration,
   remarks, and per-pass structural telemetry
 
-### Phase 6 — Reliability
+### Phase 6 — Advanced optimization ✅
+- [x] LoopInfo, canonical preheaders, LICM, and conservative strength reduction
+- [x] Direct CallGraph/SCC recursion analysis and scoped SSA analysis caching
+- [x] Deterministic general CFG inlining with multi-return/void continuations,
+  edge rebuilding, analysis invalidation, and verifier gates
+
+### Phase 7 — Correctness, differential testing, and fuzzing
 - Tree-walking reference interpreter (for differential testing)
 - Grammar-aware fuzzing
 - GitHub Actions CI

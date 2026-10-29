@@ -21,6 +21,10 @@ The CFG/SSA pipeline powers verified middle-end analysis and inspection.
 Native LLVM emission still uses the established desugared-AST backend until
 SSA-to-LLVM lowering is introduced in a later phase.
 
+The inspected SSA optimizer includes deterministic CFG-cloning direct-call
+inlining: multi-block, loop, phi, multi-return, and void callees are expanded
+only after cost, growth, recursion, and verifier checks succeed.
+
 ---
 
 ## Quick start
@@ -318,8 +322,10 @@ Test categories:
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for component descriptions.  
+See [docs/architecture.md](docs/architecture.md) for component descriptions.
 See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the pass
-infrastructure design and lifecycle.  
-See [docs/STATUS.md](docs/STATUS.md) for an accurate feature inventory.  
+infrastructure design and lifecycle.
+See [docs/analysis-manager.md](docs/analysis-manager.md) for AST/SSA analysis
+cache scopes and invalidation.
+See [docs/STATUS.md](docs/STATUS.md) for an accurate feature inventory.
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased development plan.

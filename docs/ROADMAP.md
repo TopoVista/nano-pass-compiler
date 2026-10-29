@@ -14,7 +14,7 @@
 - [x] O0–O3 and custom pipelines; optimized SSA CLI inspection
 - [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
 
-## Phase 6 — Advanced optimization (planned)
+## Phase 6 — Advanced optimization ✅
 - [x] Natural-loop discovery, nesting, exits, deterministic preheader synthesis, and phi repair
 - [x] Conservative LICM and scalar strength reduction
 - [x] Direct call graph, recursive SCC detection, and deterministic SSA CFG inlining
@@ -91,7 +91,7 @@
 - [x] O0–O3 Nano pipelines, bounded O3 fixpoint behavior, custom pass lists
 - [x] Optimizer verification, telemetry, remarks, CLI/explain/verify integration
 
-## Phase 6 — Reliability
+## Phase 7 — Correctness, differential testing, and fuzzing
 - [ ] Tree-walking reference interpreter
 - [ ] Differential testing: interpreter vs O0 vs O2
 - [ ] Grammar-aware fuzzing with program generator
@@ -99,14 +99,14 @@
 - [ ] Sanitizer CI (AddressSanitizer + UBSan on Linux/Clang)
 - [ ] GitHub Actions CI (Linux build + tests + sanitizers)
 
-## Phase 7 — LLVM/JIT
+## Phase 8 — LLVM/JIT
 - [ ] LLVM AOT object and executable emission
 - [ ] LLVM module verification gating (already done; strengthen)
 - [ ] Optional ORC JIT (`nano jit`) under `NANO_BUILD_JIT`
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Profile collection (`nano profile`)
 
-## Phase 8 — Observability
+## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs
 - [ ] Structured diagnostics: rich source spans, labels, fix-it hints
 - [ ] Pass telemetry JSON (`--pass-telemetry=json`)
@@ -114,7 +114,7 @@
 - [ ] "Why didn't this optimize?" structured rejection reasons
 - [ ] JSON API server (`nano-server`) for web frontend
 
-## Phase 9 — Web compiler lab
+## Phase 10 — Web compiler lab
 - [ ] `nano-server` HTTP API: `/compile`, `/explain`, `/verify`, `/optimize`
 - [ ] Next.js + TypeScript + Tailwind frontend
 - [ ] Monaco editor with Nano language support
@@ -124,7 +124,7 @@
 - [ ] Diagnostics panel
 - [ ] Benchmark dashboard (real measured numbers only)
 
-## Phase 10 — Advanced research
+## Phase 11 — Advanced research
 - [ ] Profile-guided optimization (branch layout, inlining decisions)
 - [ ] Learned optimization policy (`HeuristicPolicy` + optional `LearnedPolicy`)
 - [ ] Verifier-gated GenAI advisor (LLM suggests known passes; compiler validates)
