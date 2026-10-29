@@ -31,8 +31,8 @@ public:
 struct CachedLoopInfoAnalysis { using Result=LoopInfo; static Result compute(const SSAFunction&f){return LoopInfoAnalysis::run(f);} };
 struct CachedCallGraphAnalysis { using Result=CallGraph; static Result compute(const SSAProgram&p){return CallGraphAnalysis::run(p);} };
 
-enum class OptimizationReasonCode { SideEffects, LoopVariantOperand, UnsafeToSpeculate, NoPreheader, RecursiveCallee, InlineCostTooHigh, BudgetExceeded, UnsupportedControlFlow, MemoryDependenceUnknown };
-inline const char *reasonCodeName(OptimizationReasonCode code) { switch(code){case OptimizationReasonCode::SideEffects:return "SIDE_EFFECTS";case OptimizationReasonCode::LoopVariantOperand:return "LOOP_VARIANT_OPERAND";case OptimizationReasonCode::UnsafeToSpeculate:return "UNSAFE_TO_SPECULATE";case OptimizationReasonCode::NoPreheader:return "NO_PREHEADER";case OptimizationReasonCode::RecursiveCallee:return "INLINE_RECURSIVE";case OptimizationReasonCode::InlineCostTooHigh:return "INLINE_COST_TOO_HIGH";case OptimizationReasonCode::BudgetExceeded:return "INLINE_BUDGET_EXCEEDED";case OptimizationReasonCode::UnsupportedControlFlow:return "UNSUPPORTED_CONTROL_FLOW";case OptimizationReasonCode::MemoryDependenceUnknown:return "MEMORY_DEPENDENCE_UNKNOWN";}return "UNKNOWN"; }
+enum class OptimizationReasonCode { SideEffects, LoopVariantOperand, UnsafeToSpeculate, NoPreheader, RecursiveCallee, InlineCostTooHigh, BudgetExceeded, InlineDepthLimit, NoReturn, UnsupportedControlFlow, MemoryDependenceUnknown };
+inline const char *reasonCodeName(OptimizationReasonCode code) { switch(code){case OptimizationReasonCode::SideEffects:return "SIDE_EFFECTS";case OptimizationReasonCode::LoopVariantOperand:return "LOOP_VARIANT_OPERAND";case OptimizationReasonCode::UnsafeToSpeculate:return "UNSAFE_TO_SPECULATE";case OptimizationReasonCode::NoPreheader:return "NO_PREHEADER";case OptimizationReasonCode::RecursiveCallee:return "INLINE_RECURSIVE";case OptimizationReasonCode::InlineCostTooHigh:return "INLINE_COST_TOO_HIGH";case OptimizationReasonCode::BudgetExceeded:return "INLINE_GROWTH_BUDGET";case OptimizationReasonCode::InlineDepthLimit:return "INLINE_DEPTH_LIMIT";case OptimizationReasonCode::NoReturn:return "INLINE_NORETURN_UNSUPPORTED";case OptimizationReasonCode::UnsupportedControlFlow:return "INLINE_UNSUPPORTED_CFG";case OptimizationReasonCode::MemoryDependenceUnknown:return "MEMORY_DEPENDENCE_UNKNOWN";}return "UNKNOWN"; }
 struct OptimizationDecision { std::string passId; bool applied=false; OptimizationReasonCode reason; std::string explanation; std::optional<BlockId> block; std::optional<ValueId> value; SourceOrigin origin; };
 struct OptimizationBudget { size_t maxInlineCalleeInstructions=12; size_t maxCallerGrowth=32; size_t maxTotalInlineGrowth=96; size_t maxInlineDepth=1; };
 inline bool isSafeToSpeculate(const SSAInstruction &instruction) { return instruction.kind==SSAInstructionKind::Unary || (instruction.kind==SSAInstructionKind::Binary && instruction.binaryOp!=BinaryOpKind::Div && instruction.binaryOp!=BinaryOpKind::Mod); }
@@ -66,20 +66,323 @@ class StrengthReducePass final : public SSAFunctionPass { public: std::string_vi
 
 inline std::unique_ptr<SSAFunctionPass> makeAdvancedPass(std::string_view id){if(id=="loop-simplify")return std::make_unique<LoopSimplifyPass>();if(id=="licm")return std::make_unique<LICMPass>();if(id=="strength-reduce")return std::make_unique<StrengthReducePass>();return nullptr;}
 
-struct InlineDecision { bool inlineCall=false; int estimatedCost=0; OptimizationReasonCode reason=OptimizationReasonCode::UnsupportedControlFlow; std::string explanation; };
-class InlineCostModel { public: InlineDecision decide(const SSAFunction &caller,const SSAFunction &callee,bool recursive,const OptimizationBudget &budget) const { const int cost=static_cast<int>(instructionCount(callee)+2*callee.blocks.size());if(recursive)return {false,cost,OptimizationReasonCode::RecursiveCallee,"recursive callee"};if(static_cast<size_t>(cost)>budget.maxInlineCalleeInstructions)return {false,cost,OptimizationReasonCode::InlineCostTooHigh,"callee cost exceeds threshold"};if(static_cast<size_t>(cost)>budget.maxCallerGrowth)return {false,cost,OptimizationReasonCode::BudgetExceeded,"caller growth budget exhausted"};return {true,cost,OptimizationReasonCode::UnsupportedControlFlow,"direct CFG callee"}; } };
+struct InlineDecision { bool inlineCall=false; size_t estimatedCost=0; OptimizationReasonCode reason=OptimizationReasonCode::UnsupportedControlFlow; std::string explanation; };
 
-class SSAProgramInliner { public:
- SSAOptimizationResult run(SSAProgram &program,const OptimizationBudget &budget={}) const { SSAOptimizationResult result;auto graph=CallGraphAnalysis::run(program);InlineCostModel model;std::map<std::string,const SSAFunction*> map;for(const auto&f:program.functions)map[f.name]=&f;
-  auto rebuild=[](SSAFunction&f){for(auto&b:f.blocks)b.predecessors.clear();for(auto&b:f.blocks)for(BlockId s:b.successors)for(auto&d:f.blocks)if(d.id==s)d.predecessors.push_back(b.id);};
-  for(auto&caller:program.functions){bool did=true;while(did){did=false;for(size_t bi=0;bi<caller.blocks.size()&&!did;++bi){if(caller.blocks[bi].label.rfind("inline.",0)==0)continue;for(size_t ci=0;ci<caller.blocks[bi].instructions.size()&&!did;++ci){auto call=caller.blocks[bi].instructions[ci];if(call.kind!=SSAInstructionKind::Call)continue;result.statistics.add("callsConsidered");auto found=map.find(call.callee);if(found==map.end()){++ci;continue;}const auto&callee=*found->second;auto decision=model.decide(caller,callee,graph.recursive(call.callee),budget);if(!decision.inlineCall){result.remarks.push_back({OptimizationRemarkKind::Missed,"inline",std::string(reasonCodeName(decision.reason))+": "+decision.explanation,caller.blocks[bi].id,call.result,call.origin});continue;}if(callee.parameters.size()!=call.callArgs.size()){continue;}int nb=0,nv=0;for(const auto&b:caller.blocks){nb=std::max(nb,b.id.index+1);for(const auto&p:b.phis)nv=std::max(nv,p.result.index+1);for(const auto&i:b.instructions)if(i.result)nv=std::max(nv,i.result->index+1);}std::map<int,BlockId> bm;for(const auto&b:callee.blocks)bm[b.id.index]={nb++};BlockId cont{nb++};std::map<int,SSAOperand> vm;for(size_t i=0;i<callee.parameters.size();++i)vm[callee.parameters[i].value.index]=call.callArgs[i];for(const auto&b:callee.blocks){for(const auto&p:b.phis)vm[p.result.index]=ValueId{nv++};for(const auto&i:b.instructions)if(i.result)vm[i.result->index]=ValueId{nv++};}auto remap=[&](SSAOperand o){if(std::holds_alternative<CoreConstantVal>(o))return o;return vm.at(std::get<ValueId>(o).index);};
-    SSABlock original=caller.blocks[bi];SSABlock continuation;continuation.id=cont;continuation.label="inline.cont";continuation.instructions.assign(original.instructions.begin()+static_cast<long>(ci+1),original.instructions.end());continuation.terminator=original.terminator;continuation.successors=original.successors;for(BlockId s:original.successors)for(auto&b:caller.blocks)if(b.id==s)for(auto&p:b.phis)for(auto&in:p.incoming)if(in.predecessor==original.id)in.predecessor=cont;caller.blocks[bi].instructions.assign(original.instructions.begin(),original.instructions.begin()+static_cast<long>(ci));caller.blocks[bi].terminator.value=SSATerminator::Jump{bm.at(callee.entryBlock.index)};caller.blocks[bi].successors={bm.at(callee.entryBlock.index)};
-    std::vector<SSABlock> clones;std::vector<std::pair<BlockId,SSAOperand>> returns;for(const auto&old:callee.blocks){SSABlock b;b.id=bm.at(old.id.index);b.label="inline."+old.label;for(const auto&p:old.phis){auto q=p;q.result=std::get<ValueId>(vm.at(p.result.index));for(auto&in:q.incoming){in.predecessor=bm.at(in.predecessor.index);in.value=std::get<ValueId>(vm.at(in.value.index));}b.phis.push_back(std::move(q));}for(auto i:old.instructions){i.operand1=remap(i.operand1);i.operand2=remap(i.operand2);for(auto&a:i.callArgs)a=remap(a);if(i.result)i.result=std::get<ValueId>(vm.at(i.result->index));b.instructions.push_back(std::move(i));}if(auto r=std::get_if<SSATerminator::Return>(&old.terminator.value)){if(r->value){auto returned=remap(*r->value);if(std::holds_alternative<CoreConstantVal>(returned)){ValueId materialized{nv++};SSAInstruction constant;constant.kind=SSAInstructionKind::Constant;constant.result=materialized;constant.type=call.type;constant.constantValue=std::get<CoreConstantVal>(returned);b.instructions.push_back(std::move(constant));returned=materialized;}returns.push_back({b.id,returned});}b.terminator.value=SSATerminator::Jump{cont};b.successors={cont};}else if(auto j=std::get_if<SSATerminator::Jump>(&old.terminator.value)){b.terminator.value=SSATerminator::Jump{bm.at(j->target.index)};b.successors={bm.at(j->target.index)};}else if(auto br=std::get_if<SSATerminator::Branch>(&old.terminator.value)){b.terminator.value=SSATerminator::Branch{remap(br->condition),bm.at(br->thenTarget.index),bm.at(br->elseTarget.index)};b.successors={bm.at(br->thenTarget.index),bm.at(br->elseTarget.index)};}else b.terminator=old.terminator;clones.push_back(std::move(b));}
-    if(returns.empty()){result.remarks.push_back({OptimizationRemarkKind::Missed,"inline","INLINE_NORETURN_UNSUPPORTED",original.id,call.result,call.origin});caller.blocks[bi]=original;continue;}
-    caller.blocks.push_back(std::move(continuation));caller.blocks.insert(caller.blocks.end(),std::make_move_iterator(clones.begin()),std::make_move_iterator(clones.end()));
-    if(call.result){if(returns.size()==1){if(std::holds_alternative<ValueId>(returns[0].second))replaceAllUses(caller,*call.result,std::get<ValueId>(returns[0].second));else{auto &contBlock=caller.blocks[caller.blocks.size()-clones.size()-1];contBlock.instructions.insert(contBlock.instructions.begin(),{SSAInstructionKind::Constant,*call.result,call.type,std::get<CoreConstantVal>(returns[0].second)});}}else{PhiInstruction p;p.result=*call.result;p.type=call.type;for(auto&x:returns)if(std::holds_alternative<ValueId>(x.second))p.incoming.push_back({x.first,std::get<ValueId>(x.second)});auto &contBlock=caller.blocks[caller.blocks.size()-clones.size()-1];contBlock.phis.push_back(std::move(p));result.statistics.add("continuationPhisCreated");}}
-    rebuild(caller);auto v=verifySSA(caller);if(!v.ok){std::string message="internal compiler error: invalid SSA after inline";for(const auto&e:v.errors)message+="\n"+e;throw std::runtime_error(message);}result.changed=true;result.statistics.add("callsInlined");result.statistics.add("blocksCloned",clones.size());result.remarks.push_back({OptimizationRemarkKind::Applied,"inline","inlined CFG "+callee.name,original.id,{},call.origin});did=true;}}}
-  }return result; }
+class InlineCostModel {
+public:
+  size_t estimate(const SSAFunction &callee) const {
+    size_t returns = 0;
+    for (const auto &block : callee.blocks)
+      returns += std::holds_alternative<SSATerminator::Return>(block.terminator.value);
+    return instructionCount(callee) + 2 * callee.blocks.size() +
+           (returns > 0 ? returns - 1 : 0);
+  }
+
+  InlineDecision decide(const SSAFunction &callee, bool recursive,
+                        const OptimizationBudget &budget,
+                        size_t callerGrowth, size_t totalGrowth,
+                        size_t inlineDepth) const {
+    const size_t cost = estimate(callee);
+    if (recursive)
+      return {false, cost, OptimizationReasonCode::RecursiveCallee, "callee is in a recursive SCC"};
+    if (inlineDepth > budget.maxInlineDepth)
+      return {false, cost, OptimizationReasonCode::InlineDepthLimit, "inline depth limit reached"};
+    if (cost > budget.maxInlineCalleeInstructions)
+      return {false, cost, OptimizationReasonCode::InlineCostTooHigh, "callee cost exceeds threshold"};
+    if (callerGrowth + cost > budget.maxCallerGrowth ||
+        totalGrowth + cost > budget.maxTotalInlineGrowth)
+      return {false, cost, OptimizationReasonCode::BudgetExceeded, "growth budget exhausted"};
+    return {true, cost, OptimizationReasonCode::UnsupportedControlFlow, "direct CFG callee"};
+  }
+};
+
+inline void rebuildSSAEdges(SSAFunction &function) {
+  std::map<int, SSABlock *> blocks;
+  for (auto &block : function.blocks) {
+    block.predecessors.clear();
+    block.successors.clear();
+    blocks.emplace(block.id.index, &block);
+  }
+  for (auto &block : function.blocks) {
+    std::visit([&](const auto &term) {
+      using T = std::decay_t<decltype(term)>;
+      if constexpr (std::is_same_v<T, SSATerminator::Jump>) {
+        block.successors.push_back(term.target);
+      } else if constexpr (std::is_same_v<T, SSATerminator::Branch>) {
+        block.successors = {term.thenTarget, term.elseTarget};
+      }
+    }, block.terminator.value);
+    std::sort(block.successors.begin(), block.successors.end());
+    block.successors.erase(std::unique(block.successors.begin(), block.successors.end()), block.successors.end());
+    for (BlockId successor : block.successors)
+      if (auto found = blocks.find(successor.index); found != blocks.end())
+        found->second->predecessors.push_back(block.id);
+  }
+  for (auto &block : function.blocks) {
+    std::sort(block.predecessors.begin(), block.predecessors.end());
+    block.predecessors.erase(std::unique(block.predecessors.begin(), block.predecessors.end()), block.predecessors.end());
+  }
+}
+
+class SSAProgramInliner {
+  struct ReturnSite { BlockId block; std::optional<ValueId> value; };
+
+  static void addMissed(SSAOptimizationResult &result, OptimizationReasonCode code,
+                        std::string explanation, BlockId block,
+                        std::optional<ValueId> value, SourceOrigin origin) {
+    result.remarks.push_back({OptimizationRemarkKind::Missed, "inline",
+                              std::string(reasonCodeName(code)) + ": " + explanation,
+                              block, value, origin});
+  }
+
+public:
+  SSAOptimizationResult run(SSAProgram &program,
+                            const OptimizationBudget &budget = {},
+                            SSAAnalysisManager *analyses = nullptr) const {
+    SSAOptimizationResult result;
+    const CallGraph graphSnapshot = analyses
+        ? analyses->get<CachedCallGraphAnalysis>(program)
+        : CallGraphAnalysis::run(program);
+
+    InlineCostModel model;
+    std::map<std::string, const SSAFunction *> functions;
+    std::map<std::string, size_t> callerGrowth;
+    for (const auto &function : program.functions)
+      functions.emplace(function.name, &function);
+    size_t totalGrowth = 0;
+
+    for (auto &caller : program.functions) {
+      bool changedThisCaller = true;
+      while (changedThisCaller) {
+        changedThisCaller = false;
+        for (size_t blockIndex = 0; blockIndex < caller.blocks.size() && !changedThisCaller; ++blockIndex) {
+          if (caller.blocks[blockIndex].label.rfind("inline.", 0) == 0)
+            continue; // Cloned nested calls are considered only by a later pass run.
+          for (size_t instructionIndex = 0;
+               instructionIndex < caller.blocks[blockIndex].instructions.size() && !changedThisCaller;
+               ++instructionIndex) {
+            const SSAInstruction call = caller.blocks[blockIndex].instructions[instructionIndex];
+            if (call.kind != SSAInstructionKind::Call)
+              continue;
+            result.statistics.add("callsConsidered");
+            const auto calleeIt = functions.find(call.callee);
+            if (calleeIt == functions.end()) {
+              addMissed(result, OptimizationReasonCode::UnsupportedControlFlow,
+                        "callee has no SSA body", caller.blocks[blockIndex].id,
+                        call.result, call.origin);
+              result.statistics.add("callsRejectedUnsupported");
+              continue;
+            }
+            const SSAFunction &callee = *calleeIt->second;
+            const InlineDecision decision = model.decide(
+                callee, graphSnapshot.recursive(callee.name), budget,
+                callerGrowth[caller.name], totalGrowth, 1);
+            if (!decision.inlineCall) {
+              addMissed(result, decision.reason, decision.explanation,
+                        caller.blocks[blockIndex].id, call.result, call.origin);
+              if (decision.reason == OptimizationReasonCode::RecursiveCallee) result.statistics.add("callsRejectedRecursive");
+              if (decision.reason == OptimizationReasonCode::InlineCostTooHigh) result.statistics.add("callsRejectedCost");
+              if (decision.reason == OptimizationReasonCode::BudgetExceeded) result.statistics.add("callsRejectedBudget");
+              if (decision.reason == OptimizationReasonCode::InlineDepthLimit) result.statistics.add("callsRejectedDepth");
+              continue;
+            }
+            if (callee.parameters.size() != call.callArgs.size()) {
+              addMissed(result, OptimizationReasonCode::UnsupportedControlFlow,
+                        "argument count mismatch", caller.blocks[blockIndex].id,
+                        call.result, call.origin);
+              result.statistics.add("callsRejectedUnsupported");
+              continue;
+            }
+
+            size_t returnCount = 0;
+            bool malformedReturn = false;
+            for (const auto &block : callee.blocks) {
+              if (const auto *returned = std::get_if<SSATerminator::Return>(&block.terminator.value)) {
+                ++returnCount;
+                malformedReturn |= (callee.returnType.kind == LangTypeKind::Void) != !returned->value.has_value();
+              }
+            }
+            if (returnCount == 0) {
+              addMissed(result, OptimizationReasonCode::NoReturn,
+                        "callee has no reachable return", caller.blocks[blockIndex].id,
+                        call.result, call.origin);
+              result.statistics.add("callsRejectedNoReturn");
+              continue;
+            }
+            if (malformedReturn || (callee.returnType.kind == LangTypeKind::Void) == call.result.has_value() ||
+                !sameType(callee.returnType, call.type)) {
+              addMissed(result, OptimizationReasonCode::UnsupportedControlFlow,
+                        "call or return type is malformed", caller.blocks[blockIndex].id,
+                        call.result, call.origin);
+              result.statistics.add("callsRejectedUnsupported");
+              continue;
+            }
+            const auto entryIt = std::find_if(callee.blocks.begin(), callee.blocks.end(), [&](const SSABlock &block) {
+              return block.id == callee.entryBlock;
+            });
+            if (entryIt == callee.blocks.end() || !entryIt->phis.empty()) {
+              addMissed(result, OptimizationReasonCode::UnsupportedControlFlow,
+                        "callee entry has unsupported phi state", caller.blocks[blockIndex].id,
+                        call.result, call.origin);
+              result.statistics.add("callsRejectedUnsupported");
+              continue;
+            }
+
+            int nextBlock = 0;
+            int nextValue = 0;
+            for (const auto &parameter : caller.parameters)
+              nextValue = std::max(nextValue, parameter.value.index + 1);
+            for (const auto &block : caller.blocks) {
+              nextBlock = std::max(nextBlock, block.id.index + 1);
+              for (const auto &phi : block.phis)
+                nextValue = std::max(nextValue, phi.result.index + 1);
+              for (const auto &instruction : block.instructions)
+                if (instruction.result)
+                  nextValue = std::max(nextValue, instruction.result->index + 1);
+            }
+
+            std::map<int, BlockId> blockMap;
+            for (const auto &block : callee.blocks)
+              blockMap.emplace(block.id.index, BlockId{nextBlock++});
+            const BlockId continuationId{nextBlock++};
+            std::map<int, SSAOperand> valueMap;
+            for (size_t index = 0; index < callee.parameters.size(); ++index)
+              valueMap.emplace(callee.parameters[index].value.index, call.callArgs[index]);
+            for (const auto &block : callee.blocks) {
+              for (const auto &phi : block.phis)
+                valueMap.emplace(phi.result.index, ValueId{nextValue++});
+              for (const auto &instruction : block.instructions)
+                if (instruction.result)
+                  valueMap.emplace(instruction.result->index, ValueId{nextValue++});
+            }
+            const auto remapOperand = [&](const SSAOperand &operand) -> SSAOperand {
+              if (std::holds_alternative<CoreConstantVal>(operand)) return operand;
+              return valueMap.at(std::get<ValueId>(operand).index);
+            };
+
+            const SSABlock original = caller.blocks[blockIndex];
+            SSABlock continuation;
+            continuation.id = continuationId;
+            continuation.label = "inline.cont." + std::to_string(continuationId.index);
+            continuation.instructions.assign(original.instructions.begin() + static_cast<std::ptrdiff_t>(instructionIndex + 1), original.instructions.end());
+            continuation.terminator = original.terminator;
+
+            std::vector<SSABlock> clones;
+            std::vector<ReturnSite> returnSites;
+            clones.reserve(callee.blocks.size());
+            for (const auto &oldBlock : callee.blocks) {
+              SSABlock clone;
+              clone.id = blockMap.at(oldBlock.id.index);
+              clone.label = "inline." + callee.name + "." + oldBlock.label;
+              for (const auto &oldPhi : oldBlock.phis) {
+                PhiInstruction phi = oldPhi;
+                phi.result = std::get<ValueId>(valueMap.at(oldPhi.result.index));
+                for (auto &incoming : phi.incoming) {
+                  incoming.predecessor = blockMap.at(incoming.predecessor.index);
+                  incoming.value = std::get<ValueId>(valueMap.at(incoming.value.index));
+                }
+                std::sort(phi.incoming.begin(), phi.incoming.end(), [](const PhiIncoming &left, const PhiIncoming &right) {
+                  return left.predecessor < right.predecessor;
+                });
+                clone.phis.push_back(std::move(phi));
+              }
+              for (SSAInstruction instruction : oldBlock.instructions) {
+                instruction.operand1 = remapOperand(instruction.operand1);
+                instruction.operand2 = remapOperand(instruction.operand2);
+                for (auto &argument : instruction.callArgs)
+                  argument = remapOperand(argument);
+                if (instruction.result)
+                  instruction.result = std::get<ValueId>(valueMap.at(instruction.result->index));
+                clone.instructions.push_back(std::move(instruction));
+              }
+              if (const auto *returned = std::get_if<SSATerminator::Return>(&oldBlock.terminator.value)) {
+                ReturnSite site{clone.id, std::nullopt};
+                if (returned->value) {
+                  SSAOperand value = remapOperand(*returned->value);
+                  if (std::holds_alternative<CoreConstantVal>(value)) {
+                    const ValueId materialized{nextValue++};
+                    SSAInstruction constant;
+                    constant.kind = SSAInstructionKind::Constant;
+                    constant.result = materialized;
+                    constant.type = callee.returnType;
+                    constant.constantValue = std::get<CoreConstantVal>(value);
+                    constant.origin = call.origin;
+                    clone.instructions.push_back(std::move(constant));
+                    value = materialized;
+                  }
+                  site.value = std::get<ValueId>(value);
+                }
+                returnSites.push_back(site);
+                clone.terminator.value = SSATerminator::Jump{continuationId};
+              } else if (const auto *jump = std::get_if<SSATerminator::Jump>(&oldBlock.terminator.value)) {
+                clone.terminator.value = SSATerminator::Jump{blockMap.at(jump->target.index)};
+              } else if (const auto *branch = std::get_if<SSATerminator::Branch>(&oldBlock.terminator.value)) {
+                clone.terminator.value = SSATerminator::Branch{remapOperand(branch->condition), blockMap.at(branch->thenTarget.index), blockMap.at(branch->elseTarget.index)};
+              } else {
+                clone.terminator = oldBlock.terminator;
+              }
+              clones.push_back(std::move(clone));
+            }
+
+            // All rejection checks above precede mutation.  From here on the
+            // caller has a complete, verifier-checkable replacement CFG.
+            for (BlockId successor : original.successors)
+              for (auto &block : caller.blocks)
+                if (block.id == successor)
+                  for (auto &phi : block.phis)
+                    for (auto &incoming : phi.incoming)
+                      if (incoming.predecessor == original.id)
+                        incoming.predecessor = continuationId;
+            caller.blocks[blockIndex].instructions.assign(original.instructions.begin(), original.instructions.begin() + static_cast<std::ptrdiff_t>(instructionIndex));
+            caller.blocks[blockIndex].terminator.value = SSATerminator::Jump{blockMap.at(callee.entryBlock.index)};
+            caller.blocks.push_back(std::move(continuation));
+            caller.blocks.insert(caller.blocks.end(), std::make_move_iterator(clones.begin()), std::make_move_iterator(clones.end()));
+            SSABlock &continuationBlock = caller.blocks[caller.blocks.size() - clones.size() - 1];
+
+            if (call.result) {
+              if (returnSites.size() == 1) {
+                replaceAllUses(caller, *call.result, *returnSites.front().value);
+              } else {
+                PhiInstruction phi;
+                phi.result = *call.result;
+                phi.type = call.type;
+                phi.origin = call.origin;
+                for (const ReturnSite &site : returnSites)
+                  phi.incoming.push_back({site.block, *site.value});
+                std::sort(phi.incoming.begin(), phi.incoming.end(), [](const PhiIncoming &left, const PhiIncoming &right) {
+                  return left.predecessor < right.predecessor;
+                });
+                continuationBlock.phis.push_back(std::move(phi));
+                result.statistics.add("continuationPhisCreated");
+                result.statistics.add("returnSitesMerged", returnSites.size());
+              }
+            }
+            rebuildSSAEdges(caller);
+            const auto verified = verifySSA(caller);
+            if (!verified.ok) {
+              std::string message = "internal compiler error: invalid SSA after inline @" + caller.name + " <- @" + callee.name;
+              for (const auto &error : verified.errors) message += "\n  " + error;
+              throw std::runtime_error(message);
+            }
+            result.changed = result.cfgChanged = true;
+            result.statistics.add("callsInlined");
+            result.statistics.add("blocksCloned", clones.size());
+            result.statistics.add("instructionsCloned", instructionCount(callee));
+            for (const auto &block : callee.blocks) result.statistics.add("phisCloned", block.phis.size());
+            callerGrowth[caller.name] += decision.estimatedCost;
+            totalGrowth += decision.estimatedCost;
+            result.remarks.push_back({OptimizationRemarkKind::Applied, "inline", "inlined CFG " + callee.name, original.id, {}, call.origin});
+            if (analyses) {
+              analyses->invalidateFunction(program, caller);
+              analyses->invalidateProgram(program);
+            }
+            changedThisCaller = true;
+          }
+        }
+      }
+    }
+    return result;
+  }
 };
 
 } // namespace nanopass::opt
