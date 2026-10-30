@@ -23,7 +23,7 @@ class NanoProgramGenerator {
 public:
   explicit NanoProgramGenerator(GeneratorOptions options={}) : rng_(options.seed), options_(options) {}
   GeneratedProgram generate(size_t caseIndex) {
-    const int bound=1+number(8); const int increments=1+number(4); std::string source="int helper(int x) { return x + "+std::to_string(increments)+"; }\nint main() { int i = 0; int total = "+std::to_string(number())+"; while (i < "+std::to_string(bound)+") { if ((i % 2) == 0) { total = total + helper(i); } else { total = total + "+expression(options_.maxDepth,"i")+"; } i = i + 1; } print(total); return total; }\n"; return {options_.seed,caseIndex,std::move(source)};
+    const int bound=1+number(8); std::string source="int main() { int i = 0; int total = "+std::to_string(number())+"; while (i < "+std::to_string(bound)+") { if ((i % 2) == 0) { total = total + "+expression(options_.maxDepth,"i")+"; } else { total = total + "+expression(options_.maxDepth,"i")+"; } i = i + 1; } print(total); return total; }\n"; return {options_.seed,caseIndex,std::move(source)};
   }
 };
 
