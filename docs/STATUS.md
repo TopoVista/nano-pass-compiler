@@ -28,7 +28,7 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
 - **SSA interpreter** — independent frames/registers; predecessor-sensitive,
   parallel phi assignment; optimized O0–O3 execution.
 - **Differential runner and fuzzing** — Core-vs-SSA O0–O3 execution,
-  deterministic seeded typed-subset generation, malformed-input smoke fuzzing,
+  deterministic typed generation including nested calls, malformed-input smoke fuzzing,
   JSON summaries, persisted failures, and AST-guided semantic reduction.
 
 ### Advanced optimizer (Phase 6 complete)
@@ -121,7 +121,7 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 4,369 |
+| IR/SSA/optimizer/correctness assertions | 5,369 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |

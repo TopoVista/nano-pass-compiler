@@ -1346,7 +1346,7 @@ static void test_differential_execution_regression_corpus() {
 
 static void test_differential_runner_and_deterministic_generator() {
     NanoProgramGenerator first({42,3,8}), second({42,3,8}); DifferentialRunner runner; size_t compared=0;
-    for(size_t index=0;index<1000;++index){auto a=first.generate(index),b=second.generate(index);ASSERT_EQ(a.source,b.source);auto outcome=runner.run(a.source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);++compared;}ASSERT_EQ(compared,1000u);
+    for(size_t index=0;index<1000;++index){auto a=first.generate(index),b=second.generate(index);ASSERT_EQ(a.source,b.source);ASSERT(a.source.find("relay(i)")!=std::string::npos);auto outcome=runner.run(a.source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);++compared;}ASSERT_EQ(compared,1000u);
 }
 
 static void test_fuzz_summary_and_deterministic_reducer() {

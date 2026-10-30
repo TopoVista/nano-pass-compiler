@@ -28,7 +28,12 @@ struct DifferentialResult {
 inline IRPipelineResult buildIRForDifferential(const std::string &source) {
   PipelineBuilder::initialise();
   Lexer lexer(source); Parser parser(lexer.scanTokens()); auto program=parser.parseProgram();
-  ResolveScopesPass{}.resolve(program); TypeCheckPass{}.check(program);
+  // AST variable/call nodes retain non-owning Symbol pointers owned by the
+  // resolver's table. Keep this resolver alive through type checking,
+  // desugaring, and IR lowering; a temporary resolver leaves dangling symbols.
+  ResolveScopesPass resolver;
+  resolver.resolve(program);
+  TypeCheckPass{}.check(program);
   AnalysisManager analyses; PipelineBuilder::registerAnalysesWithManager(analyses);
   CompilerPassOptions options; PassContext context(analyses, options, std::cerr);
   auto pipeline=PipelineBuilder::buildDesugarPipeline(); pipeline.run(program,context);
