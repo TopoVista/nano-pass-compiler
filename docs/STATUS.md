@@ -121,7 +121,7 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,369 |
+| IR/SSA/optimizer/correctness assertions | 5,415 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -174,19 +174,27 @@ remain pending a local LLVM development installation.
 - [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
-- [ ] Sanitizer execution remains externally blocked by the LLVM package
+- [ ] Sanitizer execution remains externally blocked: CMake cannot load the
+  incomplete LLVM package, MinGW exposes neither `libasan` nor `libubsan`, and
+  no standalone `clang++` is installed.
 
-### Phase 7 — LLVM/JIT
+Latest recorded LLVM-independent campaign: seed `42`, 1,000 generated and
+valid programs, 4,000 O0–O3 comparisons, 0 mismatches/crashes/timeouts, and
+1,994,579 µs elapsed. All generated cases exercised arithmetic, comparisons,
+conditionals, bounded loops, direct/nested calls, mutable locals, and returns.
+Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
+
+### Phase 8 — LLVM/JIT
 - CFG → LLVM lowering (currently AST → LLVM is canonical)
 - ORC JIT (`nano jit`)
 - Optional adaptive JIT
 
-### Phase 8 — Observability
+### Phase 9 — Observability
 - `nano explain` full polished UX
 - JSON telemetry (`--pass-telemetry=json`)
 - Optimization remarks
 
-### Phase 9 — Web lab
+### Phase 10 — Web lab
 - JSON API server (`nano-server`)
 - Next.js compiler lab with Monaco, pipeline timeline, CFG explorer
 

@@ -29,6 +29,11 @@ subset. It is intentionally separate from the AST-to-LLVM backend.
   fixed-size arrays, indexed memory, and residual memory-backed SSA locals
   are supported. The typed generator remains scalar-only so its reported
   coverage is precise rather than aspirational.
+- Execution uses explicit step, call-depth, output-byte, and array-element
+  budgets. Division/remainder by zero and bounds failures have defined shared
+  runtime categories. Signed-overflow-dependent programs, NaN-sensitive
+  floating comparisons, aggregate parameters, and arrays of arrays are not
+  claimed as differential-equivalence inputs.
 
 The installed LLVM backend remains a separate oracle candidate once its local
 toolchain is repaired. Optimized SSA is not claimed to execute natively.

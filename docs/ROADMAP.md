@@ -93,10 +93,10 @@
 
 ## Phase 7 — Correctness, differential testing, and fuzzing ✅
 - [x] CoreIR reference execution and independent SSA execution
-- [x] Differential O0–O3 fixture corpus and deterministic 1,000-case campaign
-- [x] Typed grammar-aware source generator and seed reproducibility
+- [x] Differential O0–O3/custom-pipeline fixture corpus and deterministic 1,000-case campaign
+- [x] Typed grammar-aware source generator with independent seed/case replay and bounded complexity controls
 - [x] Failure persistence, AST-guided bounded semantic reducer, and malformed-input fuzz smoke
-- [ ] Sanitizer CI (AddressSanitizer + UBSan on Linux/Clang)
+- [ ] Sanitizer CI (AddressSanitizer + UBSan on Linux/Clang; local toolchain unavailable)
 - [x] GitHub Actions LLVM-independent correctness smoke
 
 ## Phase 8 — LLVM/JIT

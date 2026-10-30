@@ -30,6 +30,25 @@ compared with independently executed SSA O0–O3 programs. This is empirical
 semantic testing, not formal proof; LLVM execution remains optional until the
 local LLVM development package is repaired.
 
+## Differential correctness testing
+
+The LLVM-independent correctness tool executes CoreIR against fresh SSA O0–O3
+copies, rather than comparing textual IR. It is useful even when the LLVM CMake
+package is unavailable:
+
+```sh
+g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
+./nano-correctness differential examples/factorial.nano
+./nano-correctness differential-custom examples/optimizer.nano sccp,dce
+./nano-correctness fuzz 42 1000 tests/regressions/generated
+./nano-correctness malformed-fuzz 8128 256
+```
+
+The generator is seed- and case-index-reproducible, uses bounded typed source
+generation, and reports measured JSON counts. These commands provide
+differential testing, not formal verification or native optimized-SSA
+execution.
+
 ---
 
 ## Quick start
@@ -216,7 +235,7 @@ Each pass runs **once** — not once per top-level statement.
 | LLVM IR emission | ✅ stable | `--format=llvm` |
 | **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
 | Optimizer | 🗓 planned | Phase 5 |
-| JIT | 🗓 planned | Phase 7 |
+| JIT | 🗓 planned | Phase 8 |
 | Web lab | 🗓 planned | Phase 9 |
 
 ---
