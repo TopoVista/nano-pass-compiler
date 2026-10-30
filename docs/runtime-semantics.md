@@ -19,12 +19,16 @@ subset. It is intentionally separate from the AST-to-LLVM backend.
   merely because their spelling matches. Parameters are passed by value in a
   fresh frame; recursion uses fresh frames and a configured call-depth limit.
 - `print` appends the value's deterministic text followed by a newline. Output
-  is bounded. Strings print their contents; arrays print as `<array>` if a
-  future supported runtime path produces one.
-- `break`, `continue`, `return`, if/else, while, calls, and scalar arithmetic
-  are supported. Arrays/indexed memory and residual SSA local memory are
-  currently reported as `UnsupportedFeature`; they are excluded from semantic
-  fuzzing rather than given guessed semantics.
+  is bounded. Strings print their contents; arrays print as `<array>`.
+- Fixed-size local arrays are allocated with zero values for their declared
+  element type. Indexed loads and stores check signed bounds in both engines;
+  an invalid index reports `array-bounds`. Array allocation is capped by the
+  execution limit. Aggregate parameter passing and arrays of arrays are not
+  currently part of the supported execution subset.
+- `break`, `continue`, `return`, if/else, while, calls, scalar arithmetic,
+  fixed-size arrays, indexed memory, and residual memory-backed SSA locals
+  are supported. The typed generator remains scalar-only so its reported
+  coverage is precise rather than aspirational.
 
 The installed LLVM backend remains a separate oracle candidate once its local
 toolchain is repaired. Optimized SSA is not claimed to execute natively.

@@ -17,3 +17,5 @@ jobs:
         run: g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
       - name: Run bounded deterministic fuzz smoke
         run: ./nano-correctness fuzz 42 32
+      - name: Run malformed-input smoke fuzz
+        run: ./nano-correctness malformed-fuzz 8128 64

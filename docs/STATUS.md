@@ -23,13 +23,13 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
   native LLVM input.
 
 ### Correctness testing (Phase 7)
-- **CoreIR reference interpreter** — scalar expressions, control flow, calls,
-  recursion limits, print, and explicit runtime error categories.
+- **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
+  control flow, calls, recursion limits, print, and explicit runtime errors.
 - **SSA interpreter** — independent frames/registers; predecessor-sensitive,
   parallel phi assignment; optimized O0–O3 execution.
-- **Differential runner and fuzzing** — real frontend-to-IR execution
-  comparison, deterministic seeded typed-subset generation, result summaries,
-  failure persistence, and deterministic reduction hooks.
+- **Differential runner and fuzzing** — Core-vs-SSA O0–O3 execution,
+  deterministic seeded typed-subset generation, malformed-input smoke fuzzing,
+  JSON summaries, persisted failures, and AST-guided semantic reduction.
 
 ### Advanced optimizer (Phase 6 complete)
 - **LoopInfo** — dominance-qualified natural loops, latches, exits, stable
@@ -121,7 +121,7 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 4,322 |
+| IR/SSA/optimizer/correctness assertions | 4,369 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -170,9 +170,9 @@ remain pending a local LLVM development installation.
   edge rebuilding, analysis invalidation, and verifier gates
 
 ### Phase 7 — Correctness, differential testing, and fuzzing ✅
-- [x] CoreIR and SSA interpreters with shared execution limits/results
-- [x] Differential O0–O3 semantic checks and fixed-seed grammar-aware campaign
-- [x] Mismatch persistence and deterministic source reduction hook
+- [x] CoreIR and SSA interpreters with shared limits, fixed-size arrays, and parallel phi execution
+- [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
+- [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
 - [ ] Sanitizer execution remains externally blocked by the LLVM package
 
@@ -194,8 +194,8 @@ remain pending a local LLVM development installation.
 
 ## Known limitations
 
-- **Canonical LLVM path** still uses AST → LLVM (not via CFG).  CFG → LLVM
-  lowering is planned for Phase 7.
+- **Canonical LLVM path** still uses AST → LLVM (not via CFG). CFG → LLVM
+  lowering belongs to the later LLVM/JIT phase.
 - **`bool` not assignable to `int`** in the type checker — short-circuit
   expressions produce `bool`; assigning to `int` is a type error.  Use
   `if/else` to convert.
