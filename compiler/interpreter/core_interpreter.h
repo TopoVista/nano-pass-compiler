@@ -51,7 +51,8 @@ class CoreInterpreter {
     if(auto x=std::get_if<int64_t>(&a)) if(auto y=std::get_if<int64_t>(&b)) {
       switch(op){case BinaryOpKind::Add:return *x+*y;case BinaryOpKind::Sub:return *x-*y;case BinaryOpKind::Mul:return *x**y;case BinaryOpKind::Div:if(!*y)fail(ExecutionStatus::RuntimeError,"division-by-zero","integer division by zero");return *x / *y;case BinaryOpKind::Mod:if(!*y)fail(ExecutionStatus::RuntimeError,"division-by-zero","integer remainder by zero");return *x % *y;case BinaryOpKind::Eq:return *x==*y;case BinaryOpKind::Ne:return *x!=*y;case BinaryOpKind::Lt:return *x<*y;case BinaryOpKind::Le:return *x<=*y;case BinaryOpKind::Gt:return *x>*y;case BinaryOpKind::Ge:return *x>=*y;default:break;}}
     if(auto x=std::get_if<double>(&a)) if(auto y=std::get_if<double>(&b)) { switch(op){case BinaryOpKind::Add:return *x+*y;case BinaryOpKind::Sub:return *x-*y;case BinaryOpKind::Mul:return *x**y;case BinaryOpKind::Div:return *x / *y;case BinaryOpKind::Eq:return *x==*y;case BinaryOpKind::Ne:return *x!=*y;case BinaryOpKind::Lt:return *x<*y;case BinaryOpKind::Le:return *x<=*y;case BinaryOpKind::Gt:return *x>*y;case BinaryOpKind::Ge:return *x>=*y;default:break;}}
-    if(op==BinaryOpKind::Eq) return runtimeValueText(a)==runtimeValueText(b); if(op==BinaryOpKind::Ne) return runtimeValueText(a)!=runtimeValueText(b);
+    if(op==BinaryOpKind::Eq) return runtimeValueText(a)==runtimeValueText(b);
+    if(op==BinaryOpKind::Ne) return runtimeValueText(a)!=runtimeValueText(b);
     fail(ExecutionStatus::RuntimeError,"type-error","invalid binary operands");
   }
   RuntimeValue eval(const CoreExpr &expr, Frame &frame) {

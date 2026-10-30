@@ -177,12 +177,16 @@ class SSAInterpreter {
       }
       if (const auto jump = std::get_if<SSATerminator::Jump>(&block.terminator.value)) {
         predecessor = block.id; current = blocks.find(jump->target.index);
-        if (current == blocks.end()) fail(ExecutionStatus::InternalError, "bad-jump", "unknown jump target"); continue;
+        if (current == blocks.end())
+          fail(ExecutionStatus::InternalError, "bad-jump", "unknown jump target");
+        continue;
       }
       if (const auto branch = std::get_if<SSATerminator::Branch>(&block.terminator.value)) {
         predecessor = block.id;
         current = blocks.find((truth(operand(branch->condition, registers)) ? branch->thenTarget : branch->elseTarget).index);
-        if (current == blocks.end()) fail(ExecutionStatus::InternalError, "bad-branch", "unknown branch target"); continue;
+        if (current == blocks.end())
+          fail(ExecutionStatus::InternalError, "bad-branch", "unknown branch target");
+        continue;
       }
       if (const auto returned = std::get_if<SSATerminator::Return>(&block.terminator.value))
         return returned->value ? std::optional<RuntimeValue>(operand(*returned->value, registers)) : std::nullopt;

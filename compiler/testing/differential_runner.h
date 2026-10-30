@@ -25,6 +25,11 @@ struct DifferentialResult {
   bool equivalent = false;
 };
 
+struct DifferentialCustomPipeline {
+  std::string name = "custom";
+  std::vector<std::string> passIds;
+};
+
 inline IRPipelineResult buildIRForDifferential(const std::string &source) {
   PipelineBuilder::initialise();
   Lexer lexer(source); Parser parser(lexer.scanTokens()); auto program=parser.parseProgram();
@@ -41,14 +46,47 @@ inline IRPipelineResult buildIRForDifferential(const std::string &source) {
 }
 
 class DifferentialRunner {
+  static void optimize(SSAProgram &program, int level,
+                       const std::vector<std::string> *passIds = nullptr) {
+    for (auto &function : program.functions) {
+      opt::SSAOptimizationContext context;
+      if (passIds) {
+        opt::SSAOptimizationPipeline pipeline;
+        for (const auto &id : *passIds) {
+          auto pass = opt::makePass(id);
+          if (!pass) throw std::runtime_error("unknown custom SSA pass: " + id);
+          pipeline.add(std::move(pass));
+        }
+        pipeline.run(function, context);
+      } else {
+        opt::buildPipeline(level).run(function, context);
+      }
+      const auto verified = verifySSA(function);
+      if (!verified.ok) throw std::runtime_error("optimized SSA verifier failed");
+    }
+  }
 public:
   DifferentialResult run(const std::string &source, const std::vector<int> &levels={0,1,2,3}, ExecutionLimits limits={}) const {
     DifferentialResult result;
     try {
       auto ir=buildIRForDifferential(source); result.compiled=true;
       CoreInterpreter core; SSAInterpreter ssa; result.reference=core.run(ir.core,"main",limits);
-      for(int level:levels) { SSAProgram candidate=ir.ssa; for(auto &function:candidate.functions){ opt::SSAOptimizationContext context; opt::buildPipeline(level).run(function,context); const auto verified=verifySSA(function); if(!verified.ok) throw std::runtime_error("optimized SSA verifier failed"); } auto execution=ssa.run(candidate,"main",limits); result.levels.push_back({level,execution,sameObservableResult(result.reference,execution)}); }
+      for(int level:levels) { SSAProgram candidate=ir.ssa; optimize(candidate,level); auto execution=ssa.run(candidate,"main",limits); result.levels.push_back({level,execution,sameObservableResult(result.reference,execution)}); }
       result.equivalent=std::all_of(result.levels.begin(),result.levels.end(),[](const auto &item){return item.equivalent;});
+    } catch(const std::exception &error) { result.diagnostic=error.what(); }
+    return result;
+  }
+  DifferentialResult runCustom(const std::string &source,
+                               const DifferentialCustomPipeline &pipeline,
+                               ExecutionLimits limits={}) const {
+    DifferentialResult result;
+    try {
+      auto ir=buildIRForDifferential(source); result.compiled=true;
+      CoreInterpreter core; SSAInterpreter ssa; result.reference=core.run(ir.core,"main",limits);
+      SSAProgram candidate=ir.ssa; optimize(candidate,0,&pipeline.passIds);
+      auto execution=ssa.run(candidate,"main",limits);
+      result.levels.push_back({-1,execution,sameObservableResult(result.reference,execution)});
+      result.equivalent=result.levels.front().equivalent;
     } catch(const std::exception &error) { result.diagnostic=error.what(); }
     return result;
   }

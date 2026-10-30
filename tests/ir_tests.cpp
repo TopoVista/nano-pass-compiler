@@ -10,6 +10,7 @@
 
 #include <cassert>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -1317,6 +1318,14 @@ static void test_ssa_interpreter_parallel_phi_and_limits() {
     SSABlock merge;merge.id={1};merge.phis.push_back({ValueId{2},LocalId{"a",0},LangType::Int(),{{{0},{1}}}});merge.phis.push_back({ValueId{3},LocalId{"b",0},LangType::Int(),{{{0},{0}}}});SSAInstruction sum;sum.kind=SSAInstructionKind::Binary;sum.result=ValueId{4};sum.type=LangType::Int();sum.binaryOp=BinaryOpKind::Sub;sum.operand1=ValueId{2};sum.operand2=ValueId{3};merge.instructions={sum};merge.terminator.value=SSATerminator::Return{SSAOperand{ValueId{4}}};function.blocks={entry,merge};rebuildSSAEdges(function);SSAProgram program;program.functions={function};SSAInterpreter interpreter;auto ok=interpreter.run(program);ASSERT(ok.status==ExecutionStatus::Success);ASSERT_EQ(runtimeValueText(*ok.returnValue),"1");ExecutionLimits limits;limits.maxSteps=1;auto limited=interpreter.run(program,"main",limits);ASSERT(limited.status==ExecutionStatus::StepLimitExceeded);
 }
 
+static void test_execution_limits_and_defined_errors() {
+    DifferentialRunner runner;
+    ExecutionLimits recursion;recursion.maxCallDepth=4;auto recursive=runner.run(R"(int recurse(int n){return recurse(n+1);}int main(){return recurse(0);})",{0,3},recursion);ASSERT(recursive.compiled);ASSERT(recursive.equivalent);ASSERT(recursive.reference.status==ExecutionStatus::RecursionLimitExceeded);
+    ExecutionLimits output;output.maxOutputBytes=1;auto noisy=runner.run(R"(int main(){print 1;return 0;})",{0,3},output);ASSERT(noisy.compiled);ASSERT(noisy.equivalent);ASSERT(noisy.reference.status==ExecutionStatus::OutputLimitExceeded);
+    auto bounds=runner.run(R"(int main(){int[1] values;return values[2];})",{0,3});ASSERT(bounds.compiled);ASSERT(bounds.equivalent);ASSERT(bounds.reference.status==ExecutionStatus::RuntimeError);ASSERT(bounds.reference.error&&bounds.reference.error->category=="array-bounds");
+    ExecutionLimits allocation;allocation.maxArrayElements=1;auto oversized=runner.run(R"(int main(){int[2] values;return 0;})",{0,3},allocation);ASSERT(oversized.compiled);ASSERT(oversized.equivalent);ASSERT(oversized.reference.status==ExecutionStatus::RuntimeError);ASSERT(oversized.reference.error&&oversized.reference.error->category=="allocation-limit");
+}
+
 static void test_interpreters_execute_fixed_size_arrays() {
     auto result=compileToIR(R"(int main() { int[3] values; values[0] = 4; values[1] = 7; values[2] = values[0] + values[1]; print values[2]; return values[1]; })");
     ASSERT_EQ(result.ssa.functions.size(),1u); ASSERT_EQ(result.ssa.functions[0].memoryLocals.size(),1u);
@@ -1335,23 +1344,32 @@ static void test_differential_execution_regression_corpus() {
         R"(int fact(int n){if(n<=1){return 1;}return n*fact(n-1);}int main(){int n=4;n=n+1;print(fact(n));return n;})",
         R"(int f(int x){x=x+3;return x;}int main(){int x=2;int y=f(x);if(y>3){print(y);}else{print(0);}return y;})",
         R"(int main(){int x=2+3;int dead=4*5;if(x<10){print(x);}else{print(0);}return x;})",
-        R"(int main(){int a=3;int b=4;int i=0;int total=0;while(i<4){total=total+(a*b);i=i+1;}print(total);return total;})"
+        R"(int main(){int a=3;int b=4;int i=0;int total=0;while(i<4){total=total+(a*b);i=i+1;}print(total);return total;})",
+        R"(int main(){int a=2;int b=5;int result=(a+b)+(a+b);print(result);return result;})",
+        R"(int main(){double value=1.5+2.5;print(value);return 0;})",
+        R"(int main(){print "ok";return 0;})",
+        R"(int increment(int x){int local=x+1;return local;}int main(){int local=3;print(increment(local));return local;})"
     };
     DifferentialRunner runner;
     for(const auto &source:corpus){auto outcome=runner.run(source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);}
 
     const std::string inlineSource=R"(int choose(int x){if(x>0){return 7;}return 9;}int loopfn(int n){int i=0;while(i<n){i=i+1;}return i;}int main(){int value=choose(1);return loopfn(value);})";
     auto lowered=compileToIR(inlineSource);CoreInterpreter core;auto reference=core.run(lowered.core);SSAProgram inlined=lowered.ssa;auto inlineResult=SSAProgramInliner{}.run(inlined);ASSERT(inlineResult.changed);for(const auto &function:inlined.functions)ASSERT(verifySSA(function).ok);auto executed=SSAInterpreter{}.run(inlined);ASSERT(sameObservableResult(reference,executed));
+    auto voidLowered=compileToIR(R"(void choose(int x){if(x>0){print 1;return;}print 2;return;}int main(){choose(1);return 0;})");auto voidReference=core.run(voidLowered.core);SSAProgram voidInlined=voidLowered.ssa;ASSERT(SSAProgramInliner{}.run(voidInlined).changed);auto voidExecuted=SSAInterpreter{}.run(voidInlined);ASSERT(sameObservableResult(voidReference,voidExecuted));
+    auto nestedLowered=compileToIR(R"(int helper(int x){return x+2;}int outer(int x){return helper(x)*2;}int main(){return outer(3);})");auto nestedReference=core.run(nestedLowered.core);SSAProgram nestedInlined=nestedLowered.ssa;auto nestedResult=SSAProgramInliner{}.run(nestedInlined);ASSERT(nestedResult.changed);for(const auto&function:nestedInlined.functions)ASSERT(verifySSA(function).ok);auto nestedExecuted=SSAInterpreter{}.run(nestedInlined);ASSERT(sameObservableResult(nestedReference,nestedExecuted));
+    auto custom=runner.runCustom(R"(int main(){int x=2+3;int dead=4*5;print(x);return x;})",{"sccp-dce",{"sccp","dce"}});ASSERT(custom.compiled);ASSERT(custom.equivalent);ASSERT_EQ(custom.levels.size(),1u);
 }
 
 static void test_differential_runner_and_deterministic_generator() {
     NanoProgramGenerator first({42,3,8}), second({42,3,8}); DifferentialRunner runner; size_t compared=0;
     for(size_t index=0;index<1000;++index){auto a=first.generate(index),b=second.generate(index);ASSERT_EQ(a.source,b.source);ASSERT(a.source.find("relay(i)")!=std::string::npos);auto outcome=runner.run(a.source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);++compared;}ASSERT_EQ(compared,1000u);
+    NanoProgramGenerator replay({42,3,8});ASSERT_EQ(first.generate(777).source,replay.generate(777).source);
+    GeneratorOptions constrained;constrained.seed=7;constrained.maxDepth=1;constrained.maxStatements=2;constrained.maxFunctions=1;constrained.maxCallDepth=0;constrained.maxLoopNesting=0;constrained.maxSourceBytes=96;auto small=NanoProgramGenerator(constrained).generate(9);ASSERT(small.source.size()<=constrained.maxSourceBytes);ASSERT(!small.features.functions);ASSERT(!small.features.loops);
 }
 
 static void test_fuzz_summary_and_deterministic_reducer() {
-    DifferentialFuzzRunner fuzz;auto summary=fuzz.run({99,2,6},32);ASSERT_EQ(summary.generated,32u);ASSERT_EQ(summary.valid,32u);ASSERT_EQ(summary.rejected,0u);ASSERT_EQ(summary.compared,128u);ASSERT_EQ(summary.mismatches,0u);ASSERT_EQ(summary.crashes,0u);ASSERT(fuzzSummaryJson(summary).find("\"seed\":99")!=std::string::npos);
-    const auto failureDirectory=std::filesystem::temp_directory_path()/"nanopass-phase7-persistence-test";std::filesystem::remove_all(failureDirectory);DifferentialRunner persistenceRunner;auto persistFault=[&](const std::string&candidate){auto outcome=persistenceRunner.run(candidate,{0});if(outcome.compiled&&!outcome.levels.empty()){outcome.levels[0].equivalent=false;outcome.equivalent=false;}return outcome;};auto persisted=fuzz.runWithAdapter({101,1,3},1,failureDirectory,persistFault);ASSERT_EQ(persisted.mismatches,1u);ASSERT_EQ(persisted.distinctFailures,1u);ASSERT(std::filesystem::exists(failureDirectory));ASSERT(!std::filesystem::is_empty(failureDirectory));std::filesystem::remove_all(failureDirectory);
+    DifferentialFuzzRunner fuzz;auto summary=fuzz.run({99,2,6},32);ASSERT_EQ(summary.generated,32u);ASSERT_EQ(summary.valid,32u);ASSERT_EQ(summary.rejected,0u);ASSERT_EQ(summary.compared,128u);ASSERT_EQ(summary.mismatches,0u);ASSERT_EQ(summary.crashes,0u);ASSERT(summary.durationUs>0);ASSERT_EQ(summary.nestedCalls,32u);ASSERT(fuzzSummaryJson(summary).find("\"features\"")!=std::string::npos);
+    const auto failureDirectory=std::filesystem::temp_directory_path()/"nanopass-phase7-persistence-test";std::filesystem::remove_all(failureDirectory);DifferentialRunner persistenceRunner;auto persistFault=[&](const std::string&candidate){auto outcome=persistenceRunner.run(candidate,{0});if(outcome.compiled&&!outcome.levels.empty()){outcome.levels[0].equivalent=false;outcome.equivalent=false;}return outcome;};auto persisted=fuzz.runWithAdapter({101,1,3},1,failureDirectory,persistFault);ASSERT_EQ(persisted.mismatches,1u);ASSERT_EQ(persisted.distinctFailures,1u);ASSERT(std::filesystem::exists(failureDirectory));ASSERT(!std::filesystem::is_empty(failureDirectory));auto metadataPath=std::find_if(std::filesystem::directory_iterator(failureDirectory),std::filesystem::directory_iterator(),[](const auto&entry){return entry.path().extension()==".json";});ASSERT(metadataPath!=std::filesystem::directory_iterator());std::ifstream metadata(metadataPath->path());std::string metadataText((std::istreambuf_iterator<char>(metadata)),{});metadata.close();ASSERT(metadataText.find("\"generation\"")!=std::string::npos);ASSERT(metadataText.find("\"reference\"")!=std::string::npos);ASSERT(metadataText.find("\"levels\"")!=std::string::npos);std::filesystem::remove_all(failureDirectory);
     const std::string input="int main() {\n  int value = 1;\n  int irrelevant = 29;\n  print(value);\n  return value;\n}\n";
     DifferentialRunner runner;
     // Test-only faulty execution adapter: production passes are untouched.
@@ -1445,6 +1463,7 @@ int main() {
     RUN_TEST(test_trivial_phi_and_iterative_dce);
     RUN_TEST(test_interpreters_differential_core_and_ssa);
     RUN_TEST(test_ssa_interpreter_parallel_phi_and_limits);
+    RUN_TEST(test_execution_limits_and_defined_errors);
     RUN_TEST(test_interpreters_execute_fixed_size_arrays);
     RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);
