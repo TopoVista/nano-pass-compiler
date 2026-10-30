@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -283,6 +284,10 @@ struct CFGFunction {
   std::vector<CoreParam> params;
   BlockId entryBlock;
   std::vector<std::unique_ptr<BasicBlock>> blocks;
+  // Aggregate locals deliberately stay memory-backed when lowering to SSA.
+  // Keep their complete declared type so execution engines can allocate the
+  // same fixed-size storage as the source/CoreIR interpreter.
+  std::map<LocalId, LangType> memoryLocals;
   std::unordered_map<int, size_t> blockIndexMap;
   SourceOrigin origin;
 

@@ -9,6 +9,7 @@
 // No LLVM is required (no codegen is exercised here).
 
 #include <cassert>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -1316,14 +1317,47 @@ static void test_ssa_interpreter_parallel_phi_and_limits() {
     SSABlock merge;merge.id={1};merge.phis.push_back({ValueId{2},LocalId{"a",0},LangType::Int(),{{{0},{1}}}});merge.phis.push_back({ValueId{3},LocalId{"b",0},LangType::Int(),{{{0},{0}}}});SSAInstruction sum;sum.kind=SSAInstructionKind::Binary;sum.result=ValueId{4};sum.type=LangType::Int();sum.binaryOp=BinaryOpKind::Sub;sum.operand1=ValueId{2};sum.operand2=ValueId{3};merge.instructions={sum};merge.terminator.value=SSATerminator::Return{SSAOperand{ValueId{4}}};function.blocks={entry,merge};rebuildSSAEdges(function);SSAProgram program;program.functions={function};SSAInterpreter interpreter;auto ok=interpreter.run(program);ASSERT(ok.status==ExecutionStatus::Success);ASSERT_EQ(runtimeValueText(*ok.returnValue),"1");ExecutionLimits limits;limits.maxSteps=1;auto limited=interpreter.run(program,"main",limits);ASSERT(limited.status==ExecutionStatus::StepLimitExceeded);
 }
 
+static void test_interpreters_execute_fixed_size_arrays() {
+    auto result=compileToIR(R"(int main() { int[3] values; values[0] = 4; values[1] = 7; values[2] = values[0] + values[1]; print values[2]; return values[1]; })");
+    ASSERT_EQ(result.ssa.functions.size(),1u); ASSERT_EQ(result.ssa.functions[0].memoryLocals.size(),1u);
+    CoreInterpreter core; SSAInterpreter ssa; auto reference=core.run(result.core); auto o0=ssa.run(result.ssa);
+    ASSERT(reference.status==ExecutionStatus::Success); ASSERT(o0.status==ExecutionStatus::Success);
+    ASSERT(sameObservableResult(reference,o0)); ASSERT_EQ(reference.stdoutText,"11\n"); ASSERT_EQ(runtimeValueText(*reference.returnValue),"7");
+    SSAProgram optimized=result.ssa; for(auto &function:optimized.functions){SSAOptimizationContext context;buildPipeline(3).run(function,context);ASSERT(verifySSA(function).ok);} auto o3=ssa.run(optimized); ASSERT(sameObservableResult(reference,o3));
+}
+
+static void test_differential_execution_regression_corpus() {
+    const std::vector<std::string> corpus={
+        R"(int main(){int a=-17;int b=5;print(a/b);print(a%b);return a/b;})",
+        R"(int side(){print 99;return 1;} int main(){int no=0;int yes=1;if(no&&side()){print 1;}if(yes||side()){print 2;}return 0;})",
+        R"(int main(){int total=0;for(int i=0;i<5;i=i+1){if(i==2){continue;}total=total+i;}print(total);return total;})",
+        R"(int main(){int i=0;int total=0;while(i<4){int j=0;while(j<4){if(j==2){break;}total=total+1;j=j+1;}i=i+1;}print(total);return total;})",
+        R"(int fact(int n){if(n<=1){return 1;}return n*fact(n-1);}int main(){int n=4;n=n+1;print(fact(n));return n;})",
+        R"(int f(int x){x=x+3;return x;}int main(){int x=2;int y=f(x);if(y>3){print(y);}else{print(0);}return y;})",
+        R"(int main(){int x=2+3;int dead=4*5;if(x<10){print(x);}else{print(0);}return x;})",
+        R"(int main(){int a=3;int b=4;int i=0;int total=0;while(i<4){total=total+(a*b);i=i+1;}print(total);return total;})"
+    };
+    DifferentialRunner runner;
+    for(const auto &source:corpus){auto outcome=runner.run(source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);}
+
+    const std::string inlineSource=R"(int choose(int x){if(x>0){return 7;}return 9;}int loopfn(int n){int i=0;while(i<n){i=i+1;}return i;}int main(){int value=choose(1);return loopfn(value);})";
+    auto lowered=compileToIR(inlineSource);CoreInterpreter core;auto reference=core.run(lowered.core);SSAProgram inlined=lowered.ssa;auto inlineResult=SSAProgramInliner{}.run(inlined);ASSERT(inlineResult.changed);for(const auto &function:inlined.functions)ASSERT(verifySSA(function).ok);auto executed=SSAInterpreter{}.run(inlined);ASSERT(sameObservableResult(reference,executed));
+}
+
 static void test_differential_runner_and_deterministic_generator() {
     NanoProgramGenerator first({42,3,8}), second({42,3,8}); DifferentialRunner runner; size_t compared=0;
     for(size_t index=0;index<1000;++index){auto a=first.generate(index),b=second.generate(index);ASSERT_EQ(a.source,b.source);auto outcome=runner.run(a.source);ASSERT(outcome.compiled);ASSERT(outcome.equivalent);ASSERT_EQ(outcome.levels.size(),4u);++compared;}ASSERT_EQ(compared,1000u);
 }
 
 static void test_fuzz_summary_and_deterministic_reducer() {
-    DifferentialFuzzRunner fuzz;auto summary=fuzz.run({99,2,6},32);ASSERT_EQ(summary.generated,32u);ASSERT_EQ(summary.valid,32u);ASSERT_EQ(summary.compared,128u);ASSERT_EQ(summary.mismatches,0u);ASSERT_EQ(summary.crashes,0u);ASSERT(fuzzSummaryJson(summary).find("\"seed\":99")!=std::string::npos);
-    SourceReducer reducer;const std::string input="keep\nremove-a\nremove-b\n";auto faulty=[](const std::string&candidate){return candidate.find("keep")!=std::string::npos;};auto first=reducer.reduce(input,faulty);auto second=reducer.reduce(input,faulty);ASSERT_EQ(first,second);ASSERT(first.find("keep")!=std::string::npos);ASSERT(first.size()<input.size());
+    DifferentialFuzzRunner fuzz;auto summary=fuzz.run({99,2,6},32);ASSERT_EQ(summary.generated,32u);ASSERT_EQ(summary.valid,32u);ASSERT_EQ(summary.rejected,0u);ASSERT_EQ(summary.compared,128u);ASSERT_EQ(summary.mismatches,0u);ASSERT_EQ(summary.crashes,0u);ASSERT(fuzzSummaryJson(summary).find("\"seed\":99")!=std::string::npos);
+    const auto failureDirectory=std::filesystem::temp_directory_path()/"nanopass-phase7-persistence-test";std::filesystem::remove_all(failureDirectory);DifferentialRunner persistenceRunner;auto persistFault=[&](const std::string&candidate){auto outcome=persistenceRunner.run(candidate,{0});if(outcome.compiled&&!outcome.levels.empty()){outcome.levels[0].equivalent=false;outcome.equivalent=false;}return outcome;};auto persisted=fuzz.runWithAdapter({101,1,3},1,failureDirectory,persistFault);ASSERT_EQ(persisted.mismatches,1u);ASSERT_EQ(persisted.distinctFailures,1u);ASSERT(std::filesystem::exists(failureDirectory));ASSERT(!std::filesystem::is_empty(failureDirectory));std::filesystem::remove_all(failureDirectory);
+    const std::string input="int main() {\n  int value = 1;\n  int irrelevant = 29;\n  print(value);\n  return value;\n}\n";
+    DifferentialRunner runner;
+    // Test-only faulty execution adapter: production passes are untouched.
+    auto faulty=[&](const std::string&candidate){auto outcome=runner.run(candidate,{0});if(outcome.compiled&&candidate.find("print(value)")!=std::string::npos&&!outcome.levels.empty()){outcome.levels[0].equivalent=false;outcome.equivalent=false;}return outcome;};
+    DifferentialReducer reducer;auto first=reducer.reduce(input,faulty);auto second=reducer.reduce(input,faulty);ASSERT_EQ(first,second);ASSERT(first.size()<input.size());ASSERT(faulty(first).compiled);ASSERT(!faulty(first).equivalent);
+    auto malformed=MalformedInputFuzzRunner{}.run(8128,64);ASSERT_EQ(malformed.generated,64u);ASSERT_EQ(malformed.crashes,0u);ASSERT_EQ(malformed.rejected+malformed.accepted,64u);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1411,6 +1445,8 @@ int main() {
     RUN_TEST(test_trivial_phi_and_iterative_dce);
     RUN_TEST(test_interpreters_differential_core_and_ssa);
     RUN_TEST(test_ssa_interpreter_parallel_phi_and_limits);
+    RUN_TEST(test_interpreters_execute_fixed_size_arrays);
+    RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);
     RUN_TEST(test_fuzz_summary_and_deterministic_reducer);
 

@@ -29,6 +29,7 @@ struct ExecutionLimits {
   uint64_t maxSteps = 100000;
   size_t maxCallDepth = 128;
   size_t maxOutputBytes = 1 << 20;
+  size_t maxArrayElements = 1 << 20;
 };
 struct ExecutionResult {
   ExecutionStatus status = ExecutionStatus::Success;

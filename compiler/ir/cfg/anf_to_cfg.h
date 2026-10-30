@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -15,6 +16,7 @@ namespace nanopass {
 
 class ANFToCFGLowering {
   std::unordered_map<int, ValueId> tempToVal;
+  std::map<LocalId, LangType> memoryLocals_;
 
 public:
   CFGProgram lower(const ANFProgram &anfProg) {
@@ -47,6 +49,7 @@ private:
     cfgFn.origin = anfFn.origin;
 
     tempToVal.clear();
+    memoryLocals_.clear();
     CFGBuilder builder(cfgFn);
 
     BlockId entryBB = builder.createBlock("entry");
@@ -67,6 +70,7 @@ private:
     }
 
     builder.finalizeEdges();
+    cfgFn.memoryLocals = std::move(memoryLocals_);
     return cfgFn;
   }
 
@@ -80,6 +84,8 @@ private:
     }
 
     if (auto *v = dynamic_cast<ANFVarDeclStmt *>(stmt)) {
+      if (v->type.kind == LangTypeKind::Array)
+        memoryLocals_.emplace(v->id, v->type);
       if (v->init) {
         CFGOperand val = lowerAtom(*v->init, builder);
         builder.emitInstruction(

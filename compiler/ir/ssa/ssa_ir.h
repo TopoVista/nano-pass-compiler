@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <map>
 #include <string>
 #include <variant>
 #include <vector>
@@ -73,6 +74,9 @@ struct SSAFunction {
   std::vector<SSAParameter> parameters;
   BlockId entryBlock;
   std::vector<SSABlock> blocks;
+  // Deliberately memory-backed aggregate locals, copied from CFG metadata.
+  // This is semantic metadata rather than an optimization artifact.
+  std::map<LocalId, LangType> memoryLocals;
   // Source locals eliminated by mem2reg.  Kept as metadata so verifiers and
   // later passes can distinguish deliberately memory-backed locals from a
   // broken promotion.

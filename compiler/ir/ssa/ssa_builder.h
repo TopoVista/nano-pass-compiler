@@ -38,6 +38,7 @@ private:
   SSAFunction buildFunction(const CFGFunction &cfg, SSAStatistics &stats) {
     SSAFunction out; out.name = cfg.name; out.returnType = cfg.returnType;
     out.entryBlock = cfg.entryBlock; out.origin = cfg.origin;
+    out.memoryLocals = cfg.memoryLocals;
     const auto locals = collectPromotableLocals(cfg);
     for (const auto &[local, _] : locals) out.promotedLocals.push_back(local);
     stats.functions = 1; stats.blocks = cfg.blocks.size();

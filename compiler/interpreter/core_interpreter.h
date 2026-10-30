@@ -30,6 +30,15 @@ class CoreInterpreter {
   RuntimeValue lookup(const Frame &frame, const LocalId &id) {
     auto it=frame.locals.find(id); if(it==frame.locals.end()) fail(ExecutionStatus::RuntimeError,"uninitialized-local","read of "+id.str()); return it->second;
   }
+  int64_t indexOf(const RuntimeValue &value) {
+    if (auto index=std::get_if<int64_t>(&value)) return *index;
+    fail(ExecutionStatus::RuntimeError,"type-error","array index is not an integer");
+  }
+  RuntimeValue arrayRead(const RuntimeValue &array, int64_t index) {
+    auto ptr=std::get_if<RuntimeArray>(&array);if(!ptr||!*ptr)fail(ExecutionStatus::RuntimeError,"type-error","subscripted value is not an array");
+    if(index<0||static_cast<size_t>(index)>=(*ptr)->size())fail(ExecutionStatus::RuntimeError,"array-bounds","array index out of bounds");
+    return constant((**ptr)[static_cast<size_t>(index)]);
+  }
   RuntimeValue unary(UnaryOpKind op, const RuntimeValue &v) {
     if(op==UnaryOpKind::LogicalNot) return !truth(v);
     if(auto i=std::get_if<int64_t>(&v)) return -*i;
@@ -52,11 +61,13 @@ class CoreInterpreter {
     if(auto e=dynamic_cast<const CoreUnaryExpr*>(&expr)) return unary(e->op,eval(*e->operand,frame));
     if(auto e=dynamic_cast<const CoreBinaryExpr*>(&expr)) { auto left=eval(*e->left,frame); if(e->op==BinaryOpKind::LogicalAnd&&!truth(left))return false; if(e->op==BinaryOpKind::LogicalOr&&truth(left))return true; return binary(e->op,left,eval(*e->right,frame)); }
     if(auto e=dynamic_cast<const CoreCallExpr*>(&expr)) { std::vector<RuntimeValue> args;for(const auto&a:e->args)args.push_back(eval(*a,frame));return call(e->callee,args); }
-    fail(ExecutionStatus::UnsupportedFeature,"core-index","Core array execution is not implemented");
+    if(auto e=dynamic_cast<const CoreIndexExpr*>(&expr)) return arrayRead(eval(*e->array,frame),indexOf(eval(*e->index,frame)));
+    fail(ExecutionStatus::UnsupportedFeature,"core-expression","unsupported Core expression");
   }
   Flow statements(const std::vector<std::unique_ptr<CoreStmt>> &stmts, Frame &frame, std::optional<RuntimeValue> &returned) {
-    for(const auto &stmt:stmts) { step(); if(auto s=dynamic_cast<const CoreVarDeclStmt*>(stmt.get())) { if(s->initializer)frame.locals[s->id]=eval(*s->initializer,frame); else fail(ExecutionStatus::RuntimeError,"uninitialized-local","uninitialized declaration "+s->id.str()); }
+    for(const auto &stmt:stmts) { step(); if(auto s=dynamic_cast<const CoreVarDeclStmt*>(stmt.get())) { if(s->initializer)frame.locals[s->id]=eval(*s->initializer,frame); else if(s->type.kind==LangTypeKind::Array){if(s->type.arraySize<0||static_cast<size_t>(s->type.arraySize)>limits_.maxArrayElements)fail(ExecutionStatus::RuntimeError,"allocation-limit","array allocation exceeds execution limit");CoreConstantVal zero=int64_t(0);if(s->type.element&&s->type.element->kind==LangTypeKind::Bool)zero=false;else if(s->type.element&&s->type.element->kind==LangTypeKind::Floating)zero=0.0;frame.locals[s->id]=std::make_shared<std::vector<CoreConstantVal>>(static_cast<size_t>(s->type.arraySize),zero);}else fail(ExecutionStatus::RuntimeError,"uninitialized-local","uninitialized declaration "+s->id.str()); }
       else if(auto s=dynamic_cast<const CoreAssignStmt*>(stmt.get())) frame.locals[s->target]=eval(*s->value,frame);
+      else if(auto s=dynamic_cast<const CoreIndexAssignStmt*>(stmt.get())) {auto &array=frame.locals[s->targetArray];auto ptr=std::get_if<RuntimeArray>(&array);if(!ptr||!*ptr)fail(ExecutionStatus::RuntimeError,"type-error","indexed assignment target is not an array");auto index=indexOf(eval(*s->index,frame));if(index<0||static_cast<size_t>(index)>=(*ptr)->size())fail(ExecutionStatus::RuntimeError,"array-bounds","array index out of bounds");auto value=eval(*s->value,frame);(**ptr)[static_cast<size_t>(index)]=std::visit([](const auto &v)->CoreConstantVal{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,RuntimeArray>)return std::string("<array>");else return v;},value);}
       else if(auto s=dynamic_cast<const CoreExprStmt*>(stmt.get())) (void)eval(*s->expr,frame);
       else if(auto s=dynamic_cast<const CoreIfStmt*>(stmt.get())) {auto f=statements(truth(eval(*s->condition,frame))?s->thenBranch:s->elseBranch,frame,returned);if(f!=Flow::Normal)return f;}
       else if(auto s=dynamic_cast<const CoreWhileStmt*>(stmt.get())) {while(truth(eval(*s->condition,frame))){auto f=statements(s->body,frame,returned);if(f==Flow::Return)return f;if(f==Flow::Break)break;}}
