@@ -173,7 +173,8 @@ remain pending a local LLVM development installation.
 - [x] CoreIR and SSA interpreters with shared execution limits/results
 - [x] Differential O0–O3 semantic checks and fixed-seed grammar-aware campaign
 - [x] Mismatch persistence and deterministic source reduction hook
-- [ ] Sanitizer/CI execution remains externally blocked by the LLVM package
+- [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
+- [ ] Sanitizer execution remains externally blocked by the LLVM package
 
 ### Phase 7 — LLVM/JIT
 - CFG → LLVM lowering (currently AST → LLVM is canonical)
