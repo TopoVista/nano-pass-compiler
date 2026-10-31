@@ -285,9 +285,17 @@ public:
     }
     auto recomputePredecessors = [&] {
       for (auto &block : function.blocks) block.predecessors.clear();
+      for (auto &block : function.blocks) {
+        std::sort(block.successors.begin(), block.successors.end());
+        block.successors.erase(std::unique(block.successors.begin(), block.successors.end()), block.successors.end());
+      }
       for (auto &block : function.blocks) for (BlockId successor : block.successors)
         for (auto &destination : function.blocks) if (destination.id == successor)
           destination.predecessors.push_back(block.id);
+      for (auto &block : function.blocks) {
+        std::sort(block.predecessors.begin(), block.predecessors.end());
+        block.predecessors.erase(std::unique(block.predecessors.begin(), block.predecessors.end()), block.predecessors.end());
+      }
     };
     auto removeUnreachable = [&] {
       std::set<int> reachable; std::deque<BlockId> worklist{function.entryBlock};
