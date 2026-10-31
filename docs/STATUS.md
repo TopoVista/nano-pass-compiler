@@ -140,7 +140,7 @@ planned.
 | Pass manager assertions | 90 |
 | IR/SSA/optimizer/correctness assertions | 5,426 |
 | LLVM backend/JIT assertions | 496 |
-| LLVM 18.1.3 WSL CTest | 82 / 82 passed |
+| LLVM 18.1.3 WSL CTest | 83 / 83 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -148,7 +148,7 @@ planned.
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-Local WSL validation with LLVM 18.1.3: **80/80 CTest** passed; ASan+UBSan
+Local WSL validation with LLVM 18.1.3: **83/83 CTest** passed; ASan+UBSan
 passed the 5,426-assertion IR suite and 496-assertion LLVM backend suite. The
 Windows LLVM package remains invalid because its imported targets reference a
 missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.

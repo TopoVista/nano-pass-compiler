@@ -130,7 +130,11 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano jit examples/factorial.nano -O3
 ./build/compiler/nano run examples/factorial.nano -O3
 
-# Emit a host object or link a host executable through the configured C++ driver.
+# `compile -o` links a host executable through the configured C++ driver.
+# Use --emit-llvm to retain textual LLVM output with -o.
+./build/compiler/nano compile examples/factorial.nano --backend=ssa -O2 -o factorial
+
+# Emit a host object, or make the executable choice explicit.
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-exe -o factorial
 
@@ -256,7 +260,7 @@ Each pass runs **once** — not once per top-level statement.
 | **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
 | Optimizer | ✅ stable | `nano optimize`, `-O0`–`-O3` |
 | ORC JIT | 🧪 optional | `nano jit`, `nano run` with `NANO_BUILD_JIT=ON` |
-| Host AOT emission | 🧪 optional | `nano compile --backend=ssa --emit-obj|--emit-exe -o file` |
+| Host AOT emission | 🧪 optional | `nano compile --backend=ssa -o file` |
 | Web lab | 🗓 planned | Phase 9 |
 
 ---

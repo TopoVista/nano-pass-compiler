@@ -257,11 +257,15 @@ endif()
     set(NANO_SSA_AOT_EXE ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial${CMAKE_EXECUTABLE_SUFFIX})
     add_test(NAME nano_ssa_backend_executable
              COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
-                      --backend=ssa --emit-exe -o ${NANO_SSA_AOT_EXE}
+                      --backend=ssa -O2 -o ${NANO_SSA_AOT_EXE}
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME nano_ssa_backend_executable_run COMMAND ${NANO_SSA_AOT_EXE})
     set_tests_properties(nano_ssa_backend_executable_run PROPERTIES
         DEPENDS nano_ssa_backend_executable)
+    add_test(NAME nano_ssa_backend_explicit_llvm
+             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                      --backend=ssa --emit-llvm -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.ll
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endif()
 
   # ── Per-example integration tests ────────────────────────────────────

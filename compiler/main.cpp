@@ -98,6 +98,7 @@ struct Options {
     bool showBeforeAfter    = false;
     bool remarks            = false;
     bool whyNotOptimized    = false;
+    bool emitLLVM           = false;
     bool emitObject         = false;
     bool emitExecutable     = false;
 };
@@ -130,7 +131,7 @@ void printHelp(std::ostream &out) {
         << "  --format=optimized Emit optimized SSA IR.\n"
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
-        << "  --emit-llvm       Emit LLVM textual IR.\n"
+        << "  --emit-llvm       Emit LLVM textual IR (the default without -o).\n"
         << "  --emit-obj        Emit a host-native object file (requires -o).\n"
         << "  --emit-exe        Link a host-native executable (requires -o).\n"
         << "  --backend=ast|ssa Select the AST reference or SSA LLVM backend.\n"
@@ -202,6 +203,7 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             if (!takeValue(i, argc, argv, o.output, arg, err)) return false;
         } else if (arg == "--emit-llvm") {
             o.format = "llvm";
+            o.emitLLVM = true;
         } else if (arg == "--emit-obj") {
             o.emitObject = true;
         } else if (arg == "--emit-exe") {
@@ -210,6 +212,7 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.backend = std::string(arg.substr(10));
         } else if (arg.starts_with("--format=")) {
             o.format = std::string(arg.substr(9));
+            o.emitLLVM = o.format == "llvm";
         } else if (arg.starts_with("--passes=")) {
             o.passes = std::string(arg.substr(9));
         } else if (arg.starts_with("--stop-after=")) {
@@ -266,6 +269,13 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     if (o.command == Command::Compile && (o.emitObject || o.emitExecutable) && o.output.empty()) {
         err << "error: --emit-obj and --emit-exe require -o <file>\n";
         return false;
+    }
+    // `compile -o` is the normal AOT spelling. LLVM text remains available
+    // through the explicit --emit-llvm (or --format=llvm) request; compiling
+    // without -o still writes textual IR to stdout for inspection.
+    if (o.command == Command::Compile && !o.output.empty() &&
+        !o.emitLLVM && !o.emitObject && !o.emitExecutable && o.format == "llvm") {
+        o.emitExecutable = true;
     }
     if (o.backend != "ast" && o.backend != "ssa") {
         err << "error: --backend must be 'ast' or 'ssa'\n";

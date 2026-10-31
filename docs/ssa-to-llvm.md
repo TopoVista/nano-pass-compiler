@@ -44,6 +44,9 @@ the configured C++ driver:
 nano compile example.nano --backend=ssa --emit-exe -o example
 ```
 
+For `compile`, `-o example` selects this executable mode by default; pass
+`--emit-llvm` when `-o` should receive textual LLVM IR instead.
+
 The compiler passes a fixed argument vector to the configured host driver; it
 does not construct a shell command from Nano source. This is host-only AOT
 linking, not cross compilation or a packaged/installable runtime yet.
