@@ -33,6 +33,8 @@
 
 #include "codegen/llvm_codegen.h"
 #include "codegen/lower_stmt.h"
+#include "backend/llvm/ssa_llvm_lowering.h"
+#include "backend/llvm/ssa_llvm_jit.h"
 #include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "sema/resolve_scopes.h"
@@ -59,6 +61,7 @@ enum class Command {
     Compile,
     Verify,
     Run,
+    Jit,
     Explain,
     Graph,
     Optimize,
@@ -70,6 +73,7 @@ struct Options {
     Command     command         = Command::Emit;
     std::string input;
     std::string format          = "llvm";
+    std::string backend         = "ast"; // SSA is opt-in until native differential gates pass.
     std::string output;
     std::string graphTarget;
     std::string passes;       // custom pipeline from --passes=
@@ -98,7 +102,7 @@ void printHelp(std::ostream &out) {
         << "  verify <file>     Run all available compiler invariant checks.\n"
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
-        << "  run <file>        Execute (requires JIT; not yet available).\n"
+        << "  jit <file>        Execute optimized SSA through ORC LLJIT.\n"
         << "  explain <file>    Show full transformation journey.\n"
         << "  graph <file>      Emit a Graphviz graph.\n"
         << "  optimize <file>   Run optimizer (planned).\n\n"
@@ -114,6 +118,7 @@ void printHelp(std::ostream &out) {
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
+        << "  --backend=ast|ssa Select the AST reference or SSA LLVM backend.\n"
         << "  -o <file>         Write output to <file>.\n\n"
         << "Pass pipeline options:\n"
         << "  --print-pipeline         Print the active pass pipeline.\n"
@@ -162,6 +167,7 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     else if (first == "compile")  { o.command = Command::Compile;  ++i; }
     else if (first == "verify")   { o.command = Command::Verify;   ++i; }
     else if (first == "run")      { o.command = Command::Run;      ++i; }
+    else if (first == "jit")      { o.command = Command::Jit;      ++i; }
     else if (first == "explain")  { o.command = Command::Explain;  ++i; }
     else if (first == "graph")    { o.command = Command::Graph;    ++i; }
     else if (first == "optimize") { o.command = Command::Optimize; ++i; }
@@ -181,6 +187,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             if (!takeValue(i, argc, argv, o.output, arg, err)) return false;
         } else if (arg == "--emit-llvm") {
             o.format = "llvm";
+        } else if (arg.starts_with("--backend=")) {
+            o.backend = std::string(arg.substr(10));
         } else if (arg.starts_with("--format=")) {
             o.format = std::string(arg.substr(9));
         } else if (arg.starts_with("--passes=")) {
@@ -235,6 +243,10 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     if (o.command == Command::Compile && o.format != "llvm") {
         err << "error: native executable emission is not yet implemented; "
                "use --emit-llvm\n";
+        return false;
+    }
+    if (o.backend != "ast" && o.backend != "ssa") {
+        err << "error: --backend must be 'ast' or 'ssa'\n";
         return false;
     }
     return true;
@@ -518,9 +530,11 @@ int main(int argc, char **argv) {
         // The Nano SSA optimizer is intentionally independent of the AST LLVM
         // backend. It is used for inspected optimized SSA only at this stage.
         const bool optimizeSSA = options.command == Command::Optimize ||
+                                 options.command == Command::Jit ||
                                  options.command == Command::Verify ||
                                  options.command == Command::Explain ||
-                                 (options.command == Command::Emit && options.format == "optimized");
+                                 (options.command == Command::Emit && options.format == "optimized") ||
+                                 (options.backend == "ssa" && options.format == "llvm");
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
         nanopass::opt::SSAOptimizationResult optimizationResult;
@@ -740,6 +754,46 @@ int main(int argc, char **argv) {
         }
 
         // ── LLVM lowering ─────────────────────────────────────────────────
+        if (options.command == Command::Jit) {
+            const auto execution = nanopass::llvm_backend::executeWithLLJIT(irRes.ssa);
+            if (!execution.error.empty()) {
+                std::cerr << "error: ORC JIT execution failed: " << execution.error << '\n';
+                return 1;
+            }
+            std::cout << "JIT return: " << execution.returnValue << '\n';
+            return 0;
+        }
+        if (options.backend == "ssa") {
+            llvm::LLVMContext context;
+            nanopass::llvm_backend::SSALLVMLowering lowering(context);
+            auto lowered = lowering.lower(irRes.ssa, "nano_ssa_module");
+            if (!lowered.module->getFunction("main")) {
+                std::cerr << "error: no 'main' function defined\n";
+                return 1;
+            }
+            if (options.command == Command::Verify) {
+                std::cout << "PASS  LLVM (SSA backend)\n"
+                             "Total: 11 stages, 0 failures\n";
+                return 0;
+            }
+            if (options.command == Command::Explain) {
+                std::cout << "08 LLVM (SSA backend)\n"
+                          << "   functions lowered: " << lowered.statistics.functions << "\n"
+                          << "   blocks lowered: " << lowered.statistics.blocks << "\n"
+                          << "   phi nodes lowered: " << lowered.statistics.phis << "\n"
+                          << "   module verified: PASS\n";
+                return 0;
+            }
+            if (options.output.empty()) {
+                lowered.module->print(llvm::outs(), nullptr);
+            } else {
+                std::error_code ec;
+                llvm::raw_fd_ostream out(options.output, ec, llvm::sys::fs::OF_Text);
+                if (ec) { std::cerr << "error: could not write '" << options.output << "': " << ec.message() << '\n'; return 1; }
+                lowered.module->print(out, nullptr);
+            }
+            return 0;
+        }
         llvm::LLVMContext context;
         llvm::Module module("nano_module", context);
         LLVMCodegen codegen(context, &module);

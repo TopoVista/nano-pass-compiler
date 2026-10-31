@@ -24,6 +24,9 @@ add_executable(nano
     codegen/llvm_codegen.cpp
     codegen/lower_stmt.cpp
     codegen/lower_expr.cpp
+    backend/llvm/ssa_llvm_lowering.cpp
+    backend/llvm/llvm_runtime.cpp
+    backend/llvm/ssa_llvm_jit.cpp
 )
 
 target_compile_features(nano PRIVATE cxx_std_20)
@@ -36,8 +39,12 @@ target_include_directories(nano PRIVATE
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 target_compile_options(nano PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-llvm_map_components_to_libnames(LLVM_LIBS core support)
+llvm_map_components_to_libnames(LLVM_LIBS core support orcjit native)
 target_link_libraries(nano PRIVATE ${LLVM_LIBS})
+
+if(UNIX)
+  target_link_options(nano PRIVATE -rdynamic)
+endif()
 
 # Enable useful warnings for NanoPass's own code.
 # We avoid -Werror globally because LLVM headers can trigger warnings we can't
@@ -128,6 +135,19 @@ endif()
       target_compile_options(nano_ir_tests PRIVATE -Wa,-mbig-obj)
     endif()
   endif()
+
+  add_executable(nano_llvm_backend_tests
+      ${CMAKE_SOURCE_DIR}/tests/llvm_backend_tests.cpp
+      backend/llvm/ssa_llvm_lowering.cpp
+      backend/llvm/ssa_llvm_jit.cpp
+      backend/llvm/llvm_runtime.cpp)
+  target_compile_features(nano_llvm_backend_tests PRIVATE cxx_std_20)
+  target_include_directories(nano_llvm_backend_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+  target_compile_options(nano_llvm_backend_tests PRIVATE ${LLVM_DEFINITIONS_LIST})
+  target_link_libraries(nano_llvm_backend_tests PRIVATE ${LLVM_LIBS})
+  if(UNIX)
+    target_link_options(nano_llvm_backend_tests PRIVATE -rdynamic)
+  endif()
   if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_ir_tests PRIVATE
       -fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -171,6 +191,8 @@ endif()
       COMMAND nano_ir_tests
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
+  add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example
