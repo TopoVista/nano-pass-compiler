@@ -1210,6 +1210,16 @@ static void test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge() {
     ASSERT_EQ(function.blocks[1].phis[0].incoming[0].predecessor.index,0);
 }
 
+static void test_simplify_cfg_deduplicates_collapsed_branch_edges() {
+    SSAFunction function; function.name="collapsed"; function.returnType=LangType::Int(); function.entryBlock={0};
+    SSABlock entry; entry.id={0}; entry.successors={{1},{1}};
+    entry.terminator.value=SSATerminator::Branch{SSAOperand{CoreConstantVal{true}},{1},{1}};
+    SSABlock exit; exit.id={1}; exit.predecessors={{0}}; exit.terminator.value=SSATerminator::Return{SSAOperand{CoreConstantVal{int64_t(0)}}};
+    function.blocks={entry,exit}; SSAOptimizationContext context; SimplifyCFGPass simplify;
+    const auto result=simplify.run(function,context); verifyAfter(simplify,function,context);
+    ASSERT(result.changed); ASSERT_EQ(function.blocks[0].successors.size(),1u); ASSERT_EQ(function.blocks[1].predecessors.size(),1u);
+}
+
 static void test_loop_info_nesting_exits_and_preheaders() {
     auto result=compileToIR(R"(int f(int n) { int i=0; int j=0; while(i<n) { j=0; while(j<n) { j=j+1; } i=i+1; } return i; } int main(){return f(2);})");
     SSAStatistics stats; SSABuilder builder; SSAProgram program=builder.build(result.cfg,&stats); SSAFunction *function=nullptr;
@@ -1449,6 +1459,7 @@ int main() {
     RUN_TEST(test_sccp_unknown_branch_and_loop_converge);
     RUN_TEST(test_optimizer_o3_reaches_bounded_fixpoint);
     RUN_TEST(test_simplify_cfg_forwards_empty_block_and_repairs_phi_edge);
+    RUN_TEST(test_simplify_cfg_deduplicates_collapsed_branch_edges);
     RUN_TEST(test_loop_info_nesting_exits_and_preheaders);
     RUN_TEST(test_licm_hoists_only_safe_invariants);
     RUN_TEST(test_strength_reduction_and_call_graph_recursion);
