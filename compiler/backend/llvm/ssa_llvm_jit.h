@@ -9,6 +9,7 @@ namespace nanopass::llvm_backend {
 
 struct JITExecutionResult {
   std::int64_t returnValue = 0;
+  std::string stdoutText;
   std::string error;
 };
 

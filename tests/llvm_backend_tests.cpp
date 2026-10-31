@@ -40,6 +40,58 @@ SSAFunction mainFunction() {
   print.callee = "print"; print.callArgs.push_back(SSAOperand{ValueId{0}}); block.instructions.push_back(std::move(print));
   block.terminator.value = SSATerminator::Return{SSAOperand{ValueId{0}}}; fn.blocks.push_back(std::move(block)); return fn;
 }
+
+SSAFunction loopFunction() {
+  SSAFunction fn; fn.name = "main"; fn.returnType = LangType::Int(64); fn.entryBlock = {0};
+  SSABlock entry; entry.id = {0}; entry.successors = {{1}}; entry.instructions.push_back(constant({0}, 0)); entry.terminator.value = SSATerminator::Jump{{1}};
+  SSABlock header; header.id = {1}; header.predecessors = {{0}, {2}}; header.successors = {{2}, {3}};
+  header.phis.push_back({{1}, {"i", 0}, LangType::Int(64), {{{0}, {0}}, {{2}, {3}}}, {}});
+  SSAInstruction compare; compare.kind = SSAInstructionKind::Binary; compare.result = ValueId{2}; compare.type = LangType::Bool();
+  compare.binaryOp = BinaryOpKind::Lt; compare.operand1 = ValueId{1}; compare.operand2 = CoreConstantVal{int64_t(3)}; header.instructions.push_back(compare);
+  header.terminator.value = SSATerminator::Branch{SSAOperand{ValueId{2}}, {2}, {3}};
+  SSABlock latch; latch.id = {2}; latch.predecessors = {{1}}; latch.successors = {{1}};
+  SSAInstruction increment; increment.kind = SSAInstructionKind::Binary; increment.result = ValueId{3}; increment.type = LangType::Int(64);
+  increment.binaryOp = BinaryOpKind::Add; increment.operand1 = ValueId{1}; increment.operand2 = CoreConstantVal{int64_t(1)}; latch.instructions.push_back(increment);
+  latch.terminator.value = SSATerminator::Jump{{1}};
+  SSABlock exit; exit.id = {3}; exit.predecessors = {{1}}; exit.terminator.value = SSATerminator::Return{SSAOperand{ValueId{1}}};
+  fn.blocks = {std::move(entry), std::move(header), std::move(latch), std::move(exit)};
+  return fn;
+}
+
+SSAFunction factorial() {
+  SSAFunction fn; fn.name = "fact"; fn.returnType = LangType::Int(64); fn.entryBlock = {0};
+  fn.parameters.push_back({{0}, {"n", 0}, LangType::Int(64)});
+  SSABlock entry; entry.id = {0}; entry.successors = {{1}, {2}};
+  SSAInstruction compare; compare.kind = SSAInstructionKind::Binary; compare.result = ValueId{1}; compare.type = LangType::Bool();
+  compare.binaryOp = BinaryOpKind::Le; compare.operand1 = ValueId{0}; compare.operand2 = CoreConstantVal{int64_t(1)}; entry.instructions.push_back(compare);
+  entry.terminator.value = SSATerminator::Branch{SSAOperand{ValueId{1}}, {1}, {2}};
+  SSABlock base; base.id = {1}; base.predecessors = {{0}}; base.terminator.value = SSATerminator::Return{SSAOperand{CoreConstantVal{int64_t(1)}}};
+  SSABlock recur; recur.id = {2}; recur.predecessors = {{0}};
+  SSAInstruction decrement; decrement.kind = SSAInstructionKind::Binary; decrement.result = ValueId{2}; decrement.type = LangType::Int(64);
+  decrement.binaryOp = BinaryOpKind::Sub; decrement.operand1 = ValueId{0}; decrement.operand2 = CoreConstantVal{int64_t(1)}; recur.instructions.push_back(decrement);
+  SSAInstruction call; call.kind = SSAInstructionKind::Call; call.result = ValueId{3}; call.type = LangType::Int(64); call.callee = "fact"; call.callArgs = {SSAOperand{ValueId{2}}}; recur.instructions.push_back(call);
+  SSAInstruction multiply; multiply.kind = SSAInstructionKind::Binary; multiply.result = ValueId{4}; multiply.type = LangType::Int(64);
+  multiply.binaryOp = BinaryOpKind::Mul; multiply.operand1 = ValueId{0}; multiply.operand2 = ValueId{3}; recur.instructions.push_back(multiply);
+  recur.terminator.value = SSATerminator::Return{SSAOperand{ValueId{4}}};
+  fn.blocks = {std::move(entry), std::move(base), std::move(recur)}; return fn;
+}
+
+SSAFunction factorialMain() {
+  SSAFunction fn; fn.name = "main"; fn.returnType = LangType::Int(64); fn.entryBlock = {0}; SSABlock block; block.id = {0};
+  SSAInstruction call; call.kind = SSAInstructionKind::Call; call.result = ValueId{0}; call.type = LangType::Int(64); call.callee = "fact"; call.callArgs = {SSAOperand{CoreConstantVal{int64_t(5)}}}; block.instructions.push_back(call);
+  block.terminator.value = SSATerminator::Return{SSAOperand{ValueId{0}}}; fn.blocks.push_back(std::move(block)); return fn;
+}
+
+SSAFunction arrayMain() {
+  SSAFunction fn; fn.name = "main"; fn.returnType = LangType::Int(64); fn.entryBlock = {0};
+  const LocalId array{"values", 0}; fn.memoryLocals.emplace(array, LangType::Array(LangType::Int(64), 2));
+  SSABlock block; block.id = {0};
+  SSAInstruction store; store.kind = SSAInstructionKind::StoreIndex; store.type = LangType::Int(64); store.local = array;
+  store.operand1 = CoreConstantVal{int64_t(1)}; store.operand2 = CoreConstantVal{int64_t(17)}; block.instructions.push_back(store);
+  SSAInstruction load; load.kind = SSAInstructionKind::LoadIndex; load.result = ValueId{0}; load.type = LangType::Int(64); load.local = array;
+  load.operand1 = CoreConstantVal{int64_t(1)}; block.instructions.push_back(load);
+  block.terminator.value = SSATerminator::Return{SSAOperand{ValueId{0}}}; fn.blocks.push_back(std::move(block)); return fn;
+}
 }
 
 int main() {
@@ -53,6 +105,22 @@ int main() {
   const auto execution = executeWithLLJIT(program);
   CHECK(execution.error.empty());
   CHECK(execution.returnValue == 7);
+  CHECK(execution.stdoutText == "7\n");
+
+  SSAProgram loop; loop.functions.push_back(loopFunction());
+  const auto loopExecution = executeWithLLJIT(loop);
+  CHECK(loopExecution.error.empty());
+  CHECK(loopExecution.returnValue == 3);
+
+  SSAProgram recursive; recursive.functions.push_back(factorial()); recursive.functions.push_back(factorialMain());
+  const auto recursiveExecution = executeWithLLJIT(recursive);
+  CHECK(recursiveExecution.error.empty());
+  CHECK(recursiveExecution.returnValue == 120);
+
+  SSAProgram arrays; arrays.functions.push_back(arrayMain());
+  const auto arrayExecution = executeWithLLJIT(arrays);
+  CHECK(arrayExecution.error.empty());
+  CHECK(arrayExecution.returnValue == 17);
   std::cout << "llvm backend tests: " << (failures == 0 ? "passed" : "failed") << '\n';
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

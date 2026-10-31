@@ -1,6 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+
+namespace nanopass::llvm_backend {
+// Returns the prior thread-local sink. A null sink writes to std::cout.
+std::string *setRuntimeOutputSink(std::string *sink) noexcept;
+}
 
 // These symbols intentionally use a C ABI: they are referenced by generated
 // modules and explicitly registered with ORC rather than discovered by chance

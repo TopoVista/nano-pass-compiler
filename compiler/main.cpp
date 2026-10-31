@@ -34,7 +34,9 @@
 #include "codegen/llvm_codegen.h"
 #include "codegen/lower_stmt.h"
 #include "backend/llvm/ssa_llvm_lowering.h"
+#if defined(NANO_HAS_ORC_JIT)
 #include "backend/llvm/ssa_llvm_jit.h"
+#endif
 #include "lexer/lexer.h"
 #include "parser/parser.h"
 #include "sema/resolve_scopes.h"
@@ -755,13 +757,19 @@ int main(int argc, char **argv) {
 
         // ── LLVM lowering ─────────────────────────────────────────────────
         if (options.command == Command::Jit) {
+#if defined(NANO_HAS_ORC_JIT)
             const auto execution = nanopass::llvm_backend::executeWithLLJIT(irRes.ssa);
             if (!execution.error.empty()) {
                 std::cerr << "error: ORC JIT execution failed: " << execution.error << '\n';
                 return 1;
             }
+            std::cout << execution.stdoutText;
             std::cout << "JIT return: " << execution.returnValue << '\n';
             return 0;
+#else
+            std::cerr << "error: this NanoPass build was configured with NANO_BUILD_JIT=OFF\n";
+            return 2;
+#endif
         }
         if (options.backend == "ssa") {
             llvm::LLVMContext context;

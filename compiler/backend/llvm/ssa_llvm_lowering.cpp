@@ -141,8 +141,15 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
       ctx.blocks.emplace(block.id.index, llvm::BasicBlock::Create(context_, "bb" + std::to_string(block.id.index), &function));
     auto *entry = ctx.blocks.at(source.entryBlock.index);
     llvm::IRBuilder<> entryBuilder(entry, entry->begin());
-    for (const auto &[local, type] : source.memoryLocals)
-      ctx.locals.emplace(local, entryBuilder.CreateAlloca(lowerType(context_, type), nullptr, local.str()));
+    for (const auto &[local, type] : source.memoryLocals) {
+      auto *storageType = lowerType(context_, type);
+      auto *slot = entryBuilder.CreateAlloca(storageType, nullptr, local.str());
+      // The reference engines define freshly allocated fixed arrays as zeroed.
+      // Scalar locals intentionally retain their existing uninitialized model.
+      if (type.kind == LangTypeKind::Array)
+        entryBuilder.CreateStore(llvm::ConstantAggregateZero::get(storageType), slot);
+      ctx.locals.emplace(local, slot);
+    }
 
     // Pre-create phis before instructions, then fill incoming edges after all
     // definitions have mappings. This is essential for loop and inline phis.

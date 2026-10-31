@@ -19,15 +19,18 @@ message(STATUS "NanoPass using LLVM ${LLVM_PACKAGE_VERSION}")
 # include path.
 
 # ── Main compiler executable ────────────────────────────────────────────────
-add_executable(nano
+set(NANO_SOURCES
     main.cpp
     codegen/llvm_codegen.cpp
     codegen/lower_stmt.cpp
     codegen/lower_expr.cpp
     backend/llvm/ssa_llvm_lowering.cpp
     backend/llvm/llvm_runtime.cpp
-    backend/llvm/ssa_llvm_jit.cpp
 )
+if(NANO_BUILD_JIT)
+  list(APPEND NANO_SOURCES backend/llvm/ssa_llvm_jit.cpp)
+endif()
+add_executable(nano ${NANO_SOURCES})
 
 target_compile_features(nano PRIVATE cxx_std_20)
 
@@ -39,10 +42,15 @@ target_include_directories(nano PRIVATE
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 target_compile_options(nano PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-llvm_map_components_to_libnames(LLVM_LIBS core support orcjit native)
+set(NANO_LLVM_COMPONENTS core support)
+if(NANO_BUILD_JIT)
+  list(APPEND NANO_LLVM_COMPONENTS orcjit native)
+  target_compile_definitions(nano PRIVATE NANO_HAS_ORC_JIT=1)
+endif()
+llvm_map_components_to_libnames(LLVM_LIBS ${NANO_LLVM_COMPONENTS})
 target_link_libraries(nano PRIVATE ${LLVM_LIBS})
 
-if(UNIX)
+if(UNIX AND NANO_BUILD_JIT)
   target_link_options(nano PRIVATE -rdynamic)
 endif()
 
@@ -136,6 +144,7 @@ endif()
     endif()
   endif()
 
+  if(NANO_BUILD_JIT)
   add_executable(nano_llvm_backend_tests
       ${CMAKE_SOURCE_DIR}/tests/llvm_backend_tests.cpp
       backend/llvm/ssa_llvm_lowering.cpp
@@ -147,6 +156,7 @@ endif()
   target_link_libraries(nano_llvm_backend_tests PRIVATE ${LLVM_LIBS})
   if(UNIX)
     target_link_options(nano_llvm_backend_tests PRIVATE -rdynamic)
+  endif()
   endif()
   if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_ir_tests PRIVATE
@@ -191,8 +201,10 @@ endif()
       COMMAND nano_ir_tests
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
-  add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
-           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  if(NANO_BUILD_JIT)
+    add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endif()
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example
