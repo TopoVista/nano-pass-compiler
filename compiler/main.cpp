@@ -18,10 +18,12 @@
 //   - nano analyses         shows all registered analyses
 
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -33,6 +35,7 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Program.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -96,6 +99,7 @@ struct Options {
     bool remarks            = false;
     bool whyNotOptimized    = false;
     bool emitObject         = false;
+    bool emitExecutable     = false;
 };
 
 // ============================================================
@@ -107,7 +111,7 @@ void printHelp(std::ostream &out) {
         << "  nano <command> <file> [options]\n\n"
         << "Commands:\n"
         << "  emit <file>       Emit an intermediate representation.\n"
-        << "  compile <file>    Compile to LLVM IR (--emit-llvm) or an object file (--emit-obj).\n"
+        << "  compile <file>    Compile to LLVM IR, a host object, or a host executable.\n"
         << "  verify <file>     Run all available compiler invariant checks.\n"
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
@@ -128,6 +132,7 @@ void printHelp(std::ostream &out) {
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
         << "  --emit-obj        Emit a host-native object file (requires -o).\n"
+        << "  --emit-exe        Link a host-native executable (requires -o).\n"
         << "  --backend=ast|ssa Select the AST reference or SSA LLVM backend.\n"
         << "  -o <file>         Write output to <file>.\n\n"
         << "Pass pipeline options:\n"
@@ -199,6 +204,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.format = "llvm";
         } else if (arg == "--emit-obj") {
             o.emitObject = true;
+        } else if (arg == "--emit-exe") {
+            o.emitExecutable = true;
         } else if (arg.starts_with("--backend=")) {
             o.backend = std::string(arg.substr(10));
         } else if (arg.starts_with("--format=")) {
@@ -252,8 +259,12 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
         err << "error: expected an input file\n";
         return false;
     }
-    if (o.command == Command::Compile && o.emitObject && o.output.empty()) {
-        err << "error: --emit-obj requires -o <file>\n";
+    if (o.command == Command::Compile && o.emitObject && o.emitExecutable) {
+        err << "error: choose only one of --emit-obj or --emit-exe\n";
+        return false;
+    }
+    if (o.command == Command::Compile && (o.emitObject || o.emitExecutable) && o.output.empty()) {
+        err << "error: --emit-obj and --emit-exe require -o <file>\n";
         return false;
     }
     if (o.backend != "ast" && o.backend != "ssa") {
@@ -288,6 +299,35 @@ bool emitNativeObject(llvm::Module &module, const std::string &path,
         return false;
     }
     passes.run(module);
+    return true;
+}
+
+bool emitNativeExecutable(llvm::Module &module, const std::string &path,
+                          std::ostream &err) {
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto object = std::filesystem::temp_directory_path() /
+        ("nanopass-aot-" + std::to_string(unique) + ".o");
+    if (!emitNativeObject(module, object.string(), err)) return false;
+    struct RemoveObject {
+        std::filesystem::path path;
+        ~RemoveObject() { std::error_code ignored; std::filesystem::remove(path, ignored); }
+    } cleanup{object};
+    const std::string compiler = NANO_HOST_CXX;
+    const std::string runtime = NANO_RUNTIME_LIBRARY_PATH;
+    const std::string objectPath = object.string();
+    std::vector<llvm::StringRef> arguments = {
+        compiler, objectPath, runtime, "-o", path,
+    };
+    std::string linkError;
+    bool executionFailed = false;
+    const int exitCode = llvm::sys::ExecuteAndWait(
+        compiler, arguments, std::nullopt, {}, 0, 0, &linkError, &executionFailed);
+    if (executionFailed || exitCode != 0) {
+        err << "error: host linker failed";
+        if (!linkError.empty()) err << ": " << linkError;
+        err << '\n';
+        return false;
+    }
     return true;
 }
 
@@ -570,7 +610,8 @@ int main(int argc, char **argv) {
                                  (options.command == Command::Emit && options.format == "optimized") ||
                                  (options.backend == "ssa" &&
                                   (options.format == "llvm" ||
-                                   (options.command == Command::Compile && options.emitObject)));
+                                   (options.command == Command::Compile &&
+                                    (options.emitObject || options.emitExecutable))));
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
         nanopass::opt::SSAOptimizationResult optimizationResult;
@@ -819,6 +860,11 @@ int main(int argc, char **argv) {
                 std::cout << "native object written to '" << options.output << "'\n";
                 return 0;
             }
+            if (options.command == Command::Compile && options.emitExecutable) {
+                if (!emitNativeExecutable(*lowered.module, options.output, std::cerr)) return 1;
+                std::cout << "native executable written to '" << options.output << "'\n";
+                return 0;
+            }
             if (options.command == Command::Verify) {
                 std::cout << "PASS  LLVM (SSA backend)\n"
                              "Total: 11 stages, 0 failures\n";
@@ -866,6 +912,11 @@ int main(int argc, char **argv) {
         if (options.command == Command::Compile && options.emitObject) {
             if (!emitNativeObject(module, options.output, std::cerr)) return 1;
             std::cout << "native object written to '" << options.output << "'\n";
+            return 0;
+        }
+        if (options.command == Command::Compile && options.emitExecutable) {
+            if (!emitNativeExecutable(module, options.output, std::cerr)) return 1;
+            std::cout << "native executable written to '" << options.output << "'\n";
             return 0;
         }
 

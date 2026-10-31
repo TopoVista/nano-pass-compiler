@@ -19,6 +19,12 @@ message(STATUS "NanoPass using LLVM ${LLVM_PACKAGE_VERSION}")
 # include path.
 
 # ── Main compiler executable ────────────────────────────────────────────────
+# AOT executables link this compact C ABI runtime, while the JIT resolves the
+# same symbols from the compiler process. Keep it free of LLVM dependencies.
+add_library(nano_runtime STATIC backend/llvm/llvm_runtime.cpp)
+target_compile_features(nano_runtime PRIVATE cxx_std_20)
+target_include_directories(nano_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 set(NANO_SOURCES
     main.cpp
     codegen/llvm_codegen.cpp
@@ -31,6 +37,7 @@ if(NANO_BUILD_JIT)
   list(APPEND NANO_SOURCES backend/llvm/ssa_llvm_jit.cpp)
 endif()
 add_executable(nano ${NANO_SOURCES})
+add_dependencies(nano nano_runtime)
 
 target_compile_features(nano PRIVATE cxx_std_20)
 
@@ -49,6 +56,9 @@ if(NANO_BUILD_JIT)
 endif()
 llvm_map_components_to_libnames(LLVM_LIBS ${NANO_LLVM_COMPONENTS})
 target_link_libraries(nano PRIVATE ${LLVM_LIBS})
+target_compile_definitions(nano PRIVATE
+    NANO_RUNTIME_LIBRARY_PATH="$<TARGET_FILE:nano_runtime>"
+    NANO_HOST_CXX="${CMAKE_CXX_COMPILER}")
 
 if(UNIX AND NANO_BUILD_JIT)
   target_link_options(nano PRIVATE -rdynamic)
@@ -244,6 +254,14 @@ endif()
              COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
                       --backend=ssa --emit-obj -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.o
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set(NANO_SSA_AOT_EXE ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial${CMAKE_EXECUTABLE_SUFFIX})
+    add_test(NAME nano_ssa_backend_executable
+             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                      --backend=ssa --emit-exe -o ${NANO_SSA_AOT_EXE}
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_ssa_backend_executable_run COMMAND ${NANO_SSA_AOT_EXE})
+    set_tests_properties(nano_ssa_backend_executable_run PROPERTIES
+        DEPENDS nano_ssa_backend_executable)
   endif()
 
   # ── Per-example integration tests ────────────────────────────────────

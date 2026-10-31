@@ -36,6 +36,14 @@ nano compile example.nano --backend=ssa --emit-obj -o example.o
 ```
 
 Object emission sets the LLVM module triple and data layout from a native
-`TargetMachine` and uses LLVM's object-file emitter.  NanoPass does not yet
-link that object to a standalone executable: the print runtime is currently
-provided by the JIT host process, not a distributable runtime library.
+`TargetMachine` and uses LLVM's object-file emitter. The optional executable
+mode links that object against the build's compact C-ABI print runtime through
+the configured C++ driver:
+
+```text
+nano compile example.nano --backend=ssa --emit-exe -o example
+```
+
+The compiler passes a fixed argument vector to the configured host driver; it
+does not construct a shell command from Nano source. This is host-only AOT
+linking, not cross compilation or a packaged/installable runtime yet.

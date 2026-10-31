@@ -32,8 +32,9 @@ planned.
   and module verifier gates.
 - **ORC JIT** — `nano jit` / `nano run` execute optimized SSA through ORCv2
   LLJIT when built with `NANO_BUILD_JIT=ON`; C-ABI print shims capture output.
-- **Host object emission** — `nano compile --backend=ssa --emit-obj -o file.o`
-  emits a target-machine-verified host object file.
+- **Host AOT emission** — `nano compile --backend=ssa --emit-obj -o file.o`
+  emits a target-machine-verified host object; `--emit-exe -o file` links it
+  to the compact C-ABI runtime with the configured host C++ driver.
 - **Native differential runner** — `nano_jit_correctness fuzz` replays
   generated CoreIR-vs-O3-SSA/JIT cases. Recorded local campaign: seed
   `12648430`, 1,000 generated programs, 1,000 comparisons, 0 mismatches.
@@ -139,6 +140,7 @@ planned.
 | Pass manager assertions | 90 |
 | IR/SSA/optimizer/correctness assertions | 5,426 |
 | LLVM backend/JIT assertions | 496 |
+| LLVM 18.1.3 WSL CTest | 82 / 82 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -207,8 +209,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] Verified SSA → LLVM IR lowering, including CFG, phi, call, recursion,
   in-bounds fixed-array, and short-circuit coverage
 - [x] Optional ORCv2 JIT and captured typed print runtime
-- [x] Host object-file emission and replayable native differential runner
-- [ ] Standalone executable linking with a distributable runtime library
+- [x] Host object/executable emission and replayable native differential runner
+- [ ] Packaged/installable runtime library and cross-target linking
 - [ ] Native array bounds traps, execution limits, profiling, and adaptive JIT
 
 ### Phase 9 — Observability
@@ -231,7 +233,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
   `if/else` to convert.
 - **No anonymous block scopes** — variable shadowing only across functions.
 - **LLVM 14+ required** for build.
-- **No standalone native executable linking** yet — host object emission is
-  available, but it requires a future distributable Nano runtime to link.
+- **AOT linking is host-build-relative** — `--emit-exe` links the runtime
+  archive produced beside the compiler; installation packaging and cross
+  compilation are not implemented.
 - **Native bounds/runtime isolation** are not implemented. The JIT test claim
   covers in-bounds generated programs only; it does not claim a sandbox.

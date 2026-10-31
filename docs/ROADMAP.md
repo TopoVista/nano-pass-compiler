@@ -103,9 +103,9 @@
 - [x] Verified SSA → LLVM lowering with deterministic block/value/phi mapping
 - [x] LLVM function and module verification gates
 - [x] Optional ORC JIT (`nano jit` / `nano run`) under `NANO_BUILD_JIT`
-- [x] Host AOT object emission (`nano compile --backend=ssa --emit-obj`)
+- [x] Host AOT object/executable emission (`nano compile --backend=ssa --emit-obj|--emit-exe`)
 - [x] Reproducible CoreIR-vs-optimized-SSA/JIT differential runner
-- [ ] Standalone executable linking with a packaged Nano runtime
+- [ ] Packaged/installable runtime library and cross-target linking
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Profile collection (`nano profile`)
 

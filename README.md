@@ -130,8 +130,9 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano jit examples/factorial.nano -O3
 ./build/compiler/nano run examples/factorial.nano -O3
 
-# Emit a host object file. Standalone executable linking awaits the packaged runtime.
+# Emit a host object or link a host executable through the configured C++ driver.
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
+./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-exe -o factorial
 
 # Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
@@ -255,7 +256,7 @@ Each pass runs **once** — not once per top-level statement.
 | **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
 | Optimizer | ✅ stable | `nano optimize`, `-O0`–`-O3` |
 | ORC JIT | 🧪 optional | `nano jit`, `nano run` with `NANO_BUILD_JIT=ON` |
-| Host object emission | 🧪 optional | `nano compile --backend=ssa --emit-obj -o file.o` |
+| Host AOT emission | 🧪 optional | `nano compile --backend=ssa --emit-obj|--emit-exe -o file` |
 | Web lab | 🗓 planned | Phase 9 |
 
 ---
