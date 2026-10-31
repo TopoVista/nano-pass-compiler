@@ -121,7 +121,7 @@ Last updated: Phase 7 — LLVM-independent differential execution and seeded sem
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,415 |
+| IR/SSA/optimizer/correctness assertions | 5,423 |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -180,7 +180,7 @@ remain pending a local LLVM development installation.
 
 Latest recorded LLVM-independent campaign: seed `42`, 1,000 generated and
 valid programs, 4,000 O0–O3 comparisons, 0 mismatches/crashes/timeouts, and
-1,994,579 µs elapsed. All generated cases exercised arithmetic, comparisons,
+3,192,709 µs elapsed. All generated cases exercised arithmetic, comparisons,
 conditionals, bounded loops, direct/nested calls, mutable locals, and returns.
 Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 

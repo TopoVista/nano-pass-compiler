@@ -40,8 +40,8 @@ package is unavailable:
 g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
 ./nano-correctness differential examples/factorial.nano
 ./nano-correctness differential-custom examples/optimizer.nano sccp,dce
-./nano-correctness fuzz 42 1000 tests/regressions/generated
-./nano-correctness malformed-fuzz 8128 256
+./nano-correctness fuzz --seed=42 --cases=1000 --save-failures=tests/regressions/generated
+./nano-correctness malformed-fuzz --seed=8128 --cases=256
 ```
 
 The generator is seed- and case-index-reproducible, uses bounded typed source
