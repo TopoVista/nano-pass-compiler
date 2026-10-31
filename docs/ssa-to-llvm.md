@@ -15,8 +15,11 @@ Nano scalar types map directly from `LangType`: integer width to an LLVM
 integer, `bool` to `i1`, `char` to `i8`, float widths to `float`/`double`,
 string to `i8*`, and fixed arrays to LLVM fixed arrays. Memory-backed SSA
 locals become entry-block allocas. Index operations use typed GEP plus load or
-store. Runtime bounds checking is not yet part of this initial backend; native
-array differential equivalence is therefore intentionally not claimed.
+store. A few legacy CFG instructions leave their result type unknown; lowering
+derives that type from a mapped SSA operand, never from a pointer address or a
+textual printer representation. Runtime bounds checking is not yet part of
+this backend, so native array differential equivalence is claimed only for
+in-bounds programs.
 
 The AST LLVM backend remains the default reference backend. The new path is
 explicitly selected with:
@@ -25,5 +28,14 @@ explicitly selected with:
 nano emit example.nano --format=llvm --backend=ssa
 ```
 
-The SSA backend will become the default only after deterministic and generated
-native differential validation covers the supported runtime semantics.
+The default AST backend remains the compatibility reference path.  The SSA
+path additionally supports host object emission:
+
+```text
+nano compile example.nano --backend=ssa --emit-obj -o example.o
+```
+
+Object emission sets the LLVM module triple and data layout from a native
+`TargetMachine` and uses LLVM's object-file emitter.  NanoPass does not yet
+link that object to a standalone executable: the print runtime is currently
+provided by the JIT host process, not a distributable runtime library.

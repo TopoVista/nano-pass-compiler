@@ -12,14 +12,15 @@ visually explains every transformation.
 Source → Lex → Parse → Resolve → TypeCheck
        → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]
        → [CoreIR] → [ANF] → [CFG] → [SSA] → [Optimizer]
-       → LLVM IR → Native / JIT                     (native/JIT planned)
+       → LLVM IR → Host object / ORC JIT            (SSA backend optional)
 ```
 
 Items in `[brackets]` are planned and under active development.
 
-The CFG/SSA pipeline powers verified middle-end analysis and inspection.
-Native LLVM emission still uses the established desugared-AST backend until
-SSA-to-LLVM lowering is introduced in a later phase.
+The CFG/SSA pipeline powers verified middle-end analysis and inspection. The
+AST LLVM backend remains the compatibility default, while the explicit
+`--backend=ssa` path lowers verified optimized SSA through LLVM, can emit a
+host object file, and powers the optional ORC JIT.
 
 The inspected SSA optimizer includes deterministic CFG-cloning direct-call
 inlining: multi-block, loop, phi, multi-return, and void callees are expanded
@@ -27,8 +28,8 @@ only after cost, growth, recursion, and verifier checks succeed.
 
 NanoPass also differentially tests supported programs: CoreIR execution is
 compared with independently executed SSA O0–O3 programs. This is empirical
-semantic testing, not formal proof; LLVM execution remains optional until the
-local LLVM development package is repaired.
+semantic testing, not formal proof. LLVM execution is optional and requires a
+healthy CMake-discoverable LLVM development package.
 
 ## Differential correctness testing
 
@@ -46,8 +47,18 @@ g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
 
 The generator is seed- and case-index-reproducible, uses bounded typed source
 generation, and reports measured JSON counts. These commands provide
-differential testing, not formal verification or native optimized-SSA
-execution.
+differential testing, not formal verification.
+
+When built with `-DNANO_BUILD_JIT=ON`, the native differential runner checks
+the same generated language subset through CoreIR and optimized SSA/LLJIT:
+
+```sh
+./build/compiler/nano_jit_correctness fuzz --seed=12648430 --cases=1000
+```
+
+This is a measured comparison, not a formal proof. It currently covers the
+in-bounds scalar/fixed-array subset; native bounds traps and sandboxing are
+intentionally not claimed.
 
 ---
 
@@ -113,6 +124,14 @@ The produced binary is `build/compiler/nano`.
 
 # Emit LLVM IR
 ./build/compiler/nano emit examples/factorial.nano --format=llvm
+
+# Lower verified optimized SSA through LLVM, then execute it in ORC
+./build/compiler/nano emit examples/factorial.nano --format=llvm --backend=ssa -O3
+./build/compiler/nano jit examples/factorial.nano -O3
+./build/compiler/nano run examples/factorial.nano -O3
+
+# Emit a host object file. Standalone executable linking awaits the packaged runtime.
+./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
 
 # Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
@@ -232,10 +251,11 @@ Each pass runs **once** — not once per top-level statement.
 | **CFG IR + Graphviz** | ✅ **stable** | `--format=cfg`, `nano graph --cfg` |
 | **`nano explain`** | ✅ **stable** | `nano explain` |
 | **`nano verify` (10 stages)** | ✅ **stable** | `nano verify` |
-| LLVM IR emission | ✅ stable | `--format=llvm` |
+| LLVM IR emission | ✅ stable | `--format=llvm`, `--backend=ssa` |
 | **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
-| Optimizer | 🗓 planned | Phase 5 |
-| JIT | 🗓 planned | Phase 8 |
+| Optimizer | ✅ stable | `nano optimize`, `-O0`–`-O3` |
+| ORC JIT | 🧪 optional | `nano jit`, `nano run` with `NANO_BUILD_JIT=ON` |
+| Host object emission | 🧪 optional | `nano compile --backend=ssa --emit-obj -o file.o` |
 | Web lab | 🗓 planned | Phase 9 |
 
 ---
@@ -315,7 +335,7 @@ architecture description including the pass lifecycle diagram.
 | Option | Default | Description |
 |---|---|---|
 | `NANO_BUILD_TESTS` | `ON` | Build the test suite |
-| `NANO_BUILD_JIT` | `OFF` | Build ORC JIT support (planned) |
+| `NANO_BUILD_JIT` | `OFF` | Build ORCv2 JIT, native backend tests, and `nano_jit_correctness` |
 | `NANO_BUILD_WEB_SERVER` | `OFF` | Build JSON API server (planned) |
 | `NANO_ENABLE_SANITIZERS` | `OFF` | AddressSanitizer + UBSan |
 | `NANO_ENABLE_FUZZING` | `OFF` | libFuzzer targets (planned) |
@@ -330,7 +350,8 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Current: **35 tests, 100% passing.**
+The LLVM-independent suites always build; JIT/backend tests are added only
+when `NANO_BUILD_JIT=ON` and a healthy LLVM SDK is found.
 
 Test categories:
 - CLI smoke (`nano_help`, `nano_version`, `nano_passes_command`, `nano_analyses_command`)

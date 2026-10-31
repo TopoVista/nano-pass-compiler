@@ -54,6 +54,30 @@ if(UNIX AND NANO_BUILD_JIT)
   target_link_options(nano PRIVATE -rdynamic)
 endif()
 
+# Reproducible native differential campaign.  It is intentionally a separate
+# executable: Core/SSA correctness remains available without LLVM, while this
+# target exists only when the optional ORC runtime is enabled.
+if(NANO_BUILD_JIT)
+  add_executable(nano_jit_correctness
+      ${CMAKE_SOURCE_DIR}/tools/nano-jit-correctness.cpp
+      backend/llvm/ssa_llvm_lowering.cpp
+      backend/llvm/ssa_llvm_jit.cpp
+      backend/llvm/llvm_runtime.cpp)
+  target_compile_features(nano_jit_correctness PRIVATE cxx_std_20)
+  target_include_directories(nano_jit_correctness PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+  target_compile_options(nano_jit_correctness PRIVATE ${LLVM_DEFINITIONS_LIST})
+  target_link_libraries(nano_jit_correctness PRIVATE ${LLVM_LIBS})
+  if(UNIX)
+    target_link_options(nano_jit_correctness PRIVATE -rdynamic)
+  endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_jit_correctness PRIVATE
+        -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano_jit_correctness PRIVATE -fsanitize=address,undefined)
+  endif()
+endif()
+
 # Enable useful warnings for NanoPass's own code.
 # We avoid -Werror globally because LLVM headers can trigger warnings we can't
 # fix; the PRIVATE scope restricts these flags to our own compilation units.
@@ -157,6 +181,11 @@ endif()
   if(UNIX)
     target_link_options(nano_llvm_backend_tests PRIVATE -rdynamic)
   endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_llvm_backend_tests PRIVATE
+        -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano_llvm_backend_tests PRIVATE -fsanitize=address,undefined)
+  endif()
   endif()
   if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(nano_ir_tests PRIVATE
@@ -203,6 +232,17 @@ endif()
   )
   if(NANO_BUILD_JIT)
     add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_ssa_backend_emit
+             COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                      --format=llvm --backend=ssa -O3
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_ssa_backend_jit
+             COMMAND nano jit ${CMAKE_SOURCE_DIR}/examples/factorial.nano -O3
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_ssa_backend_object
+             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                      --backend=ssa --emit-obj -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.o
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endif()
 

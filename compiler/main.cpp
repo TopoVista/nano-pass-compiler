@@ -28,8 +28,14 @@
 #include <vector>
 
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/CodeGen.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/IR/LegacyPassManager.h>
 
 #include "codegen/llvm_codegen.h"
 #include "codegen/lower_stmt.h"
@@ -89,6 +95,7 @@ struct Options {
     bool showBeforeAfter    = false;
     bool remarks            = false;
     bool whyNotOptimized    = false;
+    bool emitObject         = false;
 };
 
 // ============================================================
@@ -100,7 +107,7 @@ void printHelp(std::ostream &out) {
         << "  nano <command> <file> [options]\n\n"
         << "Commands:\n"
         << "  emit <file>       Emit an intermediate representation.\n"
-        << "  compile <file>    Compile to LLVM IR (--emit-llvm) or native.\n"
+        << "  compile <file>    Compile to LLVM IR (--emit-llvm) or an object file (--emit-obj).\n"
         << "  verify <file>     Run all available compiler invariant checks.\n"
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
@@ -120,6 +127,7 @@ void printHelp(std::ostream &out) {
         << "  --format=llvm     Lower to LLVM IR (default).\n\n"
         << "Compile options:\n"
         << "  --emit-llvm       Emit LLVM textual IR.\n"
+        << "  --emit-obj        Emit a host-native object file (requires -o).\n"
         << "  --backend=ast|ssa Select the AST reference or SSA LLVM backend.\n"
         << "  -o <file>         Write output to <file>.\n\n"
         << "Pass pipeline options:\n"
@@ -189,6 +197,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             if (!takeValue(i, argc, argv, o.output, arg, err)) return false;
         } else if (arg == "--emit-llvm") {
             o.format = "llvm";
+        } else if (arg == "--emit-obj") {
+            o.emitObject = true;
         } else if (arg.starts_with("--backend=")) {
             o.backend = std::string(arg.substr(10));
         } else if (arg.starts_with("--format=")) {
@@ -242,15 +252,42 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
         err << "error: expected an input file\n";
         return false;
     }
-    if (o.command == Command::Compile && o.format != "llvm") {
-        err << "error: native executable emission is not yet implemented; "
-               "use --emit-llvm\n";
+    if (o.command == Command::Compile && o.emitObject && o.output.empty()) {
+        err << "error: --emit-obj requires -o <file>\n";
         return false;
     }
     if (o.backend != "ast" && o.backend != "ssa") {
         err << "error: --backend must be 'ast' or 'ssa'\n";
         return false;
     }
+    return true;
+}
+
+bool emitNativeObject(llvm::Module &module, const std::string &path,
+                      std::ostream &err) {
+    if (llvm::InitializeNativeTarget() || llvm::InitializeNativeTargetAsmPrinter()) {
+        err << "error: could not initialize the native LLVM target\n";
+        return false;
+    }
+    const std::string triple = llvm::sys::getDefaultTargetTriple();
+    std::string targetError;
+    const llvm::Target *target = llvm::TargetRegistry::lookupTarget(triple, targetError);
+    if (!target) { err << "error: could not select native target: " << targetError << '\n'; return false; }
+    llvm::TargetOptions targetOptions;
+    std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+        triple, "generic", "", targetOptions, llvm::Reloc::PIC_));
+    if (!machine) { err << "error: could not create native target machine\n"; return false; }
+    module.setTargetTriple(triple);
+    module.setDataLayout(machine->createDataLayout());
+    std::error_code errorCode;
+    llvm::raw_fd_ostream output(path, errorCode, llvm::sys::fs::OF_None);
+    if (errorCode) { err << "error: could not write '" << path << "': " << errorCode.message() << '\n'; return false; }
+    llvm::legacy::PassManager passes;
+    if (machine->addPassesToEmitFile(passes, output, nullptr, llvm::CodeGenFileType::ObjectFile)) {
+        err << "error: the native target cannot emit an object file\n";
+        return false;
+    }
+    passes.run(module);
     return true;
 }
 
@@ -394,13 +431,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // ── Stub commands ─────────────────────────────────────────────────────
-    if (options.command == Command::Run) {
-        std::cerr << "error: 'nano run' requires JIT execution which is not "
-                     "yet implemented.\n"
-                     "       Use --emit-llvm and run via lli.\n";
-        return 2;
-    }
+    // ── Commands with pre-pipeline validation ─────────────────────────────
     if (options.command == Command::Graph) {
         if (options.graphTarget != "cfg" && options.graphTarget != "dominator-tree" && options.graphTarget != "loops" &&
             !(options.format == "ast" || options.format == "dot")) {
@@ -533,10 +564,13 @@ int main(int argc, char **argv) {
         // backend. It is used for inspected optimized SSA only at this stage.
         const bool optimizeSSA = options.command == Command::Optimize ||
                                  options.command == Command::Jit ||
+                                 options.command == Command::Run ||
                                  options.command == Command::Verify ||
                                  options.command == Command::Explain ||
                                  (options.command == Command::Emit && options.format == "optimized") ||
-                                 (options.backend == "ssa" && options.format == "llvm");
+                                 (options.backend == "ssa" &&
+                                  (options.format == "llvm" ||
+                                   (options.command == Command::Compile && options.emitObject)));
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
         nanopass::opt::SSAOptimizationResult optimizationResult;
@@ -756,7 +790,7 @@ int main(int argc, char **argv) {
         }
 
         // ── LLVM lowering ─────────────────────────────────────────────────
-        if (options.command == Command::Jit) {
+        if (options.command == Command::Jit || options.command == Command::Run) {
 #if defined(NANO_HAS_ORC_JIT)
             const auto execution = nanopass::llvm_backend::executeWithLLJIT(irRes.ssa);
             if (!execution.error.empty()) {
@@ -767,7 +801,8 @@ int main(int argc, char **argv) {
             std::cout << "JIT return: " << execution.returnValue << '\n';
             return 0;
 #else
-            std::cerr << "error: this NanoPass build was configured with NANO_BUILD_JIT=OFF\n";
+            std::cerr << "error: 'nano " << (options.command == Command::Run ? "run" : "jit")
+                      << "' requires a build configured with NANO_BUILD_JIT=ON\n";
             return 2;
 #endif
         }
@@ -778,6 +813,11 @@ int main(int argc, char **argv) {
             if (!lowered.module->getFunction("main")) {
                 std::cerr << "error: no 'main' function defined\n";
                 return 1;
+            }
+            if (options.command == Command::Compile && options.emitObject) {
+                if (!emitNativeObject(*lowered.module, options.output, std::cerr)) return 1;
+                std::cout << "native object written to '" << options.output << "'\n";
+                return 0;
             }
             if (options.command == Command::Verify) {
                 std::cout << "PASS  LLVM (SSA backend)\n"
@@ -821,6 +861,12 @@ int main(int argc, char **argv) {
             std::cerr << "internal compiler error: LLVM module verification "
                          "failed\n";
             return 1;
+        }
+
+        if (options.command == Command::Compile && options.emitObject) {
+            if (!emitNativeObject(module, options.output, std::cerr)) return 1;
+            std::cout << "native object written to '" << options.output << "'\n";
+            return 0;
         }
 
         if (options.command == Command::Verify) {

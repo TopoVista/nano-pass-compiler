@@ -5,14 +5,14 @@
 - [x] Iterated-DF phi placement and dominator-tree renaming
 - [x] Def-use index and `replaceAllUses`
 - [x] SSA verifier, printer, `nano emit --format=ssa`, verify/explain integration
-- [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
+- [x] LLVM 18.1.3 WSL CTest and ASan+UBSan validation
 
 ## Phase 5 — SSA optimizer
 - [x] Function-level optimizer infrastructure and post-pass verification
 - [x] Folding, algebraic simplification, trivial phis, copy propagation, DCE
 - [x] Executable-edge SCCP, CFG cleanup, and dominance-aware CSE
 - [x] O0–O3 and custom pipelines; optimized SSA CLI inspection
-- [ ] LLVM-backed CTest and sanitizer validation (local LLVM SDK unavailable)
+- [x] LLVM 18.1.3 WSL CTest and ASan+UBSan validation
 
 ## Phase 6 — Advanced optimization ✅
 - [x] Natural-loop discovery, nesting, exits, deterministic preheader synthesis, and phi repair
@@ -100,9 +100,12 @@
 - [x] GitHub Actions LLVM-independent correctness smoke
 
 ## Phase 8 — LLVM/JIT
-- [ ] LLVM AOT object and executable emission
-- [ ] LLVM module verification gating (already done; strengthen)
-- [ ] Optional ORC JIT (`nano jit`) under `NANO_BUILD_JIT`
+- [x] Verified SSA → LLVM lowering with deterministic block/value/phi mapping
+- [x] LLVM function and module verification gates
+- [x] Optional ORC JIT (`nano jit` / `nano run`) under `NANO_BUILD_JIT`
+- [x] Host AOT object emission (`nano compile --backend=ssa --emit-obj`)
+- [x] Reproducible CoreIR-vs-optimized-SSA/JIT differential runner
+- [ ] Standalone executable linking with a packaged Nano runtime
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Profile collection (`nano profile`)
 
