@@ -5,6 +5,15 @@
 
 #include "backend/llvm/ssa_llvm_jit.h"
 #include "backend/llvm/ssa_llvm_lowering.h"
+#include "interpreter/core_interpreter.h"
+#include "interpreter/ssa_interpreter.h"
+#include "ir/pipeline.h"
+#include "lexer/lexer.h"
+#include "optimizer/advanced_optimizer.h"
+#include "optimizer/ssa_optimizer.h"
+#include "parser/parser.h"
+#include "sema/resolve_scopes.h"
+#include "sema/type_check.h"
 
 using namespace nanopass;
 using namespace nanopass::llvm_backend;
@@ -92,6 +101,12 @@ SSAFunction arrayMain() {
   load.operand1 = CoreConstantVal{int64_t(1)}; block.instructions.push_back(load);
   block.terminator.value = SSATerminator::Return{SSAOperand{ValueId{0}}}; fn.blocks.push_back(std::move(block)); return fn;
 }
+
+nanopass::IRPipelineResult compilePipeline(const std::string &source) {
+  Lexer lexer(source); Parser parser(lexer.scanTokens()); auto program = parser.parseProgram();
+  ResolveScopesPass resolver; resolver.resolve(program); TypeCheckPass checker; checker.check(program);
+  return nanopass::IRPipeline::runAll(program);
+}
 }
 
 int main() {
@@ -121,6 +136,37 @@ int main() {
   const auto arrayExecution = executeWithLLJIT(arrays);
   CHECK(arrayExecution.error.empty());
   CHECK(arrayExecution.returnValue == 17);
+
+  // This uses the real parser → CoreIR → SSA pipeline and compares the JIT
+  // result to the independent Core interpreter at each Nano O level.
+  auto pipeline = compilePipeline(R"(
+    int choose(int x) { if (x > 0) return 7; return 9; }
+    int loopfn(int n) { int i = 0; while (i < n) { i = i + 1; } return i; }
+    int main() { int[3] values; values[0] = choose(1); values[1] = loopfn(values[0]); values[2] = values[0] + values[1]; print(values[2]); return values[2]; }
+  )");
+  const auto expected = CoreInterpreter{}.run(pipeline.core);
+  CHECK(expected.status == ExecutionStatus::Success);
+  for (int level = 0; level <= 3; ++level) {
+    SSAProgram optimized = pipeline.ssa;
+    for (auto &function : optimized.functions) {
+      nanopass::opt::SSAOptimizationContext context; nanopass::opt::buildPipeline(level).run(function, context);
+      CHECK(verifySSA(function).ok);
+    }
+    const auto executionAtLevel = executeWithLLJIT(optimized);
+    if (!executionAtLevel.error.empty()) std::cerr << "O" << level << " JIT error: " << executionAtLevel.error << '\n';
+    CHECK(executionAtLevel.error.empty());
+    CHECK(executionAtLevel.stdoutText == expected.stdoutText);
+    CHECK(executionAtLevel.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
+  }
+  SSAProgram inlined = pipeline.ssa;
+  CHECK(nanopass::opt::SSAProgramInliner{}.run(inlined).changed);
+  const auto inlinedReference = SSAInterpreter{}.run(inlined);
+  CHECK(sameObservableResult(expected, inlinedReference));
+  const auto inlinedExecution = executeWithLLJIT(inlined);
+  if (!inlinedExecution.error.empty()) std::cerr << "inlined JIT error: " << inlinedExecution.error << '\n';
+  CHECK(inlinedExecution.error.empty());
+  CHECK(inlinedExecution.stdoutText == expected.stdoutText);
+  CHECK(inlinedExecution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
   std::cout << "llvm backend tests: " << (failures == 0 ? "passed" : "failed") << '\n';
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

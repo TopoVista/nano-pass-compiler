@@ -65,6 +65,20 @@ llvm::Value *constant(llvm::IRBuilder<> &builder, const CoreConstantVal &value,
   }, value);
 }
 
+llvm::Type *defaultConstantType(llvm::LLVMContext &context,
+                                const CoreConstantVal &value) {
+  return std::visit([&](const auto &item) -> llvm::Type * {
+    using T = std::decay_t<decltype(item)>;
+    // Untagged integer constants are the source language's ordinary `int`.
+    // Values with a narrower/wider declared type are recovered from a mapped
+    // ValueId before this fallback is used.
+    if constexpr (std::is_same_v<T, int64_t>) return llvm::Type::getInt32Ty(context);
+    else if constexpr (std::is_same_v<T, double>) return llvm::Type::getDoubleTy(context);
+    else if constexpr (std::is_same_v<T, bool>) return llvm::Type::getInt1Ty(context);
+    else return llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(context));
+  }, value);
+}
+
 llvm::Function *runtimePrint(llvm::Module &module, llvm::Type *argument) {
   llvm::LLVMContext &context = module.getContext();
   std::string name;
@@ -165,21 +179,24 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
       ctx.builder.SetInsertPoint(ctx.blocks.at(block.id.index));
       for (const auto &instruction : block.instructions) {
         llvm::Value *result = nullptr;
-        const auto type = lowerType(context_, instruction.type);
-        auto op1 = [&] { return ctx.operand(instruction.operand1, type, block.id); };
+        auto resultType = [&] { return lowerType(context_, instruction.type); };
+        auto op1 = [&](llvm::Type *expected) { return ctx.operand(instruction.operand1, expected, block.id); };
         auto op2 = [&](llvm::Type *expected) { return ctx.operand(instruction.operand2, expected, block.id); };
         switch (instruction.kind) {
-        case SSAInstructionKind::Constant: result = constant(ctx.builder, instruction.constantValue, type); break;
-        case SSAInstructionKind::Copy: result = op1(); break;
+        case SSAInstructionKind::Constant: result = constant(ctx.builder, instruction.constantValue, resultType()); break;
+        case SSAInstructionKind::Copy: result = op1(resultType()); break;
         case SSAInstructionKind::Unary: {
-          auto *operand = op1();
+          auto *operand = op1(resultType());
           result = instruction.unaryOp == UnaryOpKind::Negate
               ? (operand->getType()->isFloatingPointTy() ? ctx.builder.CreateFNeg(operand) : ctx.builder.CreateNeg(operand))
               : ctx.builder.CreateNot(operand); break;
         }
         case SSAInstructionKind::Binary: {
-          llvm::Type *operandType = type;
-          if (std::holds_alternative<ValueId>(instruction.operand1)) operandType = op1()->getType();
+          llvm::Type *operandType = resultType();
+          if (std::holds_alternative<ValueId>(instruction.operand1)) operandType = op1(resultType())->getType();
+          else if (instruction.type.kind == LangTypeKind::Bool &&
+                   std::holds_alternative<CoreConstantVal>(instruction.operand1))
+            operandType = defaultConstantType(context_, std::get<CoreConstantVal>(instruction.operand1));
           auto *left = ctx.operand(instruction.operand1, operandType, block.id);
           auto *right = op2(operandType); const bool fp = left->getType()->isFloatingPointTy();
           switch (instruction.binaryOp) {
@@ -202,9 +219,10 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           std::vector<llvm::Value *> arguments;
           if (instruction.callee == "print") {
             if (instruction.callArgs.size() != 1) ctx.fail("print expects one argument", block.id, instruction.result);
-            llvm::Type *guess = type;
+            llvm::Type *guess = instruction.type.kind == LangTypeKind::Void
+                ? llvm::Type::getInt64Ty(context_) : resultType();
             if (std::holds_alternative<ValueId>(instruction.callArgs.front())) {
-              guess = ctx.operand(instruction.callArgs.front(), type, block.id)->getType();
+              guess = ctx.operand(instruction.callArgs.front(), guess, block.id)->getType();
             } else {
               const auto &literal = std::get<CoreConstantVal>(instruction.callArgs.front());
               guess = std::visit([&](const auto &item) -> llvm::Type * {
@@ -228,8 +246,13 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           if (!callee->getReturnType()->isVoidTy()) result = call;
           break;
         }
-        case SSAInstructionKind::LoadLocal: { auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id,instruction.result); result=ctx.builder.CreateLoad(type,it->second); break; }
-        case SSAInstructionKind::StoreLocal: { auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id); ctx.builder.CreateStore(op1(),it->second); break; }
+        case SSAInstructionKind::LoadLocal: { auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id,instruction.result); result=ctx.builder.CreateLoad(resultType(),it->second); break; }
+        case SSAInstructionKind::StoreLocal: {
+          auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id);
+          const auto sourceLocal=source.memoryLocals.find(instruction.local);
+          if(sourceLocal==source.memoryLocals.end())ctx.fail("store references a promoted or unknown local",block.id);
+          ctx.builder.CreateStore(op1(lowerType(context_,sourceLocal->second)),it->second); break;
+        }
         case SSAInstructionKind::LoadIndex: {
           const auto local = source.memoryLocals.find(instruction.local);
           if (local == source.memoryLocals.end() || local->second.kind != LangTypeKind::Array || !local->second.element)
