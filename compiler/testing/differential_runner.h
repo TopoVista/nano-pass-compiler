@@ -16,7 +16,12 @@
 
 namespace nanopass {
 
-struct DifferentialLevelResult { int level = 0; ExecutionResult execution; bool equivalent = false; };
+struct DifferentialLevelResult {
+  int level = 0;
+  std::string pipeline;
+  ExecutionResult execution;
+  bool equivalent = false;
+};
 struct DifferentialResult {
   bool compiled = false;
   std::string diagnostic;
@@ -46,6 +51,14 @@ inline IRPipelineResult buildIRForDifferential(const std::string &source) {
 }
 
 class DifferentialRunner {
+  static std::string pipelineName(const std::vector<std::string> &passIds) {
+    std::ostringstream out;
+    for (size_t index = 0; index < passIds.size(); ++index) {
+      if (index) out << ',';
+      out << passIds[index];
+    }
+    return out.str();
+  }
   static void optimize(SSAProgram &program, int level,
                        const std::vector<std::string> *passIds = nullptr) {
     for (auto &function : program.functions) {
@@ -71,7 +84,7 @@ public:
     try {
       auto ir=buildIRForDifferential(source); result.compiled=true;
       CoreInterpreter core; SSAInterpreter ssa; result.reference=core.run(ir.core,"main",limits);
-      for(int level:levels) { SSAProgram candidate=ir.ssa; optimize(candidate,level); auto execution=ssa.run(candidate,"main",limits); result.levels.push_back({level,execution,sameObservableResult(result.reference,execution)}); }
+      for(int level:levels) { SSAProgram candidate=ir.ssa; optimize(candidate,level); auto execution=ssa.run(candidate,"main",limits); result.levels.push_back({level,"O"+std::to_string(level),execution,sameObservableResult(result.reference,execution)}); }
       result.equivalent=std::all_of(result.levels.begin(),result.levels.end(),[](const auto &item){return item.equivalent;});
     } catch(const std::exception &error) { result.diagnostic=error.what(); }
     return result;
@@ -85,7 +98,7 @@ public:
       CoreInterpreter core; SSAInterpreter ssa; result.reference=core.run(ir.core,"main",limits);
       SSAProgram candidate=ir.ssa; optimize(candidate,0,&pipeline.passIds);
       auto execution=ssa.run(candidate,"main",limits);
-      result.levels.push_back({-1,execution,sameObservableResult(result.reference,execution)});
+      result.levels.push_back({-1,pipeline.name+":"+pipelineName(pipeline.passIds),execution,sameObservableResult(result.reference,execution)});
       result.equivalent=result.levels.front().equivalent;
     } catch(const std::exception &error) { result.diagnostic=error.what(); }
     return result;
