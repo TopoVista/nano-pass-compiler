@@ -179,26 +179,34 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
       ctx.builder.SetInsertPoint(ctx.blocks.at(block.id.index));
       for (const auto &instruction : block.instructions) {
         llvm::Value *result = nullptr;
-        auto resultType = [&] { return lowerType(context_, instruction.type); };
+        auto declaredResultType = [&]() -> llvm::Type * {
+          try { return lowerType(context_, instruction.type); }
+          catch (const LoweringError &) { ctx.fail("unsupported result type", block.id, instruction.result); }
+        };
         auto op1 = [&](llvm::Type *expected) { return ctx.operand(instruction.operand1, expected, block.id); };
         auto op2 = [&](llvm::Type *expected) { return ctx.operand(instruction.operand2, expected, block.id); };
+        auto operandType = [&](const SSAOperand &operand) -> llvm::Type * {
+          if (std::holds_alternative<ValueId>(operand))
+            return ctx.operand(operand, llvm::Type::getInt32Ty(context_), block.id)->getType();
+          return defaultConstantType(context_, std::get<CoreConstantVal>(operand));
+        };
         switch (instruction.kind) {
-        case SSAInstructionKind::Constant: result = constant(ctx.builder, instruction.constantValue, resultType()); break;
-        case SSAInstructionKind::Copy: result = op1(resultType()); break;
+        case SSAInstructionKind::Constant: {
+          llvm::Type *type = instruction.type.kind == LangTypeKind::Unknown
+              ? defaultConstantType(context_, instruction.constantValue) : declaredResultType();
+          result = constant(ctx.builder, instruction.constantValue, type); break;
+        }
+        case SSAInstructionKind::Copy: result = op1(operandType(instruction.operand1)); break;
         case SSAInstructionKind::Unary: {
-          auto *operand = op1(resultType());
+          auto *operand = op1(operandType(instruction.operand1));
           result = instruction.unaryOp == UnaryOpKind::Negate
               ? (operand->getType()->isFloatingPointTy() ? ctx.builder.CreateFNeg(operand) : ctx.builder.CreateNeg(operand))
               : ctx.builder.CreateNot(operand); break;
         }
         case SSAInstructionKind::Binary: {
-          llvm::Type *operandType = resultType();
-          if (std::holds_alternative<ValueId>(instruction.operand1)) operandType = op1(resultType())->getType();
-          else if (instruction.type.kind == LangTypeKind::Bool &&
-                   std::holds_alternative<CoreConstantVal>(instruction.operand1))
-            operandType = defaultConstantType(context_, std::get<CoreConstantVal>(instruction.operand1));
-          auto *left = ctx.operand(instruction.operand1, operandType, block.id);
-          auto *right = op2(operandType); const bool fp = left->getType()->isFloatingPointTy();
+          llvm::Type *type = operandType(instruction.operand1);
+          auto *left = ctx.operand(instruction.operand1, type, block.id);
+          auto *right = op2(type); const bool fp = left->getType()->isFloatingPointTy();
           switch (instruction.binaryOp) {
           case BinaryOpKind::Add: result=fp?ctx.builder.CreateFAdd(left,right):ctx.builder.CreateAdd(left,right); break;
           case BinaryOpKind::Sub: result=fp?ctx.builder.CreateFSub(left,right):ctx.builder.CreateSub(left,right); break;
@@ -220,7 +228,7 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           if (instruction.callee == "print") {
             if (instruction.callArgs.size() != 1) ctx.fail("print expects one argument", block.id, instruction.result);
             llvm::Type *guess = instruction.type.kind == LangTypeKind::Void
-                ? llvm::Type::getInt64Ty(context_) : resultType();
+                ? llvm::Type::getInt64Ty(context_) : declaredResultType();
             if (std::holds_alternative<ValueId>(instruction.callArgs.front())) {
               guess = ctx.operand(instruction.callArgs.front(), guess, block.id)->getType();
             } else {
@@ -246,7 +254,12 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           if (!callee->getReturnType()->isVoidTy()) result = call;
           break;
         }
-        case SSAInstructionKind::LoadLocal: { auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id,instruction.result); result=ctx.builder.CreateLoad(resultType(),it->second); break; }
+        case SSAInstructionKind::LoadLocal: {
+          auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id,instruction.result);
+          const auto sourceLocal=source.memoryLocals.find(instruction.local);
+          if(sourceLocal==source.memoryLocals.end())ctx.fail("load references a promoted or unknown local",block.id,instruction.result);
+          result=ctx.builder.CreateLoad(lowerType(context_,sourceLocal->second),it->second); break;
+        }
         case SSAInstructionKind::StoreLocal: {
           auto it=ctx.locals.find(instruction.local); if(it==ctx.locals.end())ctx.fail("unknown memory local",block.id);
           const auto sourceLocal=source.memoryLocals.find(instruction.local);

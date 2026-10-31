@@ -14,13 +14,15 @@
 #include "parser/parser.h"
 #include "sema/resolve_scopes.h"
 #include "sema/type_check.h"
+#include "testing/nano_generator.h"
 
 using namespace nanopass;
 using namespace nanopass::llvm_backend;
 
 namespace {
 int failures = 0;
-#define CHECK(EXPR) do { if (!(EXPR)) { std::cerr << "FAIL " #EXPR "\n"; ++failures; } } while (false)
+int assertions = 0;
+#define CHECK(EXPR) do { ++assertions; if (!(EXPR)) { std::cerr << "FAIL " #EXPR "\n"; ++failures; } } while (false)
 
 SSAInstruction constant(ValueId id, int64_t value) {
   SSAInstruction instruction; instruction.kind = SSAInstructionKind::Constant;
@@ -167,6 +169,42 @@ int main() {
   CHECK(inlinedExecution.error.empty());
   CHECK(inlinedExecution.stdoutText == expected.stdoutText);
   CHECK(inlinedExecution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
-  std::cout << "llvm backend tests: " << (failures == 0 ? "passed" : "failed") << '\n';
+
+  // Short-circuit lowering must keep the dead division off the executed path.
+  auto shortCircuit = compilePipeline(R"(
+    int main() { int x = 0; if (false && ((1 / 0) > 0)) { x = 1; } else { x = 2; } print(x); return x; }
+  )");
+  const auto shortCircuitOracle = CoreInterpreter{}.run(shortCircuit.core);
+  CHECK(shortCircuitOracle.status == ExecutionStatus::Success);
+  const auto shortCircuitNative = executeWithLLJIT(shortCircuit.ssa);
+  CHECK(shortCircuitNative.error.empty());
+  CHECK(shortCircuitNative.stdoutText == shortCircuitOracle.stdoutText);
+  CHECK(shortCircuitNative.returnValue == std::stoll(runtimeValueText(*shortCircuitOracle.returnValue)));
+
+  // A bounded deterministic campaign supplements the structural cases above.
+  // The Phase 7 generator produces the scalar subset whose reference semantics
+  // are already established independently of LLVM.
+  NanoProgramGenerator generator({0xC0FFEEu, 3, 8});
+  size_t nativeCompared = 0;
+  for (size_t index = 0; index < 64; ++index) {
+    auto generated = compilePipeline(generator.generate(index).source);
+    const auto oracle = CoreInterpreter{}.run(generated.core);
+    CHECK(oracle.status == ExecutionStatus::Success);
+    SSAProgram optimized = generated.ssa;
+    for (auto &function : optimized.functions) {
+      nanopass::opt::SSAOptimizationContext context;
+      nanopass::opt::buildPipeline(3).run(function, context);
+      CHECK(verifySSA(function).ok);
+    }
+    const auto native = executeWithLLJIT(optimized);
+    if (!native.error.empty()) std::cerr << "generated case " << index << " JIT error: " << native.error << '\n';
+    CHECK(native.error.empty());
+    CHECK(native.stdoutText == oracle.stdoutText);
+    CHECK(native.returnValue == std::stoll(runtimeValueText(*oracle.returnValue)));
+    ++nativeCompared;
+  }
+  CHECK(nativeCompared == 64u);
+  std::cout << "llvm backend tests: " << (failures == 0 ? "passed" : "failed")
+            << " (" << assertions << " assertions)\n";
   return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
