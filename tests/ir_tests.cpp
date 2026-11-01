@@ -1389,6 +1389,15 @@ static void test_ssa_runtime_profile_is_deterministic_serializable_and_compatibl
     profile::ProgramRuntimeProfile failed; ExecutionLimits limited; limited.maxSteps=1;
     const auto failedRun=SSAInterpreter{}.run(result.ssa,"main",limited,&failed);
     ASSERT(failedRun.status==ExecutionStatus::StepLimitExceeded); ASSERT(failed.status==profile::ProfileStatus::Failed);
+
+    auto nested=compileToIR(R"(int nested(int n){int i=0;int total=0;while(i<n){int j=0;while(j<n){total=total+1;j=j+1;}i=i+1;}return total;}int main(){return nested(3);})");
+    profile::ProgramRuntimeProfile nestedProfile;
+    const auto nestedRun=SSAInterpreter{}.run(nested.ssa,"main",{},&nestedProfile);
+    ASSERT(nestedRun.status==ExecutionStatus::Success);
+    ASSERT_EQ(nestedProfile.functions.at("nested").calls,1u);
+    ASSERT_EQ(nestedProfile.functions.at("nested").loops.size(),2u);
+    uint64_t nestedBackedges=0;for(const auto &[header,loopRecord]:nestedProfile.functions.at("nested").loops){(void)header;nestedBackedges+=loopRecord.backedges;}
+    ASSERT(nestedBackedges>0u);
 }
 
 static void test_profile_guided_inline_remains_verifier_gated() {

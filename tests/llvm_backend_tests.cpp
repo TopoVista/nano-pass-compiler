@@ -177,6 +177,15 @@ int main() {
   CHECK(inlinedExecution.error.empty());
   CHECK(inlinedExecution.stdoutText == expected.stdoutText);
   CHECK(inlinedExecution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
+  // The general SSA inliner leaves a multi-return continuation phi in @main.
+  // Adaptive Tier-0 lowering must execute that real cloned CFG unchanged.
+  AdaptiveJITConfig inlinedAdaptiveConfig; inlinedAdaptiveConfig.forceTier0 = true;
+  const auto inlinedAdaptive = executeAdaptivelyWithLLJIT(inlined, inlinedAdaptiveConfig);
+  CHECK(inlinedAdaptive.execution.error.empty());
+  CHECK(inlinedAdaptive.execution.stdoutText == expected.stdoutText);
+  CHECK(inlinedAdaptive.execution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
+  CHECK(inlinedAdaptive.telemetry.at("main").tier0Instructions > 0u);
+  CHECK(inlinedAdaptive.telemetry.at("main").tier0Blocks > 0u);
 
   // CFG simplification may retain blocks in a storage order that is not a
   // dominance order after general inlining. LLVM lowering must use a stable
@@ -237,6 +246,9 @@ int main() {
   CHECK(!adaptivePromoted.runtimeProfile.functions.at("main").loops.empty());
   CHECK(adaptivePromoted.tiers.at("add").activeTier == CompilationTier::Tier1);
   CHECK(adaptivePromoted.tiers.at("add").recompilationComplete);
+  CHECK(adaptivePromoted.telemetry.at("add").tier0Instructions > 0u);
+  CHECK(adaptivePromoted.telemetry.at("add").tier1Instructions > 0u);
+  CHECK(adaptivePromoted.telemetry.at("add").tier1Blocks > 0u);
   CHECK(std::any_of(adaptivePromoted.events.begin(), adaptivePromoted.events.end(),
       [](const AdaptiveJITEvent &event) { return event.kind == AdaptiveJITEventKind::Tier1Installed && event.function == "add"; }));
   AdaptiveJITConfig forced; forced.forceTier1 = true;

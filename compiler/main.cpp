@@ -621,9 +621,60 @@ void printRuntimeProfile(const nanopass::profile::ProgramRuntimeProfile &profile
     }
 }
 
+void printRuntimeProfileSummary(const nanopass::profile::ProgramRuntimeProfile &profile,
+                                std::ostream &out, std::string_view indent = "   ") {
+    uint64_t calls = 0, blocks = 0, edges = 0, loops = 0;
+    for (const auto &[name, function] : profile.functions) {
+        (void)name;
+        calls += function.calls;
+        blocks += function.blocksExecuted;
+        edges += function.edgeCounts.size();
+        loops += function.loops.size();
+    }
+    out << "Runtime profile input\n"
+        << indent << "status: " << nanopass::profile::runtimeProfileStatusName(profile.status) << '\n'
+        << indent << "mode: " << profile.executionMode << ", O" << profile.optimizationLevel << '\n'
+        << indent << "functions observed: " << profile.functions.size() << '\n'
+        << indent << "calls: " << calls << ", block entries: " << blocks
+        << ", observed edges: " << edges << ", loops: " << loops << "\n\n";
+}
+
+struct PolicyDecisionObservation {
+    uint64_t instructionsBefore = 0;
+    uint64_t instructionsAfter = 0;
+    uint64_t blocksBefore = 0;
+    uint64_t blocksAfter = 0;
+    bool changed = false;
+};
+
+PolicyDecisionObservation policyObservation(const nanopass::SSAFunction &function) {
+    PolicyDecisionObservation observation;
+    observation.blocksBefore = observation.blocksAfter = function.blocks.size();
+    for (const auto &block : function.blocks)
+        observation.instructionsBefore += block.phis.size() + block.instructions.size();
+    observation.instructionsAfter = observation.instructionsBefore;
+    return observation;
+}
+
+std::string policyConfigurationJson() {
+    const nanopass::opt::HotnessThresholds thresholds;
+    std::ostringstream out;
+    out << "{\"policy\":\"heuristic-v1\",\"thresholds\":{"
+        << "\"warm_function_calls\":" << thresholds.warmFunctionCalls
+        << ",\"hot_function_calls\":" << thresholds.hotFunctionCalls
+        << ",\"warm_dynamic_blocks\":" << thresholds.warmDynamicBlocks
+        << ",\"hot_dynamic_blocks\":" << thresholds.hotDynamicBlocks
+        << ",\"hot_loop_backedges\":" << thresholds.hotLoopBackedges
+        << ",\"hot_loop_trip_count\":" << std::fixed << std::setprecision(6)
+        << thresholds.hotLoopTripCount << std::defaultfloat << "}}";
+    return out.str();
+}
+
 bool writePolicyDecisionLog(
     const std::string &path, const nanopass::SSAProgram &program,
-    const nanopass::profile::ProgramRuntimeProfile *profile, std::ostream &err) {
+    const nanopass::profile::ProgramRuntimeProfile *profile,
+    const std::map<std::string, PolicyDecisionObservation> &observations,
+    std::ostream &err) {
     std::ofstream out(path);
     if (!out) { err << "error: could not write policy decision log '" << path << "'\n"; return false; }
     const nanopass::opt::HeuristicOptimizationPolicy policy;
@@ -648,8 +699,16 @@ bool writePolicyDecisionLog(
         decision.action = action.str();
         decision.reason = tier.reason;
         decision.estimatedCost = static_cast<double>(decision.features.instructionCount);
-        out << "{\"program_fingerprint\":\"" << fingerprint << "\",\"record\":"
-            << nanopass::opt::optimizationPolicyDecisionJson(decision) << "}\n";
+        const auto observation = observations.contains(function.name)
+            ? observations.at(function.name) : policyObservation(function);
+        out << "{\"schema_version\":1,\"program_fingerprint\":\"" << fingerprint
+            << "\",\"configuration\":" << policyConfigurationJson()
+            << ",\"record\":" << nanopass::opt::optimizationPolicyDecisionJson(decision)
+            << ",\"structural_result\":{\"instructions_before\":"
+            << observation.instructionsBefore << ",\"instructions_after\":"
+            << observation.instructionsAfter << ",\"blocks_before\":"
+            << observation.blocksBefore << ",\"blocks_after\":" << observation.blocksAfter
+            << ",\"changed\":" << (observation.changed ? "true" : "false") << "}}\n";
     }
     return true;
 }
@@ -896,13 +955,22 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!options.policyDecisionLog.empty() &&
-            !writePolicyDecisionLog(options.policyDecisionLog, irRes.ssa,
-                                    optimizationProfile ? &*optimizationProfile : nullptr,
-                                    std::cerr))
-            return 1;
+        // Preserve the subject used to make a policy decision.  The emitted
+        // record may be written after optimization so its structural outcome
+        // is observable, while its features always describe the original SSA.
+        std::optional<nanopass::SSAProgram> policyDecisionInput;
+        if (!options.policyDecisionLog.empty()) policyDecisionInput = irRes.ssa;
 
         if (options.command == Command::Features) {
+            if (!options.policyDecisionLog.empty()) {
+                std::map<std::string, PolicyDecisionObservation> observations;
+                for (const auto &function : irRes.ssa.functions)
+                    observations.emplace(function.name, policyObservation(function));
+                if (!writePolicyDecisionLog(options.policyDecisionLog, irRes.ssa,
+                                            optimizationProfile ? &*optimizationProfile : nullptr,
+                                            observations, std::cerr))
+                    return 1;
+            }
             std::cout << "{\"schema_version\":1,\"program_fingerprint\":\""
                       << nanopass::profile::stableProgramFingerprint(irRes.ssa)
                       << "\",\"functions\":[";
@@ -943,8 +1011,13 @@ int main(int argc, char **argv) {
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
         nanopass::opt::SSAOptimizationResult optimizationResult;
+        std::map<std::string, PolicyDecisionObservation> policyObservations;
+        std::map<std::string, bool> policyPassChanges;
         if (optimizeSSA) {
             ssaBefore = irRes.ssa;
+            if (policyDecisionInput)
+                for (const auto &function : ssaBefore.functions)
+                    policyObservations.emplace(function.name, policyObservation(function));
             const bool adaptiveTier0 = options.command == Command::Jit && options.adaptiveJit;
             const bool policyDriven = options.optimizationPolicy == "heuristic";
             const bool requestInline = !adaptiveTier0 && !policyDriven && (options.passes.empty()
@@ -1032,11 +1105,31 @@ int main(int argc, char **argv) {
                 const auto one = pipeline.run(function, optimizationContext);
                 optimizationResult.changed |= one.changed;
                 optimizationResult.cfgChanged |= one.cfgChanged;
+                policyPassChanges[function.name] = policyPassChanges[function.name] || one.changed;
                 for (const auto &[key, value] : one.statistics.counters)
                     optimizationResult.statistics.add(key, value);
                 optimizationResult.telemetry.insert(optimizationResult.telemetry.end(),
                                                     one.telemetry.begin(), one.telemetry.end());
             }
+        }
+
+        if (policyDecisionInput) {
+            for (const auto &function : irRes.ssa.functions) {
+                auto position = policyObservations.find(function.name);
+                if (position == policyObservations.end())
+                    position = policyObservations.emplace(
+                        function.name, policyObservation(function)).first;
+                auto after = policyObservation(function);
+                position->second.instructionsAfter = after.instructionsAfter;
+                position->second.blocksAfter = after.blocksAfter;
+                position->second.changed = policyPassChanges[function.name] ||
+                                           position->second.instructionsBefore != after.instructionsAfter ||
+                                           position->second.blocksBefore != after.blocksAfter;
+            }
+            if (!writePolicyDecisionLog(options.policyDecisionLog, *policyDecisionInput,
+                                        optimizationProfile ? &*optimizationProfile : nullptr,
+                                        policyObservations, std::cerr))
+                return 1;
         }
 
         if (options.command == Command::Optimize ||
@@ -1240,13 +1333,38 @@ int main(int argc, char **argv) {
                                   << "\",\"calls\":" << event.calls
                                   << ",\"detail\":\"" << jsonEscape(event.detail) << "\"}";
                     }
-                    std::cout << "],\"stdout\":\"" << jsonEscape(adaptive.execution.stdoutText)
+                    std::cout << "],\"telemetry\":{\"functions\":[";
+                    bool firstTelemetry = true;
+                    for (const auto &[name, telemetry] : adaptive.telemetry) {
+                        if (!firstTelemetry) std::cout << ',';
+                        firstTelemetry = false;
+                        std::cout << "{\"function\":\"" << jsonEscape(name)
+                                  << "\",\"tier0_compilation_us\":" << telemetry.tier0CompilationUs
+                                  << ",\"tier1_compilation_us\":" << telemetry.tier1CompilationUs
+                                  << ",\"tier0_instructions\":" << telemetry.tier0Instructions
+                                  << ",\"tier1_instructions\":" << telemetry.tier1Instructions
+                                  << ",\"tier0_blocks\":" << telemetry.tier0Blocks
+                                  << ",\"tier1_blocks\":" << telemetry.tier1Blocks << '}';
+                    }
+                    std::cout << "]},\"stdout\":\"" << jsonEscape(adaptive.execution.stdoutText)
                               << "\",\"return_value\":" << adaptive.execution.returnValue << "}\n";
                 } else {
                     for (const auto &event : adaptive.events) {
                         std::cout << "[jit] @" << event.function << " " << eventName(event.kind);
                         if (event.calls) std::cout << " (calls=" << event.calls << ")";
                         if (!event.detail.empty()) std::cout << ": " << event.detail;
+                        std::cout << '\n';
+                    }
+                    for (const auto &[name, telemetry] : adaptive.telemetry) {
+                        std::cout << "[jit] @" << name << " telemetry: tier0="
+                                  << telemetry.tier0CompilationUs << " us, "
+                                  << telemetry.tier0Instructions << " instructions, "
+                                  << telemetry.tier0Blocks << " blocks";
+                        if (telemetry.tier1CompilationUs) {
+                            std::cout << "; tier1=" << telemetry.tier1CompilationUs << " us, "
+                                      << telemetry.tier1Instructions << " instructions, "
+                                      << telemetry.tier1Blocks << " blocks";
+                        }
                         std::cout << '\n';
                     }
                     std::cout << adaptive.execution.stdoutText;
@@ -1292,6 +1410,7 @@ int main(int argc, char **argv) {
                 return 0;
             }
             if (options.command == Command::Explain) {
+                if (optimizationProfile) printRuntimeProfileSummary(*optimizationProfile, std::cout);
                 std::cout << "08 LLVM (SSA backend)\n"
                           << "   functions lowered: " << lowered.statistics.functions << "\n"
                           << "   blocks lowered: " << lowered.statistics.blocks << "\n"
@@ -1394,6 +1513,7 @@ int main(int argc, char **argv) {
                       << "   DCE removed:    " << optimizationResult.statistics.get("instructionsRemoved") << "\n\n"
                       << "08 LLVM\n"
                       << "   module verified\n";
+            if (optimizationProfile) printRuntimeProfileSummary(*optimizationProfile, std::cout);
             return 0;
         }
 

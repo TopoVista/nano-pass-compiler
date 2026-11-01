@@ -1,6 +1,7 @@
 #include "backend/llvm/ssa_llvm_jit.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -22,6 +23,13 @@
 namespace nanopass::llvm_backend {
 namespace {
 std::string errorText(llvm::Error error) { return llvm::toString(std::move(error)); }
+
+uint64_t instructionCount(const SSAFunction &function) {
+  uint64_t count = 0;
+  for (const auto &block : function.blocks)
+    count += static_cast<uint64_t>(block.phis.size() + block.instructions.size());
+  return count;
+}
 
 class AdaptiveSession;
 thread_local AdaptiveSession *activeAdaptiveSession = nullptr;
@@ -168,6 +176,7 @@ class AdaptiveSession {
 
   bool compileAndInstall(const std::string &name, CompilationTier tier,
                          std::string &error) {
+    const auto compilationStarted = std::chrono::steady_clock::now();
     const SSAFunction *sourceFunction = function(name);
     if (!sourceFunction) { error = "unknown adaptive function @" + name; return false; }
     SSAProgram candidate = tier == CompilationTier::Tier0 ? source_ : tier1Program(name);
@@ -199,6 +208,19 @@ class AdaptiveSession {
       error = failure.what(); return false;
     }
     result_.tiers[name].activeTier = tier;
+    auto &telemetry = result_.telemetry[name];
+    const uint64_t elapsedUs = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - compilationStarted).count());
+    if (tier == CompilationTier::Tier0) {
+      telemetry.tier0CompilationUs = elapsedUs;
+      telemetry.tier0Instructions = instructionCount(*selected);
+      telemetry.tier0Blocks = selected->blocks.size();
+    } else {
+      telemetry.tier1CompilationUs = elapsedUs;
+      telemetry.tier1Instructions = instructionCount(*selected);
+      telemetry.tier1Blocks = selected->blocks.size();
+    }
     return true;
   }
 

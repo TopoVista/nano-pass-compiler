@@ -123,7 +123,7 @@
 - [x] Opt-in heuristic-policy pipeline selection (`nano optimize --policy=heuristic`)
 - [x] Native function/block/edge instrumentation for complete adaptive profiles
 - [ ] Profile-guided branch layout and loop-effort selection
-- [x] Deterministic decision JSONL dataset export (`--decision-log=file`)
+- [x] Deterministic decision JSONL dataset export with policy configuration and observed structural results (`--decision-log=file`)
 - [ ] Decision-log replay and measured reward collection
 
 ## Phase 9 — Observability

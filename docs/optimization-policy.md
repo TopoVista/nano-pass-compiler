@@ -34,6 +34,15 @@ is resolved through the compiler's registered pass allowlist, and ordinary
 post-pass SSA verification remains in force. Global inlining is intentionally
 left to the default/profile-guided optimizer pipeline for now.
 
+`--decision-log=decisions.jsonl` exports one deterministic schema-v1 record per
+function. A record contains the source-program fingerprint, the fixed
+heuristic threshold configuration, static/dynamic features, selected action,
+hotness reason, and the observed before/after instruction and block counts
+after the requested compiler pipeline. The log is a dataset export, not a
+training loop: it makes future learned-policy experiments reproducible without
+letting a model choose unregistered transforms. Decision replay and measured
+reward collection remain planned.
+
 Hotness derives only from counters and centralized thresholds, never wall-clock
 time. Its structured reasons distinguish `COLD_FUNCTION`, `WARM_FUNCTION`,
 hot function/block/loop criteria, and `INSUFFICIENT_PROFILE_DATA`. A future learned policy may implement the same interface but may only

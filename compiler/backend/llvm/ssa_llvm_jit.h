@@ -33,6 +33,18 @@ struct TierState {
   bool recompilationComplete = false;
 };
 
+// Measurements collected at the adaptive compilation boundary.  They describe
+// compiler work, not synthetic performance claims: execution time remains the
+// responsibility of an explicit benchmark run.
+struct AdaptiveFunctionTelemetry {
+  uint64_t tier0CompilationUs = 0;
+  uint64_t tier1CompilationUs = 0;
+  uint64_t tier0Instructions = 0;
+  uint64_t tier1Instructions = 0;
+  uint64_t tier0Blocks = 0;
+  uint64_t tier1Blocks = 0;
+};
+
 enum class AdaptiveJITEventKind { Tier0Compiled, HotThresholdReached,
                                   Tier1CompilationStarted, Tier1Installed,
                                   Tier1Rejected };
@@ -54,6 +66,7 @@ struct AdaptiveJITExecutionResult {
   JITExecutionResult execution;
   profile::ProgramRuntimeProfile runtimeProfile;
   std::map<std::string, TierState> tiers;
+  std::map<std::string, AdaptiveFunctionTelemetry> telemetry;
   std::vector<AdaptiveJITEvent> events;
 };
 

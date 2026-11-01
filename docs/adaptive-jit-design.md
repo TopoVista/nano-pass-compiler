@@ -66,4 +66,8 @@ entry, basic-block entry, and every emitted CFG edge. The resulting
 `--profile-output` profile is complete when execution completes, can be shown
 with `nano profile show`, and has the same schema/fingerprint contract as
 interpreter-collected profiles. `--jit-events=json` emits a separate
-schema-v1 machine-readable event record without mixing terminal text.
+schema-v1 machine-readable event record without mixing terminal text. It also
+contains a stable function-name keyed telemetry section with actual Tier-0 and
+Tier-1 compilation durations plus the selected SSA instruction/block counts.
+Those measurements describe compilation work only; runtime comparisons remain
+the job of the benchmark tooling.

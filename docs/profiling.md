@@ -28,3 +28,8 @@ The current PGO consumer intentionally accepts only Tier-0/O0 profiles. A
 higher-level profile is useful for deterministic inspection but is rejected as
 `PROFILE_OPTIMIZATION_LEVEL_MISMATCH`, avoiding accidental use against a
 different SSA shape.
+
+`nano explain input.nano --backend=ssa --profile=input.nprof.json` includes a compact summary
+of the validated runtime facts consumed by the compilation journey. It reports
+profile metadata and aggregate observed function, call, block-entry, edge, and
+loop counts; it never invents a runtime measurement.

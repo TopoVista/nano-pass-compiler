@@ -60,12 +60,14 @@ profiles, while preserving single-threaded execution ownership.
   LLVM 18 indirect stub, records real native function/block/edge counters, and
   promotes a non-recursive hot function once through `updatePointer`. Tier-0
   active frames finish normally; only future calls use Tier 1. Tier-1
-  candidates remain SSA- and LLVM-verifier gated.
+  candidates remain SSA- and LLVM-verifier gated. JSON event output includes
+  measured per-tier compilation work and selected SSA structural counts.
 - **Policy substrate** — `nano features` emits schema-v1 static/dynamic feature
   JSON including dynamic edge and branch-probability summaries, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
   choices from counter-derived hotness. `nano optimize --policy=heuristic`
   executes that opt-in function-local choice and records it as an analysis
-  remark. No ML model or LLM is required.
+  remark. `--decision-log` records the selected configuration and observed
+  structural result as deterministic JSONL. No ML model or LLM is required.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
