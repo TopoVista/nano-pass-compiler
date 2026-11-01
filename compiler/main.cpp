@@ -96,6 +96,7 @@ struct Options {
     std::string passes;       // custom pipeline from --passes=
     std::string optimizationProfile;
     std::string telemetryOutput;
+    std::string diagnosticsFormat = "text";
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
     bool debugPassManager   = false;
@@ -159,6 +160,7 @@ void printHelp(std::ostream &out) {
         << "  --show-before-after      Print SSA before and after optimization.\n"
         << "  --remarks[=json]         Print optimization remarks as text or JSON.\n"
         << "  --telemetry=<file>       Write measured AST desugaring pass telemetry as JSON.\n\n"
+        << "  --diagnostics=text|json  Select user diagnostic rendering.\n"
         << "  --why-not-optimized      Print recorded advanced optimization rejections.\n\n"
         << "Graph options:\n"
         << "  --cfg                    Emit Control-Flow Graph DOT.\n"
@@ -232,6 +234,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.optimizationProfile = std::string(arg.substr(10));
         } else if (arg.starts_with("--telemetry=")) {
             o.telemetryOutput = std::string(arg.substr(12));
+        } else if (arg.starts_with("--diagnostics=")) {
+            o.diagnosticsFormat = std::string(arg.substr(14));
         } else if (arg.starts_with("--stop-after=")) {
             o.stopAfter = std::string(arg.substr(13));
         } else if (arg.starts_with("--disable-pass=")) {
@@ -298,6 +302,10 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     }
     if (o.backend != "ast" && o.backend != "ssa") {
         err << "error: --backend must be 'ast' or 'ssa'\n";
+        return false;
+    }
+    if (o.diagnosticsFormat != "text" && o.diagnosticsFormat != "json") {
+        err << "error: --diagnostics must be 'text' or 'json'\n";
         return false;
     }
     if (!o.optimizationProfile.empty() && o.command != Command::Optimize &&
@@ -1129,6 +1137,12 @@ int main(int argc, char **argv) {
         }
 
     } catch (const CompileError &err) {
+        if (options.diagnosticsFormat == "json") {
+            std::cerr << "{\"schema_version\":1,\"diagnostics\":[{\"severity\":\"error\",\"code\":\"E1000\",\"message\":\""
+                      << jsonEscape(err.message) << "\",\"file\":\"" << jsonEscape(options.input)
+                      << "\",\"line\":" << err.line << ",\"column\":" << err.col << "}]}\n";
+            return 1;
+        }
         std::cerr << "error: " << err.message;
         if (err.line > 0)
             std::cerr << " at " << options.input
