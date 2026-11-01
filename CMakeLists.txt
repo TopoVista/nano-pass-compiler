@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(NanoPassCompilerLab LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+
 # Enable CTest at the root so `ctest --test-dir build` discovers all tests.
 enable_testing()
 

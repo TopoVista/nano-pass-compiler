@@ -138,6 +138,10 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-exe -o factorial
 
+# Package the driver, its host-AOT runtime archive, and the runtime ABI header.
+cmake --install build --prefix "$HOME/.local"
+$HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o factorial
+
 # Collect deterministic interpreter execution facts in versioned JSON.
 ./build/compiler/nano profile examples/loops.nano -o loops.nprof
 

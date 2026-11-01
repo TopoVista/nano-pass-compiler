@@ -58,11 +58,24 @@ llvm_map_components_to_libnames(LLVM_LIBS ${NANO_LLVM_COMPONENTS})
 target_link_libraries(nano PRIVATE ${LLVM_LIBS})
 target_compile_definitions(nano PRIVATE
     NANO_RUNTIME_LIBRARY_PATH="$<TARGET_FILE:nano_runtime>"
+    # A build-tree archive is preferred for developer builds. Installed Nano
+    # resolves this deterministic path relative to its executable when the
+    # build tree is unavailable.
+    NANO_RUNTIME_INSTALL_RELATIVE_PATH="../${CMAKE_INSTALL_LIBDIR}/$<TARGET_FILE_NAME:nano_runtime>"
     NANO_HOST_CXX="${CMAKE_CXX_COMPILER}")
 
 if(UNIX AND NANO_BUILD_JIT)
   target_link_options(nano PRIVATE -rdynamic)
 endif()
+
+# Install the command-line driver and exactly the compact C-ABI archive it
+# needs for host AOT linking. The full compiler headers remain internal; the
+# small runtime header is installed for embedders that need its ABI.
+install(TARGETS nano nano_runtime
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(FILES backend/llvm/llvm_runtime.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nanopass/backend/llvm)
 
 # Reproducible native differential campaign.  It is intentionally a separate
 # executable: Core/SSA correctness remains available without LLVM, while this

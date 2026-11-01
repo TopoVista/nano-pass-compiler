@@ -50,5 +50,8 @@ For `compile`, `-o example` selects this executable mode by default; pass
 `--emit-llvm` when `-o` should receive textual LLVM IR instead.
 
 The compiler passes a fixed argument vector to the configured host driver; it
-does not construct a shell command from Nano source. This is host-only AOT
-linking, not cross compilation or a packaged/installable runtime yet.
+does not construct a shell command from Nano source. `cmake --install` installs
+the `nano` driver, its compact static runtime archive, and the C-ABI runtime
+header. An installed driver first uses a build-tree archive when it remains
+available, then resolves `../lib{,64}/` relative to its own executable. This
+is host-only AOT linking, not cross compilation.

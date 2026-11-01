@@ -37,7 +37,9 @@ and runtime safety traps remain planned.
   LLJIT when built with `NANO_BUILD_JIT=ON`; C-ABI print shims capture output.
 - **Host AOT emission** — `nano compile --backend=ssa --emit-obj -o file.o`
   emits a target-machine-verified host object; `--emit-exe -o file` links it
-  to the compact C-ABI runtime with the configured host C++ driver.
+  to the compact C-ABI runtime with the configured host C++ driver. `cmake
+  --install` packages the driver, runtime archive, and runtime header; an
+  installed driver resolves that archive relative to itself.
 - **Native differential runner** — `nano_jit_correctness fuzz` replays
   generated CoreIR-vs-O3-SSA/JIT cases. Recorded local campaign: seed
   `12648430`, 1,000 generated programs, 1,000 comparisons, 0 mismatches.
@@ -218,7 +220,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
   in-bounds fixed-array, and short-circuit coverage
 - [x] Optional ORCv2 JIT and captured typed print runtime
 - [x] Host object/executable emission and replayable native differential runner
-- [ ] Packaged/installable runtime library and cross-target linking
+- [x] Packaged/installable host runtime library and AOT linking
+- [ ] Cross-target linking
 - [x] Deterministic CoreIR profile collection (`nano profile`)
 - [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
 - [x] Native fixed-array bounds traps for SSA LLVM lowering
@@ -244,8 +247,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
   `if/else` to convert.
 - **No anonymous block scopes** — variable shadowing only across functions.
 - **LLVM 14+ required** for build.
-- **AOT linking is host-build-relative** — `--emit-exe` links the runtime
-  archive produced beside the compiler; installation packaging and cross
-  compilation are not implemented.
+- **AOT linking is host-only** — `cmake --install` packages the runtime and
+  lets `nano` locate it relative to its installed executable, but cross
+  compilation is not implemented.
 - **Native bounds/runtime isolation** are not implemented. The JIT test claim
   covers in-bounds generated programs only; it does not claim a sandbox.

@@ -65,6 +65,7 @@
 // ============================================================
 namespace {
 constexpr std::string_view kVersion = "nano 0.3.0";
+std::string gProgramPath;
 
 // ============================================================
 // Command / Option types
@@ -326,6 +327,25 @@ bool emitNativeObject(llvm::Module &module, const std::string &path,
     return true;
 }
 
+std::optional<std::filesystem::path> resolveRuntimeArchive(std::ostream &err) {
+    const std::filesystem::path buildArchive = NANO_RUNTIME_LIBRARY_PATH;
+    if (std::filesystem::exists(buildArchive)) return buildArchive;
+
+    const std::string executable = llvm::sys::fs::getMainExecutable(
+        gProgramPath.c_str(), reinterpret_cast<void *>(&resolveRuntimeArchive));
+    if (!executable.empty()) {
+        const std::filesystem::path installedArchive =
+            std::filesystem::path(executable).parent_path() /
+            std::filesystem::path(NANO_RUNTIME_INSTALL_RELATIVE_PATH);
+        if (std::filesystem::exists(installedArchive)) return installedArchive;
+        err << "error: Nano runtime archive is missing at '" << installedArchive.string()
+            << "' (installed relative to '" << executable << "')\n";
+    } else {
+        err << "error: unable to determine Nano executable path for runtime lookup\n";
+    }
+    return std::nullopt;
+}
+
 bool emitNativeExecutable(llvm::Module &module, const std::string &path,
                           std::ostream &err) {
     const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -336,8 +356,10 @@ bool emitNativeExecutable(llvm::Module &module, const std::string &path,
         std::filesystem::path path;
         ~RemoveObject() { std::error_code ignored; std::filesystem::remove(path, ignored); }
     } cleanup{object};
+    const auto runtimeArchive = resolveRuntimeArchive(err);
+    if (!runtimeArchive) return false;
     const std::string compiler = NANO_HOST_CXX;
-    const std::string runtime = NANO_RUNTIME_LIBRARY_PATH;
+    const std::string runtime = runtimeArchive->string();
     const std::string objectPath = object.string();
     std::vector<llvm::StringRef> arguments = {
         compiler, objectPath, runtime, "-o", path,
@@ -467,6 +489,7 @@ nanopass::CompilerPassOptions toPassOptions(const Options &opts) {
 // main
 // ============================================================
 int main(int argc, char **argv) {
+    gProgramPath = argc > 0 && argv[0] ? argv[0] : "nano";
     // Initialise registry (idempotent)
     nanopass::PipelineBuilder::initialise();
 

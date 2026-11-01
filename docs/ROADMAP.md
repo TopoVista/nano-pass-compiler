@@ -108,7 +108,8 @@
 - [x] Versioned CoreIR execution profile collection (`nano profile`)
 - [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
 - [x] Fixed-array bounds checks in generated SSA LLVM code
-- [ ] Packaged/installable runtime library and cross-target linking
+- [x] Packaged/installable host runtime library and AOT linking
+- [ ] Cross-target linking
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Branch/loop profile consumption for layout decisions
 
