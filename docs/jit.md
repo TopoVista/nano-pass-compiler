@@ -27,5 +27,7 @@ nano_jit_correctness fuzz --seed=12648430 --cases=1000
 `--start-case` splits a campaign into replayable intervals, and
 `--save-failures=DIR` persists the exact source for a mismatch. This is
 measured differential testing, not formal translation validation. There are
-no JIT timeouts, memory limits, or native runtime bounds traps yet; those are
-known limitations rather than silent guarantees.
+no JIT timeouts or memory limits yet; those are known limitations rather than
+silent guarantees. Generated SSA LLVM fixed-array accesses do use the native
+bounds trap, which reports an invalid index and terminates before an
+out-of-range memory access.
