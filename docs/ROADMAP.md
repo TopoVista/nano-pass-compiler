@@ -117,7 +117,7 @@
 - [ ] `nano explain` — full transformation journey with before/after diffs
 - [ ] Structured diagnostics: rich source spans, labels, fix-it hints
 - [x] Versioned AST desugaring telemetry JSON (`--telemetry=file`)
-- [ ] Optimization remarks (`OptimizationApplied` / `OptimizationMissed`)
+- [x] Optimization remarks (`OptimizationApplied` / `OptimizationMissed`) in text or JSON
 - [ ] "Why didn't this optimize?" structured rejection reasons
 - [ ] JSON API server (`nano-server`) for web frontend
 
