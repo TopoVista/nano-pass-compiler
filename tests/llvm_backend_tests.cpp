@@ -229,6 +229,8 @@ int main() {
   CHECK(adaptivePromoted.execution.stdoutText == adaptiveOracle.stdoutText);
   CHECK(adaptivePromoted.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
   CHECK(adaptivePromoted.runtimeProfile.status == profile::ProfileStatus::Complete);
+  CHECK(adaptivePromoted.runtimeProfile.optimizationLevel == 0u);
+  CHECK(adaptivePromoted.runtimeProfile.executionMode == "orc-adaptive");
   CHECK(adaptivePromoted.runtimeProfile.functions.at("add").calls == 5u);
   CHECK(adaptivePromoted.runtimeProfile.functions.at("main").blocksExecuted > 0u);
   CHECK(!adaptivePromoted.runtimeProfile.functions.at("main").edgeCounts.empty());

@@ -62,7 +62,7 @@ profiles, while preserving single-threaded execution ownership.
   active frames finish normally; only future calls use Tier 1. Tier-1
   candidates remain SSA- and LLVM-verifier gated.
 - **Policy substrate** — `nano features` emits schema-v1 static/dynamic feature
-  JSON, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
+  JSON including dynamic edge and branch-probability summaries, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
   choices from counter-derived hotness. `nano optimize --policy=heuristic`
   executes that opt-in function-local choice and records it as an analysis
   remark. No ML model or LLM is required.

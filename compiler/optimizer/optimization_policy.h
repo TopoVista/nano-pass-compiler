@@ -18,6 +18,7 @@ namespace nanopass::opt {
 enum class Hotness { Cold, Warm, Hot };
 enum class HotnessReason {
   ColdFunction,
+  WarmFunction,
   HotFunctionCallCount,
   HotFunctionDynamicExecution,
   HotLoopBackedgeCount,
@@ -32,6 +33,7 @@ inline const char *hotnessName(Hotness value) {
 inline const char *hotnessReasonName(HotnessReason value) {
   switch (value) {
   case HotnessReason::ColdFunction: return "COLD_FUNCTION";
+  case HotnessReason::WarmFunction: return "WARM_FUNCTION";
   case HotnessReason::HotFunctionCallCount: return "HOT_FUNCTION_CALL_COUNT";
   case HotnessReason::HotFunctionDynamicExecution: return "HOT_FUNCTION_DYNAMIC_EXECUTION";
   case HotnessReason::HotLoopBackedgeCount: return "HOT_LOOP_BACKEDGE_COUNT";
@@ -74,7 +76,7 @@ inline HotnessDecision classifyHotness(
   }
   if (profile->calls >= thresholds.warmFunctionCalls ||
       profile->blocksExecuted >= thresholds.warmDynamicBlocks)
-    return {Hotness::Warm, HotnessReason::ColdFunction,
+    return {Hotness::Warm, HotnessReason::WarmFunction,
             std::max(profile->calls, profile->blocksExecuted)};
   return {Hotness::Cold, HotnessReason::ColdFunction,
           std::max(profile->calls, profile->blocksExecuted)};
@@ -98,9 +100,13 @@ struct OptimizationFeaturesV1 {
   uint64_t calleeCount = 0;
   uint64_t dynamicCallCount = 0;
   uint64_t dynamicBlockExecutions = 0;
+  uint64_t dynamicEdgeExecutions = 0;
   uint64_t hotBlockCount = 0;
   uint64_t dynamicLoopBackedges = 0;
   double hottestLoopTripCount = 0.0;
+  // Largest observed successor probability for a real conditional branch.
+  // This is a summary feature, not a promise that branch layout is changed.
+  double hottestBranchProbability = 0.0;
 };
 
 inline OptimizationFeaturesV1 extractOptimizationFeatures(
@@ -136,12 +142,34 @@ inline OptimizationFeaturesV1 extractOptimizationFeatures(
   const auto &record = dynamic->second;
   features.dynamicCallCount = record.calls;
   features.dynamicBlockExecutions = record.blocksExecuted;
+  for (const auto &[edge, count] : record.edgeCounts) {
+    (void)edge;
+    features.dynamicEdgeExecutions += count;
+  }
   const uint64_t hotThreshold = record.blocksExecuted == 0 ? UINT64_MAX : std::max<uint64_t>(1, record.blocksExecuted / 10);
   for (const auto &[block, count] : record.blockCounts) { (void)block; if (count >= hotThreshold) ++features.hotBlockCount; }
   for (const auto &[header, loop] : record.loops) {
     (void)header;
     features.dynamicLoopBackedges += loop.backedges;
     features.hottestLoopTripCount = std::max(features.hottestLoopTripCount, loop.averageTripCount());
+  }
+  for (const auto &block : function.blocks) {
+    const auto *branch = std::get_if<SSATerminator::Branch>(&block.terminator.value);
+    if (!branch) continue;
+    const profile::EdgeKey thenEdge{block.id.index, branch->thenTarget.index};
+    const profile::EdgeKey elseEdge{block.id.index, branch->elseTarget.index};
+    const uint64_t thenCount = record.edgeCounts.contains(thenEdge)
+        ? record.edgeCounts.at(thenEdge) : 0;
+    const uint64_t elseCount = record.edgeCounts.contains(elseEdge)
+        ? record.edgeCounts.at(elseEdge) : 0;
+    if (branch->thenTarget == branch->elseTarget) {
+      if (thenCount) features.hottestBranchProbability = std::max(features.hottestBranchProbability, 1.0);
+      continue;
+    }
+    const uint64_t total = thenCount + elseCount;
+    if (total)
+      features.hottestBranchProbability = std::max(features.hottestBranchProbability,
+          static_cast<double>(std::max(thenCount, elseCount)) / static_cast<double>(total));
   }
   return features;
 }
@@ -162,10 +190,12 @@ inline std::string optimizationFeaturesJson(const OptimizationFeaturesV1 &f) {
       << ",\"callee_count\":" << f.calleeCount
       << ",\"dynamic_call_count\":" << f.dynamicCallCount
       << ",\"dynamic_block_executions\":" << f.dynamicBlockExecutions
+      << ",\"dynamic_edge_executions\":" << f.dynamicEdgeExecutions
       << ",\"hot_block_count\":" << f.hotBlockCount
       << ",\"dynamic_loop_backedges\":" << f.dynamicLoopBackedges
       << ",\"hottest_loop_trip_count\":" << std::fixed << std::setprecision(6)
-      << f.hottestLoopTripCount << "}";
+      << f.hottestLoopTripCount
+      << ",\"hottest_branch_probability\":" << f.hottestBranchProbability << "}";
   return out.str();
 }
 

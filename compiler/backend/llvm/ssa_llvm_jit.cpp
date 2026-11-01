@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <optional>
 
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/IndirectionUtils.h>
@@ -112,7 +111,6 @@ class AdaptiveSession {
   CallGraph callGraph_;
   AdaptiveJITExecutionResult result_;
   std::map<std::string, size_t> generation_;
-  std::optional<std::string> fatalError_;
 
   void event(AdaptiveJITEventKind kind, const std::string &function,
              uint64_t calls = 0, std::string detail = {}) {
@@ -274,15 +272,11 @@ public:
     } else { result_.execution.error = "JIT @main must return an integer or void"; return std::move(result_); }
     result_.execution.stdoutText = std::move(output);
     result_.runtimeProfile.finalizeLoops(source_);
-    if (fatalError_) {
-      result_.runtimeProfile.status = profile::ProfileStatus::Failed;
-      result_.execution.error = *fatalError_;
-    }
     return std::move(result_);
   }
 
   void onFunctionEntry(const char *rawName) {
-    if (!rawName || fatalError_) return;
+    if (!rawName) return;
     const std::string name(rawName);
     auto state = result_.tiers.find(name);
     if (state == result_.tiers.end()) return;
@@ -299,7 +293,9 @@ public:
     std::string error;
     if (!compileAndInstall(name, CompilationTier::Tier1, error)) {
       event(AdaptiveJITEventKind::Tier1Rejected, name, state->second.callCount, error);
-      fatalError_ = "tier1 compile for @" + name + " failed: " + error;
+      // A recompilation failure must never invalidate working Tier-0 code.
+      // Keep the request latched so this deterministic one-promotion policy
+      // does not retry on every entry, and report the concrete failure event.
       return;
     }
     state->second.recompilationComplete = true;

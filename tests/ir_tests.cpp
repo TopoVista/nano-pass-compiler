@@ -1407,10 +1407,11 @@ static void test_policy_features_and_hotness_are_stable() {
     const auto staticFeatures=extractOptimizationFeatures(result.ssa,*helper);
     const auto dynamicFeatures=extractOptimizationFeatures(result.ssa,*helper,&runtime);
     ASSERT(staticFeatures.instructionCount>0u); ASSERT(staticFeatures.blockCount>1u); ASSERT(staticFeatures.loopCount>0u);
-    ASSERT(dynamicFeatures.dynamicCallCount==2u); ASSERT(dynamicFeatures.dynamicBlockExecutions>0u); ASSERT(dynamicFeatures.dynamicLoopBackedges>0u);
-    const auto jsonA=optimizationFeaturesJson(dynamicFeatures),jsonB=optimizationFeaturesJson(dynamicFeatures);ASSERT_EQ(jsonA,jsonB);ASSERT(jsonA.find("\"schema_version\":1")!=std::string::npos);
+    ASSERT(dynamicFeatures.dynamicCallCount==2u); ASSERT(dynamicFeatures.dynamicBlockExecutions>0u); ASSERT(dynamicFeatures.dynamicEdgeExecutions>0u); ASSERT(dynamicFeatures.dynamicLoopBackedges>0u);ASSERT(dynamicFeatures.hottestBranchProbability>0.0);ASSERT(dynamicFeatures.hottestBranchProbability<=1.0);
+    const auto jsonA=optimizationFeaturesJson(dynamicFeatures),jsonB=optimizationFeaturesJson(dynamicFeatures);ASSERT_EQ(jsonA,jsonB);ASSERT(jsonA.find("\"schema_version\":1")!=std::string::npos);ASSERT(jsonA.find("\"hottest_branch_probability\":")!=std::string::npos);
     HotnessThresholds thresholds;thresholds.hotFunctionCalls=2;const auto decision=HeuristicOptimizationPolicy{}.decideTier(&runtime.functions.at("helper"),thresholds);
     ASSERT(decision.hotness==Hotness::Hot);ASSERT(decision.reason==HotnessReason::HotFunctionCallCount);
+    HotnessThresholds warmThresholds;warmThresholds.warmFunctionCalls=2;warmThresholds.hotFunctionCalls=3;const auto warm=HeuristicOptimizationPolicy{}.decideTier(&runtime.functions.at("helper"),warmThresholds);ASSERT(warm.hotness==Hotness::Warm);ASSERT(warm.reason==HotnessReason::WarmFunction);
     const auto cold=HeuristicOptimizationPolicy{}.decideTier(nullptr,thresholds);ASSERT(cold.reason==HotnessReason::InsufficientProfileData);
     const auto pipeline=HeuristicOptimizationPolicy{}.choosePipeline(Hotness::Hot);ASSERT(std::find(pipeline.begin(),pipeline.end(),"licm")!=pipeline.end());
     OptimizationPolicyDecision record;record.decisionType="pipeline";record.subject="helper";record.features=dynamicFeatures;record.action="sccp,dce";record.reason=decision.reason;record.estimatedCost=static_cast<double>(dynamicFeatures.instructionCount);

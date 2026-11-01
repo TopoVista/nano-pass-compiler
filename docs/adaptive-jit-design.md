@@ -47,6 +47,11 @@ An already-active Tier-0 frame is never migrated or patched. It returns using
 Tier 0. Only later calls through the stable stub reach Tier 1. Old modules stay
 owned by LLJIT for the run so no active code can be reclaimed prematurely.
 
+If a Tier-1 candidate fails verification, lowering, symbol installation, or
+ORC publication, its stub is left pointing to the known-good Tier-0 body. A
+structured `tier1_rejected` event records the cause; the one-promotion policy
+does not repeatedly retry that function during the same run.
+
 Recursive SCCs are profiled but deliberately remain Tier 0 in this initial
 policy. Force modes exist for deterministic tests:
 
