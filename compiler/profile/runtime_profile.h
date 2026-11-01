@@ -148,7 +148,7 @@ inline void writeRuntimeProfileJson(const ProgramRuntimeProfile &profile,
       << ",\n  \"program_fingerprint\": \""
       << escapeRuntimeProfileJson(profile.programFingerprint) << "\""
       << ",\n  \"status\": \"" << runtimeProfileStatusName(profile.status)
-      << "\"\n  ,\"functions\": {";
+      << "\",\n  \"functions\": {";
   bool firstFunction = true;
   for (const auto &[name, function] : profile.functions) {
     out << (firstFunction ? "\n" : ",\n") << "    \""
