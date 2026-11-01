@@ -49,9 +49,9 @@ target_include_directories(nano PRIVATE
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND "${LLVM_DEFINITIONS}")
 target_compile_options(nano PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-set(NANO_LLVM_COMPONENTS core support)
+set(NANO_LLVM_COMPONENTS core support native)
 if(NANO_BUILD_JIT)
-  list(APPEND NANO_LLVM_COMPONENTS orcjit native)
+  list(APPEND NANO_LLVM_COMPONENTS orcjit)
   target_compile_definitions(nano PRIVATE NANO_HAS_ORC_JIT=1)
 endif()
 llvm_map_components_to_libnames(LLVM_LIBS ${NANO_LLVM_COMPONENTS})
@@ -243,30 +243,36 @@ endif()
   if(NANO_BUILD_JIT)
     add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    add_test(NAME nano_ssa_backend_emit
-             COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/factorial.nano
-                      --format=llvm --backend=ssa -O3
-             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME nano_ssa_backend_jit
              COMMAND nano jit ${CMAKE_SOURCE_DIR}/examples/factorial.nano -O3
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    add_test(NAME nano_ssa_backend_object
-             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
-                      --backend=ssa --emit-obj -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.o
-             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    set(NANO_SSA_AOT_EXE ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial${CMAKE_EXECUTABLE_SUFFIX})
-    add_test(NAME nano_ssa_backend_executable
-             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
-                      --backend=ssa -O2 -o ${NANO_SSA_AOT_EXE}
-             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-    add_test(NAME nano_ssa_backend_executable_run COMMAND ${NANO_SSA_AOT_EXE})
-    set_tests_properties(nano_ssa_backend_executable_run PROPERTIES
-        DEPENDS nano_ssa_backend_executable)
-    add_test(NAME nano_ssa_backend_explicit_llvm
-             COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
-                      --backend=ssa --emit-llvm -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.ll
-             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endif()
+  # SSA LLVM emission and host AOT are independent of ORC JIT.  Keep their
+  # coverage active in the default NANO_BUILD_JIT=OFF configuration as well.
+  add_test(NAME nano_ssa_backend_emit
+           COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                    --format=llvm --backend=ssa -O3
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_ssa_backend_object
+           COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                    --backend=ssa --emit-obj -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.o
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set(NANO_SSA_AOT_EXE ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial${CMAKE_EXECUTABLE_SUFFIX})
+  add_test(NAME nano_ssa_backend_executable
+           COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                    --backend=ssa -O2 -o ${NANO_SSA_AOT_EXE}
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_ssa_backend_executable_run COMMAND ${NANO_SSA_AOT_EXE})
+  set_tests_properties(nano_ssa_backend_executable_run PROPERTIES
+      DEPENDS nano_ssa_backend_executable)
+  add_test(NAME nano_ssa_backend_explicit_llvm
+           COMMAND nano compile ${CMAKE_SOURCE_DIR}/examples/factorial.nano
+                    --backend=ssa --emit-llvm -o ${CMAKE_CURRENT_BINARY_DIR}/nano_ssa_factorial.ll
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_profile_loops
+           COMMAND nano profile ${CMAKE_SOURCE_DIR}/examples/loops.nano
+                    -o ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example

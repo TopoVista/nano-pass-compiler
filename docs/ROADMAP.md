@@ -105,9 +105,10 @@
 - [x] Optional ORC JIT (`nano jit` / `nano run`) under `NANO_BUILD_JIT`
 - [x] Host AOT object/executable emission (`nano compile --backend=ssa --emit-obj|--emit-exe`)
 - [x] Reproducible CoreIR-vs-optimized-SSA/JIT differential runner
+- [x] Versioned CoreIR execution profile collection (`nano profile`)
 - [ ] Packaged/installable runtime library and cross-target linking
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
-- [ ] Profile collection (`nano profile`)
+- [ ] Profile consumption for inlining/layout decisions
 
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs

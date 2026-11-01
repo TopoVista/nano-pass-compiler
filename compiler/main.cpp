@@ -50,6 +50,8 @@
 #include "parser/parser.h"
 #include "sema/resolve_scopes.h"
 #include "sema/type_check.h"
+#include "interpreter/core_interpreter.h"
+#include "profile/nano_profile.h"
 #include "visualize/ast_graphviz.h"
 
 // Pass infrastructure
@@ -73,6 +75,7 @@ enum class Command {
     Verify,
     Run,
     Jit,
+    Profile,
     Explain,
     Graph,
     Optimize,
@@ -117,6 +120,7 @@ void printHelp(std::ostream &out) {
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
         << "  jit <file>        Execute optimized SSA through ORC LLJIT.\n"
+        << "  profile <file>    Collect a deterministic Nano execution profile.\n"
         << "  explain <file>    Show full transformation journey.\n"
         << "  graph <file>      Emit a Graphviz graph.\n"
         << "  optimize <file>   Run optimizer (planned).\n\n"
@@ -184,6 +188,7 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     else if (first == "verify")   { o.command = Command::Verify;   ++i; }
     else if (first == "run")      { o.command = Command::Run;      ++i; }
     else if (first == "jit")      { o.command = Command::Jit;      ++i; }
+    else if (first == "profile")  { o.command = Command::Profile;  ++i; }
     else if (first == "explain")  { o.command = Command::Explain;  ++i; }
     else if (first == "graph")    { o.command = Command::Graph;    ++i; }
     else if (first == "optimize") { o.command = Command::Optimize; ++i; }
@@ -609,6 +614,24 @@ int main(int argc, char **argv) {
 
         // ── Run middle-end pipeline (CoreIR -> ANF -> CFG) ────────────────
         auto irRes = nanopass::IRPipeline::runAll(program);
+
+        if (options.command == Command::Profile) {
+            nanopass::profile::NanoProfile profile;
+            const auto execution = nanopass::CoreInterpreter{}.run(irRes.core, "main", {}, &profile);
+            if (execution.status != nanopass::ExecutionStatus::Success) {
+                const std::string reason = execution.error ? execution.error->message : "reference execution failed";
+                throw std::runtime_error("profile execution failed: " + reason);
+            }
+            const std::string destination = options.output.empty() ? options.input + ".nprof" : options.output;
+            std::ofstream out(destination);
+            if (!out) { std::cerr << "error: could not write '" << destination << "'\n"; return 1; }
+            nanopass::profile::writeProfileJson(profile, out);
+            std::cout << "profile written to '" << destination << "'\n"
+                      << "  functions: " << profile.functionCounts.size() << "\n"
+                      << "  branches: " << profile.branchCounts.size() << "\n"
+                      << "  loops: " << profile.loopIterations.size() << "\n";
+            return 0;
+        }
 
         // The Nano SSA optimizer is intentionally independent of the AST LLVM
         // backend. It is used for inspected optimized SSA only at this stage.

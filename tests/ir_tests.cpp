@@ -52,6 +52,7 @@
 #include "optimizer/advanced_optimizer.h"
 #include "interpreter/core_interpreter.h"
 #include "interpreter/ssa_interpreter.h"
+#include "profile/nano_profile.h"
 #include "testing/differential_runner.h"
 #include "testing/nano_generator.h"
 #include "testing/fuzz_runner.h"
@@ -1345,6 +1346,22 @@ static void test_interpreters_execute_fixed_size_arrays() {
     SSAProgram optimized=result.ssa; for(auto &function:optimized.functions){SSAOptimizationContext context;buildPipeline(3).run(function,context);ASSERT(verifySSA(function).ok);} auto o3=ssa.run(optimized); ASSERT(sameObservableResult(reference,o3));
 }
 
+static void test_reference_profile_is_deterministic_and_site_distinct() {
+    auto result=compileToIR(R"(int worker(int n){int i=0;while(i<n){if(i<2){i=i+1;}else{i=i+1;}}return i;}int main(){return worker(3);})");
+    profile::NanoProfile first, second;
+    auto firstRun=CoreInterpreter{}.run(result.core,"main",{},&first);
+    auto secondRun=CoreInterpreter{}.run(result.core,"main",{},&second);
+    ASSERT(firstRun.status==ExecutionStatus::Success);ASSERT(secondRun.status==ExecutionStatus::Success);
+    ASSERT_EQ(first.functionCounts.at("main"),1u);ASSERT_EQ(first.functionCounts.at("worker"),1u);
+    ASSERT_EQ(first.branchCounts.size(),2u);ASSERT_EQ(first.loopIterations.size(),1u);
+    const auto ifSite=std::find_if(first.branchCounts.begin(),first.branchCounts.end(),[](const auto&entry){return entry.first.find(":if:")!=std::string::npos;});
+    const auto loopSite=std::find_if(first.branchCounts.begin(),first.branchCounts.end(),[](const auto&entry){return entry.first.find(":while:")!=std::string::npos;});
+    ASSERT(ifSite!=first.branchCounts.end());ASSERT(loopSite!=first.branchCounts.end());
+    if(ifSite!=first.branchCounts.end()){ASSERT_EQ(ifSite->second.taken,2u);ASSERT_EQ(ifSite->second.notTaken,1u);}
+    if(loopSite!=first.branchCounts.end()){ASSERT_EQ(loopSite->second.taken,3u);ASSERT_EQ(loopSite->second.notTaken,1u);}
+    std::ostringstream firstJson,secondJson;profile::writeProfileJson(first,firstJson);profile::writeProfileJson(second,secondJson);ASSERT_EQ(firstJson.str(),secondJson.str());ASSERT(firstJson.str().find("\"schema_version\": 1")!=std::string::npos);
+}
+
 static void test_differential_execution_regression_corpus() {
     const std::vector<std::string> corpus={
         R"(int main(){int a=-17;int b=5;print(a/b);print(a%b);return a/b;})",
@@ -1478,6 +1495,7 @@ int main() {
     RUN_TEST(test_ssa_interpreter_parallel_phi_and_limits);
     RUN_TEST(test_execution_limits_and_defined_errors);
     RUN_TEST(test_interpreters_execute_fixed_size_arrays);
+    RUN_TEST(test_reference_profile_is_deterministic_and_site_distinct);
     RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);
     RUN_TEST(test_fuzz_summary_and_deterministic_reducer);

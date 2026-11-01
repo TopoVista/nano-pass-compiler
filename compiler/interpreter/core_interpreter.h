@@ -2,8 +2,10 @@
 
 #include <map>
 #include <stdexcept>
+#include <utility>
 
 #include "interpreter/execution.h"
+#include "interpreter/profile_sink.h"
 
 namespace nanopass {
 
@@ -14,6 +16,32 @@ class CoreInterpreter {
   ExecutionLimits limits_;
   ExecutionResult result_;
   size_t callDepth_ = 0;
+  ExecutionProfileSink *profile_ = nullptr;
+  std::string currentFunction_;
+  std::map<const CoreStmt *, std::string> profileSites_;
+
+  void indexProfileSites(const std::vector<std::unique_ptr<CoreStmt>> &statements,
+                         const std::string &function, size_t &ordinal) {
+    for (const auto &statement : statements) {
+      if (const auto *ifStatement = dynamic_cast<const CoreIfStmt *>(statement.get())) {
+        profileSites_.emplace(statement.get(), function + ":if:" +
+            std::to_string(ifStatement->origin.loc.line) + ":" +
+            std::to_string(ifStatement->origin.loc.col) + ":" + std::to_string(ordinal++));
+        indexProfileSites(ifStatement->thenBranch, function, ordinal);
+        indexProfileSites(ifStatement->elseBranch, function, ordinal);
+      } else if (const auto *whileStatement = dynamic_cast<const CoreWhileStmt *>(statement.get())) {
+        profileSites_.emplace(statement.get(), function + ":while:" +
+            std::to_string(whileStatement->origin.loc.line) + ":" +
+            std::to_string(whileStatement->origin.loc.col) + ":" + std::to_string(ordinal++));
+        indexProfileSites(whileStatement->body, function, ordinal);
+      }
+    }
+  }
+  std::string profileSite(const CoreStmt &statement) const {
+    const auto found = profileSites_.find(&statement);
+    if (found != profileSites_.end()) return found->second;
+    return currentFunction_ + ":unknown";
+  }
 
   [[noreturn]] void fail(ExecutionStatus status, std::string category, std::string message) {
     result_.status = status;
@@ -70,8 +98,15 @@ class CoreInterpreter {
       else if(auto s=dynamic_cast<const CoreAssignStmt*>(stmt.get())) frame.locals[s->target]=eval(*s->value,frame);
       else if(auto s=dynamic_cast<const CoreIndexAssignStmt*>(stmt.get())) {auto &array=frame.locals[s->targetArray];auto ptr=std::get_if<RuntimeArray>(&array);if(!ptr||!*ptr)fail(ExecutionStatus::RuntimeError,"type-error","indexed assignment target is not an array");auto index=indexOf(eval(*s->index,frame));if(index<0||static_cast<size_t>(index)>=(*ptr)->size())fail(ExecutionStatus::RuntimeError,"array-bounds","array index out of bounds");auto value=eval(*s->value,frame);(**ptr)[static_cast<size_t>(index)]=std::visit([](const auto &v)->CoreConstantVal{using T=std::decay_t<decltype(v)>;if constexpr(std::is_same_v<T,RuntimeArray>)return std::string("<array>");else return v;},value);}
       else if(auto s=dynamic_cast<const CoreExprStmt*>(stmt.get())) (void)eval(*s->expr,frame);
-      else if(auto s=dynamic_cast<const CoreIfStmt*>(stmt.get())) {auto f=statements(truth(eval(*s->condition,frame))?s->thenBranch:s->elseBranch,frame,returned);if(f!=Flow::Normal)return f;}
-      else if(auto s=dynamic_cast<const CoreWhileStmt*>(stmt.get())) {while(truth(eval(*s->condition,frame))){auto f=statements(s->body,frame,returned);if(f==Flow::Return)return f;if(f==Flow::Break)break;}}
+      else if(auto s=dynamic_cast<const CoreIfStmt*>(stmt.get())) {
+        const bool taken=truth(eval(*s->condition,frame));
+        if(profile_)profile_->recordBranch(profileSite(*s),taken);
+        auto f=statements(taken?s->thenBranch:s->elseBranch,frame,returned);if(f!=Flow::Normal)return f;
+      }
+      else if(auto s=dynamic_cast<const CoreWhileStmt*>(stmt.get())) {
+        const auto site=profileSite(*s);
+        while(true){const bool taken=truth(eval(*s->condition,frame));if(profile_)profile_->recordBranch(site,taken);if(!taken)break;if(profile_)profile_->recordLoopIteration(site);auto f=statements(s->body,frame,returned);if(f==Flow::Return)return f;if(f==Flow::Break)break;}
+      }
       else if(auto s=dynamic_cast<const CoreReturnStmt*>(stmt.get())) {if(s->value)returned=eval(*s->value,frame);return Flow::Return;}
       else if(dynamic_cast<const CoreBreakStmt*>(stmt.get()))return Flow::Break; else if(dynamic_cast<const CoreContinueStmt*>(stmt.get()))return Flow::Continue;
       else fail(ExecutionStatus::UnsupportedFeature,"core-statement","unsupported Core statement"); }
@@ -79,10 +114,15 @@ class CoreInterpreter {
   }
   RuntimeValue call(const std::string &name, const std::vector<RuntimeValue> &args) {
     if(name=="print"){if(args.size()!=1)fail(ExecutionStatus::RuntimeError,"arity","print expects one argument");auto text=runtimeValueText(args[0])+"\n";if(result_.stdoutText.size()+text.size()>limits_.maxOutputBytes)fail(ExecutionStatus::OutputLimitExceeded,"output-limit","output limit exceeded");result_.stdoutText+=text;return int64_t(0);}
-    const CoreFunction *fn=nullptr;for(const auto &candidate:program_->functions)if(candidate.name==name){fn=&candidate;break;}if(!fn)fail(ExecutionStatus::RuntimeError,"unknown-function","unknown function @"+name);if(args.size()!=fn->params.size())fail(ExecutionStatus::RuntimeError,"arity","wrong argument count");if(++callDepth_>limits_.maxCallDepth)fail(ExecutionStatus::RecursionLimitExceeded,"recursion-limit","call depth limit exceeded");Frame frame;for(size_t i=0;i<args.size();++i)frame.locals[fn->params[i].id]=args[i];std::optional<RuntimeValue> returned;auto flow=statements(fn->body,frame,returned);--callDepth_;if(flow!=Flow::Return&&fn->returnType.kind!=LangTypeKind::Void)fail(ExecutionStatus::RuntimeError,"missing-return","non-void function returned no value");return returned.value_or(RuntimeValue{int64_t(0)});
+    const CoreFunction *fn=nullptr;for(const auto &candidate:program_->functions)if(candidate.name==name){fn=&candidate;break;}if(!fn)fail(ExecutionStatus::RuntimeError,"unknown-function","unknown function @"+name);if(args.size()!=fn->params.size())fail(ExecutionStatus::RuntimeError,"arity","wrong argument count");if(++callDepth_>limits_.maxCallDepth)fail(ExecutionStatus::RecursionLimitExceeded,"recursion-limit","call depth limit exceeded");
+    if(profile_)profile_->recordFunctionCall(name);
+    Frame frame;for(size_t i=0;i<args.size();++i)frame.locals[fn->params[i].id]=args[i];std::optional<RuntimeValue> returned;
+    const std::string previousFunction=std::exchange(currentFunction_,name);
+    auto flow=statements(fn->body,frame,returned);
+    currentFunction_=previousFunction;--callDepth_;if(flow!=Flow::Return&&fn->returnType.kind!=LangTypeKind::Void)fail(ExecutionStatus::RuntimeError,"missing-return","non-void function returned no value");return returned.value_or(RuntimeValue{int64_t(0)});
   }
 public:
-  ExecutionResult run(const CoreProgram &program, std::string entry="main", ExecutionLimits limits={}) { program_=&program;limits_=limits;result_={};callDepth_=0;try { std::vector<RuntimeValue> none;auto value=call(entry,none);const CoreFunction*fn=nullptr;for(const auto&f:program.functions)if(f.name==entry)fn=&f;if(fn&&fn->returnType.kind!=LangTypeKind::Void)result_.returnValue=value; } catch(const std::runtime_error&) { if(result_.status==ExecutionStatus::Success) {result_.status=ExecutionStatus::InternalError;result_.error=RuntimeError{"internal","interpreter failure"};} } return result_; }
+  ExecutionResult run(const CoreProgram &program, std::string entry="main", ExecutionLimits limits={}, ExecutionProfileSink *profile=nullptr) { program_=&program;limits_=limits;result_={};callDepth_=0;profile_=profile;currentFunction_.clear();profileSites_.clear();if(profile_)for(const auto&function:program.functions){size_t ordinal=0;indexProfileSites(function.body,function.name,ordinal);}try { std::vector<RuntimeValue> none;auto value=call(entry,none);const CoreFunction*fn=nullptr;for(const auto&f:program.functions)if(f.name==entry)fn=&f;if(fn&&fn->returnType.kind!=LangTypeKind::Void)result_.returnValue=value; } catch(const std::runtime_error&) { if(result_.status==ExecutionStatus::Success) {result_.status=ExecutionStatus::InternalError;result_.error=RuntimeError{"internal","interpreter failure"};} } profile_=nullptr;currentFunction_.clear();profileSites_.clear(); return result_; }
 };
 
 } // namespace nanopass

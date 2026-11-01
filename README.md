@@ -138,6 +138,9 @@ The produced binary is `build/compiler/nano`.
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
 ./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-exe -o factorial
 
+# Collect deterministic interpreter execution facts in versioned JSON.
+./build/compiler/nano profile examples/loops.nano -o loops.nprof
+
 # Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
 ```

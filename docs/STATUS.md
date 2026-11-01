@@ -38,6 +38,9 @@ planned.
 - **Native differential runner** — `nano_jit_correctness fuzz` replays
   generated CoreIR-vs-O3-SSA/JIT cases. Recorded local campaign: seed
   `12648430`, 1,000 generated programs, 1,000 comparisons, 0 mismatches.
+- **Nano profile format** — `nano profile file -o file.nprof` records
+  deterministic function-call, branch-outcome, and loop-iteration counts from
+  the bounded CoreIR reference interpreter in schema-versioned JSON.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
@@ -138,9 +141,9 @@ planned.
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,426 |
+| IR/SSA/optimizer/correctness assertions | 5,440 |
 | LLVM backend/JIT assertions | 496 |
-| LLVM 18.1.3 WSL CTest | 83 / 83 passed |
+| LLVM 18.1.3 WSL CTest | 84 / 84 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -148,8 +151,8 @@ planned.
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-Local WSL validation with LLVM 18.1.3: **83/83 CTest** passed; ASan+UBSan
-passed the 5,426-assertion IR suite and 496-assertion LLVM backend suite. The
+Local WSL validation with LLVM 18.1.3: **84/84 CTest** passed; ASan+UBSan
+passed the 5,440-assertion IR suite and 496-assertion LLVM backend suite. The
 Windows LLVM package remains invalid because its imported targets reference a
 missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 
@@ -195,7 +198,7 @@ missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 - [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
-- [x] WSL LLVM 18.1.3 ASan+UBSan execution: 5,426 IR assertions and 496
+- [x] WSL LLVM 18.1.3 ASan+UBSan execution: 5,440 IR assertions and 496
   backend/JIT assertions passed. The Windows package remains independently
   broken (`C:\llvm\bin\llvm-tblgen.exe` missing).
 
@@ -211,7 +214,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] Optional ORCv2 JIT and captured typed print runtime
 - [x] Host object/executable emission and replayable native differential runner
 - [ ] Packaged/installable runtime library and cross-target linking
-- [ ] Native array bounds traps, execution limits, profiling, and adaptive JIT
+- [x] Deterministic CoreIR profile collection (`nano profile`)
+- [ ] Native array bounds traps, execution limits, profile consumption, and adaptive JIT
 
 ### Phase 9 — Observability
 - `nano explain` full polished UX
