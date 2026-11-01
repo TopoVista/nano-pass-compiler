@@ -217,7 +217,7 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     else if (first == "verify")   { o.command = Command::Verify;   ++i; }
     else if (first == "run")      { o.command = Command::Run;      ++i; }
     else if (first == "jit")      { o.command = Command::Jit;      ++i; }
-    else if (first == "profile")  { o.command = Command::Profile;  ++i;
+    else if (first == "profile")  { o.command = Command::Profile; o.optimizationLevel = 0; ++i;
         if (i < argc && std::string_view(argv[i]) == "show") { o.profileShow = true; ++i; } }
     else if (first == "explain")  { o.command = Command::Explain;  ++i; }
     else if (first == "graph")    { o.command = Command::Graph;    ++i; }
@@ -599,7 +599,9 @@ nanopass::CompilerPassOptions toPassOptions(const Options &opts) {
 void printRuntimeProfile(const nanopass::profile::ProgramRuntimeProfile &profile,
                          std::ostream &out) {
     out << "Profile (" << nanopass::profile::runtimeProfileStatusName(profile.status)
-        << ")\n  fingerprint: " << profile.programFingerprint << "\n";
+        << ")\n  fingerprint: " << profile.programFingerprint
+        << "\n  optimization level: O" << profile.optimizationLevel
+        << "\n  execution mode: " << profile.executionMode << "\n";
     for (const auto &[name, function] : profile.functions) {
         out << "\nFunction @" << name << "\n  calls: " << function.calls
             << "\n  blocks executed: " << function.blocksExecuted << "\n";
@@ -836,18 +838,31 @@ int main(int argc, char **argv) {
         auto irRes = nanopass::IRPipeline::runAll(program);
 
         if (options.command == Command::Profile) {
+            nanopass::SSAProgram profileInput = irRes.ssa;
+            if (options.optimizationLevel > 0) {
+                for (auto &function : profileInput.functions) {
+                    nanopass::opt::SSAOptimizationContext context;
+                    auto pipeline = nanopass::opt::buildPipeline(options.optimizationLevel);
+                    pipeline.run(function, context);
+                    if (!nanopass::verifySSA(function).ok)
+                        throw std::runtime_error("internal compiler error: SSA verification failed while preparing profile input");
+                }
+            }
             nanopass::profile::ProgramRuntimeProfile profile;
-            const auto execution = nanopass::SSAInterpreter{}.run(irRes.ssa, "main", {}, &profile);
+            const auto execution = nanopass::SSAInterpreter{}.run(profileInput, "main", {}, &profile);
             if (execution.status != nanopass::ExecutionStatus::Success) {
                 const std::string reason = execution.error ? execution.error->message : "SSA profile execution failed";
                 throw std::runtime_error("profile execution failed: " + reason);
             }
+            profile.optimizationLevel = static_cast<uint64_t>(options.optimizationLevel);
+            profile.executionMode = "ssa-interpreter";
             const std::string destination = options.output.empty() ? options.input + ".nprof.json" : options.output;
             std::ofstream out(destination);
             if (!out) { std::cerr << "error: could not write '" << destination << "'\n"; return 1; }
             nanopass::profile::writeRuntimeProfileJson(profile, out);
             std::cout << "profile written to '" << destination << "'\n"
                       << "  fingerprint: " << profile.programFingerprint << "\n"
+                      << "  optimization level: O" << profile.optimizationLevel << "\n"
                       << "  functions: " << profile.functions.size() << "\n";
             return 0;
         }
@@ -872,6 +887,11 @@ int main(int argc, char **argv) {
             }
             if (optimizationProfile->status != nanopass::profile::ProfileStatus::Complete) {
                 std::cerr << "error: profile is not complete and cannot guide optimization\n";
+                return 1;
+            }
+            if (optimizationProfile->optimizationLevel != 0) {
+                std::cerr << "error[PROFILE_OPTIMIZATION_LEVEL_MISMATCH]: current PGO consumes Tier-0/O0 profiles; profile was collected at O"
+                          << optimizationProfile->optimizationLevel << '\n';
                 return 1;
             }
         }

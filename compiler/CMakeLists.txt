@@ -313,6 +313,15 @@ endif()
            COMMAND nano profile show ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   set_tests_properties(nano_profile_show PROPERTIES DEPENDS nano_profile_loops)
+  add_test(NAME nano_profile_o2
+           COMMAND nano profile ${CMAKE_SOURCE_DIR}/examples/loops.nano -O2
+                   -o ${CMAKE_CURRENT_BINARY_DIR}/nano_loops_o2.nprof
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_profile_o2_rejected_for_pgo
+           COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/loops.nano
+                   --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops_o2.nprof -O2)
+  set_tests_properties(nano_profile_o2_rejected_for_pgo PROPERTIES
+                       DEPENDS nano_profile_o2 WILL_FAIL TRUE)
   add_test(NAME nano_heuristic_policy_optimize
            COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/loops.nano
                    --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof

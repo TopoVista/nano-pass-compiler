@@ -7,6 +7,11 @@ nano profile app.nano -o app.nprof.json
 nano optimize app.nano --profile=app.nprof.json -O3
 ```
 
+Collect the profile at Tier-0/O0 (the default, or pass `-O0` explicitly).
+Higher-level profile runs are labelled observation artifacts and are rejected
+by the current PGO consumer because their SSA fingerprint describes a
+different input shape.
+
 A successful Tier-0 → Tier-1 native run can produce an equivalent complete
 profile for the same input source:
 

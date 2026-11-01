@@ -51,6 +51,11 @@ struct ProgramRuntimeProfile {
   static constexpr uint64_t kSchemaVersion = 1;
   uint64_t schemaVersion = kSchemaVersion;
   std::string programFingerprint;
+  // The SSA optimization level used to create this profile. Tier-0/O0 is the
+  // compatible baseline for the current PGO consumer; higher levels remain
+  // useful, explicitly labelled observation artifacts.
+  uint64_t optimizationLevel = 0;
+  std::string executionMode = "unspecified";
   ProfileStatus status = ProfileStatus::Complete;
   std::map<std::string, FunctionRuntimeProfile> functions;
 
@@ -147,6 +152,9 @@ inline void writeRuntimeProfileJson(const ProgramRuntimeProfile &profile,
       << ",\n  \"profile_kind\": \"ssa-runtime\""
       << ",\n  \"program_fingerprint\": \""
       << escapeRuntimeProfileJson(profile.programFingerprint) << "\""
+      << ",\n  \"optimization_level\": " << profile.optimizationLevel
+      << ",\n  \"execution_mode\": \""
+      << escapeRuntimeProfileJson(profile.executionMode) << "\""
       << ",\n  \"status\": \"" << runtimeProfileStatusName(profile.status)
       << "\",\n  \"functions\": {";
   bool firstFunction = true;
@@ -334,6 +342,8 @@ inline std::optional<ProgramRuntimeProfile> readRuntimeProfileJson(
   const auto *version = detail::profileField(*root, "schema_version", detail::JsonValue::Kind::Number);
   const auto *kind = detail::profileField(*root, "profile_kind", detail::JsonValue::Kind::String);
   const auto *fingerprint = detail::profileField(*root, "program_fingerprint", detail::JsonValue::Kind::String);
+  const auto *optimizationLevel = detail::profileField(*root, "optimization_level", detail::JsonValue::Kind::Number);
+  const auto *executionMode = detail::profileField(*root, "execution_mode", detail::JsonValue::Kind::String);
   const auto *status = detail::profileField(*root, "status", detail::JsonValue::Kind::String);
   const auto *functions = detail::profileField(*root, "functions", detail::JsonValue::Kind::Object);
   if (!version || !kind || !fingerprint || !status || !functions ||
@@ -345,6 +355,10 @@ inline std::optional<ProgramRuntimeProfile> readRuntimeProfileJson(
   if (!parsedStatus) { error = "unknown runtime profile status"; return std::nullopt; }
   ProgramRuntimeProfile profile;
   profile.programFingerprint = fingerprint->string;
+  // These fields were added without changing the v1 counter schema. Accept
+  // older v1 files as baseline profiles, but write both fields going forward.
+  if (optimizationLevel) profile.optimizationLevel = optimizationLevel->number;
+  if (executionMode) profile.executionMode = executionMode->string;
   profile.status = *parsedStatus;
   for (const auto &[name, encodedFunction] : functions->object) {
     const auto *calls = detail::profileField(encodedFunction, "calls", detail::JsonValue::Kind::Number);

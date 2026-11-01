@@ -208,6 +208,8 @@ public:
   AdaptiveSession(const SSAProgram &source, AdaptiveJITConfig config)
       : source_(source), config_(config), callGraph_(CallGraphAnalysis::run(source)) {
     result_.runtimeProfile.programFingerprint = profile::stableProgramFingerprint(source);
+    result_.runtimeProfile.optimizationLevel = 0;
+    result_.runtimeProfile.executionMode = "orc-adaptive";
     result_.runtimeProfile.status = profile::ProfileStatus::Complete;
   }
 

@@ -54,7 +54,8 @@ profiles, while preserving single-threaded execution ownership.
 - **SSA runtime profiles** — `nano profile` records deterministic
   function/block/edge/loop counters under a canonical SSA fingerprint;
   `nano profile show` renders saved profiles. Schema, malformed input,
-  incomplete status, and fingerprint mismatches are rejected before PGO use.
+  incomplete status, fingerprint mismatches, and non-Tier-0 profile levels
+  are rejected before PGO use.
 - **Adaptive ORC JIT** — `nano jit --adaptive` compiles each function behind an
   LLVM 18 indirect stub, records real native function/block/edge counters, and
   promotes a non-recursive hot function once through `updatePointer`. Tier-0

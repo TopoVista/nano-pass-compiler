@@ -1379,12 +1379,13 @@ static void test_ssa_runtime_profile_is_deterministic_serializable_and_compatibl
     ASSERT(loop.entries>0u); ASSERT(loop.backedges>0u); ASSERT(loop.exits>0u); ASSERT(loop.averageTripCount()>0.0);
     ASSERT(profile::runtimeProfileMatches(first,result.ssa));
     std::ostringstream a,b; profile::writeRuntimeProfileJson(first,a); profile::writeRuntimeProfileJson(second,b);
-    ASSERT_EQ(a.str(),b.str()); ASSERT(a.str().find("\"profile_kind\": \"ssa-runtime\"")!=std::string::npos);
+    ASSERT_EQ(a.str(),b.str()); ASSERT(a.str().find("\"profile_kind\": \"ssa-runtime\"")!=std::string::npos);ASSERT(a.str().find("\"optimization_level\": 0")!=std::string::npos);
     std::istringstream encoded(a.str()); std::string error; auto decoded=profile::readRuntimeProfileJson(encoded,error);
-    ASSERT(decoded.has_value()); if(decoded){ASSERT(profile::runtimeProfileMatches(*decoded,result.ssa));ASSERT_EQ(decoded->functions.at("helper").calls,2u);}
+    ASSERT(decoded.has_value()); if(decoded){ASSERT(profile::runtimeProfileMatches(*decoded,result.ssa));ASSERT_EQ(decoded->optimizationLevel,0u);ASSERT_EQ(decoded->executionMode,"unspecified");ASSERT_EQ(decoded->functions.at("helper").calls,2u);}
     SSAProgram different=compileToIR(R"(int main(){return 9;})").ssa; ASSERT(!profile::runtimeProfileMatches(first,different));
     std::istringstream malformed("{\"schema_version\":99}"); ASSERT(!profile::readRuntimeProfileJson(malformed,error).has_value());
     std::istringstream incomplete("{\"schema_version\":1,\"profile_kind\":\"ssa-runtime\"}"); ASSERT(!profile::readRuntimeProfileJson(incomplete,error).has_value());
+    std::istringstream legacy("{\"schema_version\":1,\"profile_kind\":\"ssa-runtime\",\"program_fingerprint\":\"legacy\",\"status\":\"complete\",\"functions\":{}}"); auto legacyProfile=profile::readRuntimeProfileJson(legacy,error); ASSERT(legacyProfile.has_value());if(legacyProfile){ASSERT_EQ(legacyProfile->optimizationLevel,0u);ASSERT_EQ(legacyProfile->executionMode,"unspecified");}
     profile::ProgramRuntimeProfile failed; ExecutionLimits limited; limited.maxSteps=1;
     const auto failedRun=SSAInterpreter{}.run(result.ssa,"main",limited,&failed);
     ASSERT(failedRun.status==ExecutionStatus::StepLimitExceeded); ASSERT(failed.status==profile::ProfileStatus::Failed);

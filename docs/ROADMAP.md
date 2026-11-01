@@ -115,6 +115,7 @@
 
 ## Phase 9 — Runtime profiling, adaptive JIT, and policy infrastructure
 - [x] Schema-versioned SSA function/block/edge/loop profiles with fingerprint validation
+- [x] Explicit profile optimization-level/execution-mode metadata and Tier-0 PGO gate
 - [x] `nano profile show` and deterministic `nano features` JSON output
 - [x] ORC indirect-stub Tier-0 → Tier-1 promotion with force-tier test modes
 - [x] Profile compatibility gates and bounded hot-inline cost tuning
