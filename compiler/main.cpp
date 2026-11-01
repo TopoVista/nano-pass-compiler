@@ -955,7 +955,11 @@ int main(int argc, char **argv) {
                         pipeline.add(std::move(pass));
                     }
                 } else {
-                    const int pipelineLevel = adaptiveTier0 ? 1 : options.optimizationLevel;
+                    // Tier 0 deliberately starts from the unoptimized SSA.
+                    // Besides keeping first compilation cheap, this makes a
+                    // completed native profile fingerprint the same SSA that
+                    // `nano optimize --profile` validates for this source.
+                    const int pipelineLevel = adaptiveTier0 ? 0 : options.optimizationLevel;
                     pipeline = nanopass::opt::buildPipeline(pipelineLevel);
                     if (!adaptiveTier0 && options.optimizationLevel >= 2) {
                         pipeline.add(nanopass::opt::makeAdvancedPass("loop-simplify"));

@@ -25,7 +25,9 @@ smallest extension of the existing whole-program lowering path: the selected
 body is retained, other lowered bodies are converted to declarations, and the
 module is verified again before ORC accepts it.
 
-Tier 0 installs verified SSA with no expensive middle-end work. Tier 1 starts
+Tier 0 installs the verified, unoptimized input SSA with no middle-end work.
+This also keeps the completed profile fingerprint compatible with
+`nano optimize --profile` for the same source. Tier 1 starts
 from a fresh SSA copy, supplies observed call counters to the ordinary inliner
 only as its documented hot-callee cost input, then runs the bounded O3
 pipeline plus loop canonicalization, LICM, and strength reduction. Recursion,

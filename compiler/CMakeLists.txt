@@ -262,7 +262,14 @@ endif()
     add_test(NAME nano_adaptive_jit_promotion
              COMMAND nano jit ${CMAKE_SOURCE_DIR}/examples/hot_loop.nano
                       --adaptive --hot-threshold=2 -O0
+                      --profile-output=${CMAKE_CURRENT_BINARY_DIR}/nano_adaptive_hot.nprof
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_adaptive_profile_consume
+             COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/hot_loop.nano
+                      --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_adaptive_hot.nprof -O2
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    set_tests_properties(nano_adaptive_profile_consume PROPERTIES
+                         DEPENDS nano_adaptive_jit_promotion)
     add_test(NAME nano_adaptive_jit_fuzz_smoke
              COMMAND nano_jit_correctness adaptive-fuzz --seed=918273 --cases=8 --hot-threshold=2
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
