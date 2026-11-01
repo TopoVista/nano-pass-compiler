@@ -33,3 +33,10 @@ different SSA shape.
 of the validated runtime facts consumed by the compilation journey. It reports
 profile metadata and aggregate observed function, call, block-entry, edge, and
 loop counts; it never invents a runtime measurement.
+
+For a reproducible profile-guided loop-effort demonstration, use
+`examples/pgo_hot_loop.nano`: its `step` function reaches the default hot
+function threshold during O0 profile collection. `nano optimize ... -O2
+--profile=... --remarks` then records `PROFILE_LOOP_EFFORT_ENABLED`; cold
+functions record `PROFILE_LOOP_EFFORT_SKIPPED` through
+`--why-not-optimized` instead.

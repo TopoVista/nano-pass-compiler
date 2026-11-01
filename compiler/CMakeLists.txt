@@ -327,6 +327,20 @@ endif()
                    --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
                    --policy=heuristic --remarks)
   set_tests_properties(nano_heuristic_policy_optimize PROPERTIES DEPENDS nano_profile_loops)
+  add_test(NAME nano_pgo_hot_profile
+           COMMAND nano profile ${CMAKE_SOURCE_DIR}/examples/pgo_hot_loop.nano
+                   -o ${CMAKE_CURRENT_BINARY_DIR}/nano_pgo_hot.nprof
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_pgo_hot_optimize
+           COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/pgo_hot_loop.nano
+                   --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_pgo_hot.nprof
+                   -O2 --remarks --why-not-optimized)
+  set_tests_properties(nano_pgo_hot_optimize PROPERTIES DEPENDS nano_pgo_hot_profile)
+  add_test(NAME nano_policy_decision_log
+           COMMAND nano features ${CMAKE_SOURCE_DIR}/examples/pgo_hot_loop.nano
+                   --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_pgo_hot.nprof
+                   --decision-log=${CMAKE_CURRENT_BINARY_DIR}/nano_policy_decisions.jsonl)
+  set_tests_properties(nano_policy_decision_log PROPERTIES DEPENDS nano_pgo_hot_profile)
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example

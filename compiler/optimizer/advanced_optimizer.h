@@ -45,6 +45,10 @@ struct OptimizationBudget {
   std::map<std::string,uint64_t> observedFunctionCalls;
   uint64_t hotFunctionThreshold=10;
   size_t hotInlineCalleeInstructions=24;
+  // Profile data may increase bounded optimization effort for a demonstrably
+  // hot callee, but it is never an escape hatch from a finite growth budget.
+  size_t hotMaxCallerGrowth=64;
+  size_t hotMaxTotalInlineGrowth=192;
 };
 inline bool isSafeToSpeculate(const SSAInstruction &instruction) { return instruction.kind==SSAInstructionKind::Unary || (instruction.kind==SSAInstructionKind::Binary && instruction.binaryOp!=BinaryOpKind::Div && instruction.binaryOp!=BinaryOpKind::Mod); }
 
@@ -193,13 +197,31 @@ public:
               decisionBudget.maxInlineCalleeInstructions = std::max(
                   decisionBudget.maxInlineCalleeInstructions,
                   decisionBudget.hotInlineCalleeInstructions);
+              decisionBudget.maxCallerGrowth = std::max(
+                  decisionBudget.maxCallerGrowth,
+                  decisionBudget.hotMaxCallerGrowth);
+              decisionBudget.maxTotalInlineGrowth = std::max(
+                  decisionBudget.maxTotalInlineGrowth,
+                  decisionBudget.hotMaxTotalInlineGrowth);
               result.remarks.push_back({OptimizationRemarkKind::Analysis, "inline",
                   "PROFILE_HOT_CALLEE: @" + callee.name + " observed " +
                       std::to_string(observedCalls->second) + " calls; inline threshold " +
                       std::to_string(budget.maxInlineCalleeInstructions) + " -> " +
-                      std::to_string(decisionBudget.maxInlineCalleeInstructions),
+                      std::to_string(decisionBudget.maxInlineCalleeInstructions) +
+                      ", caller growth " + std::to_string(budget.maxCallerGrowth) +
+                      " -> " + std::to_string(decisionBudget.maxCallerGrowth) +
+                      ", total growth " + std::to_string(budget.maxTotalInlineGrowth) +
+                      " -> " + std::to_string(decisionBudget.maxTotalInlineGrowth),
                   caller.blocks[blockIndex].id, call.result, call.origin});
               result.statistics.add("profileHotCallees");
+            } else if (observedCalls != budget.observedFunctionCalls.end()) {
+              result.remarks.push_back({OptimizationRemarkKind::Analysis, "inline",
+                  "PROFILE_COLD_CALLEE: @" + callee.name + " observed " +
+                      std::to_string(observedCalls->second) + " calls below hot threshold " +
+                      std::to_string(budget.hotFunctionThreshold) +
+                      "; retaining static inline budget",
+                  caller.blocks[blockIndex].id, call.result, call.origin});
+              result.statistics.add("profileColdCallees");
             }
             const InlineDecision decision = model.decide(
                 callee, graphSnapshot.recursive(callee.name), decisionBudget,

@@ -1404,8 +1404,16 @@ static void test_profile_guided_inline_remains_verifier_gated() {
     auto result=compileToIR(R"(int hot(int x){int a=x+1;int b=a+1;int c=b+1;int d=c+1;int e=d+1;int f=e+1;int g=f+1;int h=g+1;int i=h+1;int j=i+1;int k=j+1;return k;}int main(){return hot(1);})");
     SSAProgram cold=result.ssa,hot=result.ssa;OptimizationBudget budget;
     auto coldResult=SSAProgramInliner{}.run(cold,budget);ASSERT(!coldResult.changed);ASSERT(coldResult.statistics.get("callsRejectedCost")>0u);
+    OptimizationBudget observedCold;observedCold.observedFunctionCalls["hot"]=1;SSAProgram observedColdProgram=result.ssa;auto observedColdResult=SSAProgramInliner{}.run(observedColdProgram,observedCold);ASSERT(!observedColdResult.changed);ASSERT(observedColdResult.statistics.get("profileColdCallees")==1u);ASSERT(std::any_of(observedColdResult.remarks.begin(),observedColdResult.remarks.end(),[](const auto&remark){return remark.message.find("PROFILE_COLD_CALLEE")!=std::string::npos;}));
     budget.observedFunctionCalls["hot"]=10;auto hotResult=SSAProgramInliner{}.run(hot,budget);ASSERT(hotResult.changed);ASSERT(hotResult.statistics.get("hotProfileInlines")>0u);ASSERT(hotResult.statistics.get("profileHotCallees")==1u);ASSERT(std::any_of(hotResult.remarks.begin(),hotResult.remarks.end(),[](const auto&remark){return remark.message.find("PROFILE_HOT_CALLEE")!=std::string::npos;}));
     for(const auto&function:hot.functions)ASSERT(verifySSA(function).ok);
+    // Hotness may enlarge a finite effort budget, but not erase it. This
+    // proves profile data affects profitability only after ordinary legality
+    // checks and that a configured hot budget remains enforceable.
+    OptimizationBudget exhausted;exhausted.maxInlineCalleeInstructions=100;exhausted.maxCallerGrowth=0;exhausted.maxTotalInlineGrowth=0;exhausted.hotMaxCallerGrowth=0;exhausted.hotMaxTotalInlineGrowth=0;exhausted.observedFunctionCalls["hot"]=10;
+    SSAProgram stillRejected=result.ssa;auto rejected=SSAProgramInliner{}.run(stillRejected,exhausted);ASSERT(!rejected.changed);ASSERT(rejected.statistics.get("callsRejectedBudget")>0u);
+    exhausted.hotMaxCallerGrowth=32;exhausted.hotMaxTotalInlineGrowth=32;
+    SSAProgram budgetedHot=result.ssa;auto widened=SSAProgramInliner{}.run(budgetedHot,exhausted);ASSERT(widened.changed);ASSERT(widened.statistics.get("hotProfileInlines")>0u);for(const auto&function:budgetedHot.functions)ASSERT(verifySSA(function).ok);
 }
 
 static void test_policy_features_and_hotness_are_stable() {

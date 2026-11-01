@@ -113,7 +113,7 @@
 - [x] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Branch/loop profile consumption for layout decisions
 
-## Phase 9 — Runtime profiling, adaptive JIT, and policy infrastructure
+## Phase 9 — Runtime profiling, adaptive JIT, and policy infrastructure ✅
 - [x] Schema-versioned SSA function/block/edge/loop profiles with fingerprint validation
 - [x] Explicit profile optimization-level/execution-mode metadata and Tier-0 PGO gate
 - [x] `nano profile show` and deterministic `nano features` JSON output
@@ -122,9 +122,12 @@
 - [x] Heuristic policy interface and stable static/dynamic feature schema
 - [x] Opt-in heuristic-policy pipeline selection (`nano optimize --policy=heuristic`)
 - [x] Native function/block/edge instrumentation for complete adaptive profiles
-- [ ] Profile-guided branch layout and loop-effort selection
+- [x] Profile-guided bounded loop-effort selection (legality unchanged)
 - [x] Deterministic decision JSONL dataset export with policy configuration and observed structural results (`--decision-log=file`)
-- [ ] Decision-log replay and measured reward collection
+
+Deferred research extensions: profile-guided branch layout, decision-log replay,
+and measured reward collection belong to the advanced-policy work after the
+deterministic Phase 9 foundation; they are not represented as implemented.
 
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs

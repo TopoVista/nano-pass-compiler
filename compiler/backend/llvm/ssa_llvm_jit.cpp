@@ -18,6 +18,7 @@
 #include "ir/ssa/call_graph.h"
 #include "ir/ssa/ssa_verifier.h"
 #include "optimizer/advanced_optimizer.h"
+#include "optimizer/optimization_policy.h"
 #include "optimizer/ssa_optimizer.h"
 
 namespace nanopass::llvm_backend {
@@ -151,7 +152,7 @@ class AdaptiveSession {
     return true;
   }
 
-  SSAProgram tier1Program(std::string_view name) {
+  std::pair<SSAProgram, bool> tier1Program(std::string_view name) {
     SSAProgram tier1 = source_;
     // Reuse the ordinary, verifier-gated inliner rather than inventing a JIT
     // variant. Counters observed before this recompilation can widen only its
@@ -164,14 +165,23 @@ class AdaptiveSession {
     opt::SSAProgramInliner{}.run(tier1, inlineBudget);
     const auto found = std::find_if(tier1.functions.begin(), tier1.functions.end(),
         [&](const SSAFunction &candidate) { return candidate.name == name; });
-    if (found == tier1.functions.end()) return tier1;
+    if (found == tier1.functions.end()) return {std::move(tier1), false};
+    bool runLoopEffort = true;
+    const auto observed = result_.runtimeProfile.functions.find(std::string(name));
+    if (observed != result_.runtimeProfile.functions.end()) {
+      opt::HotnessThresholds thresholds;
+      thresholds.hotFunctionCalls = config_.hotFunctionCallThreshold;
+      runLoopEffort = opt::classifyHotness(&observed->second, thresholds).hotness == opt::Hotness::Hot;
+    }
     opt::SSAOptimizationContext context;
     auto pipeline = opt::buildPipeline(3);
-    pipeline.add(opt::makeAdvancedPass("loop-simplify"));
-    pipeline.add(opt::makeAdvancedPass("licm"));
+    if (runLoopEffort) {
+      pipeline.add(opt::makeAdvancedPass("loop-simplify"));
+      pipeline.add(opt::makeAdvancedPass("licm"));
+    }
     pipeline.add(opt::makeAdvancedPass("strength-reduce"));
     pipeline.run(*found, context);
-    return tier1;
+    return {std::move(tier1), runLoopEffort};
   }
 
   bool compileAndInstall(const std::string &name, CompilationTier tier,
@@ -179,7 +189,15 @@ class AdaptiveSession {
     const auto compilationStarted = std::chrono::steady_clock::now();
     const SSAFunction *sourceFunction = function(name);
     if (!sourceFunction) { error = "unknown adaptive function @" + name; return false; }
-    SSAProgram candidate = tier == CompilationTier::Tier0 ? source_ : tier1Program(name);
+    bool tier1ProfileLoopEffort = false;
+    SSAProgram candidate;
+    if (tier == CompilationTier::Tier0) {
+      candidate = source_;
+    } else {
+      auto tier1 = tier1Program(name);
+      candidate = std::move(tier1.first);
+      tier1ProfileLoopEffort = tier1.second;
+    }
     const auto selected = std::find_if(candidate.functions.begin(), candidate.functions.end(),
         [&](const SSAFunction &item) { return item.name == name; });
     if (selected == candidate.functions.end() || !verifySSA(*selected).ok) {
@@ -220,6 +238,7 @@ class AdaptiveSession {
       telemetry.tier1CompilationUs = elapsedUs;
       telemetry.tier1Instructions = instructionCount(*selected);
       telemetry.tier1Blocks = selected->blocks.size();
+      telemetry.tier1ProfileLoopEffortEnabled = tier1ProfileLoopEffort;
     }
     return true;
   }

@@ -158,6 +158,12 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 ./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
   --policy=heuristic --decision-log=policy-decisions.jsonl
 
+# This profile makes `step` hot at the documented default threshold, so the
+# normal PGO pipeline spends optional loop-optimization effort only there.
+./build/compiler/nano profile examples/pgo_hot_loop.nano -o pgo-hot.nprof.json
+./build/compiler/nano optimize examples/pgo_hot_loop.nano --profile=pgo-hot.nprof.json \
+  -O2 --remarks --why-not-optimized
+
 # Promote deterministic hot calls through LLVM ORC dispatch stubs.
 ./build/compiler/nano profile examples/hot_loop.nano -o hot.nprof.json
 ./build/compiler/nano optimize examples/hot_loop.nano --profile=hot.nprof.json -O3 --why-not-optimized

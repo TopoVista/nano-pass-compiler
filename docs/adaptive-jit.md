@@ -17,7 +17,8 @@ complete stable function/block/edge/loop counters; `--jit-events=json`
 produces a schema-v1 event record without human-output interleaving. The same
 event document contains measured per-function Tier-0/Tier-1 compiler work
 (compilation microseconds and selected SSA instruction/block counts). These
-fields are telemetry, not an execution-speed claim.
+fields also state whether Tier 1 enabled its profile-guided loop effort; they
+are telemetry, not an execution-speed claim.
 
 The detailed ownership, replacement, and correctness model is in
 [`adaptive-jit-design.md`](adaptive-jit-design.md).

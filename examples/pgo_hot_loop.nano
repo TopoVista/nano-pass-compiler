@@ -1,0 +1,22 @@
+// A deterministic PGO demonstration: `step` reaches the default hot-function
+// threshold during profile collection, and its loop receives the optional
+// profile-guided loop-effort pipeline during a subsequent -O2 optimization.
+int step(int value) {
+  int i = 0;
+  while (i < 3) {
+    value = value + 1;
+    i = i + 1;
+  }
+  return value;
+}
+
+int main() {
+  int i = 0;
+  int total = 0;
+  while (i < 1000) {
+    total = step(total);
+    i = i + 1;
+  }
+  print(total);
+  return total;
+}

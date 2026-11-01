@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: Phase 9 runtime foundation — complete deterministic SSA profiles,
+Last updated: Phase 9 — complete deterministic SSA profiles,
 ORC Tier-0 → Tier-1 dispatch-stub promotion, PGO compatibility gates, and
 versioned optimization-policy features are implemented. Adaptive ORC profiles
 use the same stable function/block/edge/loop identities as interpreter
@@ -50,7 +50,7 @@ profiles, while preserving single-threaded execution ownership.
   function-call counts can conservatively guide SSA inlining through
   `--profile=file.nprof`; all legality and verifier gates remain unchanged.
 
-### Runtime profiles and adaptive JIT (Phase 9 foundation)
+### Runtime profiles and adaptive JIT (Phase 9 complete)
 - **SSA runtime profiles** — `nano profile` records deterministic
   function/block/edge/loop counters under a canonical SSA fingerprint;
   `nano profile show` renders saved profiles. Schema, malformed input,
@@ -68,6 +68,11 @@ profiles, while preserving single-threaded execution ownership.
   executes that opt-in function-local choice and records it as an analysis
   remark. `--decision-log` records the selected configuration and observed
   structural result as deterministic JSONL. No ML model or LLM is required.
+- **Profile-guided effort** — complete O0 profiles can widen only documented
+  inline cost/growth limits for hot callees and selectively enable the bounded
+  loop-simplify/LICM effort for hot functions. Profile data never changes
+  transformation legality; `--why-not-optimized` exposes skipped cold-loop
+  effort with its recorded hotness reason.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,

@@ -295,6 +295,7 @@ int main() {
   CHECK(hotLoopAdaptive.execution.stdoutText == hotLoopOracle.stdoutText);
   CHECK(hotLoopAdaptive.execution.returnValue == std::stoll(runtimeValueText(*hotLoopOracle.returnValue)));
   CHECK(hotLoopAdaptive.tiers.at("spin").activeTier == CompilationTier::Tier1);
+  CHECK(hotLoopAdaptive.telemetry.at("spin").tier1ProfileLoopEffortEnabled);
   CHECK(!hotLoopAdaptive.runtimeProfile.functions.at("spin").loops.empty());
   CHECK(hotLoopAdaptive.runtimeProfile.functions.at("spin").loops.begin()->second.backedges == 15u);
 

@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -72,12 +73,62 @@ IRPipelineResult compilePipeline(const std::string &source) {
   return IRPipeline::runAll(program);
 }
 
-void saveFailure(const Options &options, size_t caseIndex, const std::string &source) {
+std::string jsonEscape(std::string_view value) {
+  std::string escaped;
+  for (const char ch : value) {
+    if (ch == '\\') escaped += "\\\\";
+    else if (ch == '"') escaped += "\\\"";
+    else if (ch == '\n') escaped += "\\n";
+    else escaped += ch;
+  }
+  return escaped;
+}
+
+const char *eventName(llvm_backend::AdaptiveJITEventKind event) {
+  switch (event) {
+  case llvm_backend::AdaptiveJITEventKind::Tier0Compiled: return "tier0_compiled";
+  case llvm_backend::AdaptiveJITEventKind::HotThresholdReached: return "hot_threshold_reached";
+  case llvm_backend::AdaptiveJITEventKind::Tier1CompilationStarted: return "tier1_compilation_started";
+  case llvm_backend::AdaptiveJITEventKind::Tier1Installed: return "tier1_installed";
+  case llvm_backend::AdaptiveJITEventKind::Tier1Rejected: return "tier1_rejected";
+  }
+  return "unknown";
+}
+
+void saveFailure(const Options &options, size_t caseIndex, const std::string &source,
+                 bool adaptive,
+                 const std::optional<llvm_backend::AdaptiveJITExecutionResult> &adaptiveResult) {
   if (options.failureDirectory.empty()) return;
   std::filesystem::create_directories(options.failureDirectory);
-  std::ofstream out(options.failureDirectory / ("jit-seed-" +
-      std::to_string(options.generator.seed) + "-case-" + std::to_string(caseIndex) + ".nano"));
+  const std::string stem = "jit-seed-" + std::to_string(options.generator.seed) +
+      "-case-" + std::to_string(caseIndex);
+  std::ofstream out(options.failureDirectory / (stem + ".nano"));
   out << source;
+  std::ofstream metadata(options.failureDirectory / (stem + ".json"));
+  metadata << "{\"schema_version\":1,\"kind\":\"jit-correctness-failure\""
+           << ",\"seed\":" << options.generator.seed
+           << ",\"case\":" << caseIndex
+           << ",\"adaptive\":" << (adaptive ? "true" : "false")
+           << ",\"hot_threshold\":" << options.hotThreshold
+           << ",\"tier0_pipeline\":\"O0\""
+           << ",\"tier1_pipeline\":\"O3,loop-simplify,licm,strength-reduce,profile-inline\"";
+  if (adaptiveResult) {
+    metadata << ",\"events\":[";
+    for (size_t index = 0; index < adaptiveResult->events.size(); ++index) {
+      if (index) metadata << ',';
+      const auto &event = adaptiveResult->events[index];
+      metadata << "{\"kind\":\"" << eventName(event.kind)
+               << "\",\"function\":\"" << jsonEscape(event.function)
+               << "\",\"calls\":" << event.calls
+               << ",\"detail\":\"" << jsonEscape(event.detail) << "\"}";
+    }
+    std::ostringstream profile;
+    profile::writeRuntimeProfileJson(adaptiveResult->runtimeProfile, profile);
+    metadata << "],\"runtime_profile\":" << profile.str();
+  } else {
+    metadata << ",\"events\":[],\"runtime_profile\":null";
+  }
+  metadata << "}\n";
 }
 
 } // namespace
@@ -98,18 +149,20 @@ int main(int argc, char **argv) {
     for (size_t offset = 0; offset < options.cases; ++offset) {
       const size_t caseIndex = options.startCase + offset;
       const auto generated = generator.generate(caseIndex);
+      std::optional<llvm_backend::AdaptiveJITExecutionResult> adaptiveResult;
       try {
         auto pipeline = compilePipeline(generated.source);
         const auto oracle = CoreInterpreter{}.run(pipeline.core);
         if (oracle.status != ExecutionStatus::Success || !oracle.returnValue)
           throw std::runtime_error("CoreIR reference execution did not succeed");
-        for (auto &function : pipeline.ssa.functions) {
+        SSAProgram optimized = pipeline.ssa;
+        for (auto &function : optimized.functions) {
           nanopass::opt::SSAOptimizationContext context;
           nanopass::opt::buildPipeline(3).run(function, context);
           const auto verification = verifySSA(function);
           if (!verification.ok) throw std::runtime_error("optimized SSA verification failed: " + verification.errors.front());
         }
-        const auto native = llvm_backend::executeWithLLJIT(pipeline.ssa);
+        const auto native = llvm_backend::executeWithLLJIT(optimized);
         const auto expectedReturn = std::stoll(runtimeValueText(*oracle.returnValue));
         if (!native.error.empty() || native.stdoutText != oracle.stdoutText ||
             native.returnValue != expectedReturn) {
@@ -123,7 +176,8 @@ int main(int argc, char **argv) {
         if (adaptive) {
           llvm_backend::AdaptiveJITConfig tiering;
           tiering.hotFunctionCallThreshold = options.hotThreshold;
-          const auto adaptiveNative = llvm_backend::executeAdaptivelyWithLLJIT(pipeline.ssa, tiering);
+          adaptiveResult = llvm_backend::executeAdaptivelyWithLLJIT(pipeline.ssa, tiering);
+          const auto &adaptiveNative = *adaptiveResult;
           if (!adaptiveNative.execution.error.empty() ||
               adaptiveNative.execution.stdoutText != oracle.stdoutText ||
               adaptiveNative.execution.returnValue != expectedReturn) {
@@ -141,7 +195,7 @@ int main(int argc, char **argv) {
           if (casePromotions) ++promotedCases;
         }
       } catch (const std::exception &error) {
-        saveFailure(options, caseIndex, generated.source);
+        saveFailure(options, caseIndex, generated.source, adaptive, adaptiveResult);
         std::cerr << "jit-fuzz failure: seed=" << options.generator.seed
                   << " case=" << caseIndex << ": " << error.what() << "\n"
                   << generated.source;

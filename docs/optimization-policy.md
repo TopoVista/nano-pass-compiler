@@ -38,7 +38,8 @@ left to the default/profile-guided optimizer pipeline for now.
 function. A record contains the source-program fingerprint, the fixed
 heuristic threshold configuration, static/dynamic features, selected action,
 hotness reason, and the observed before/after instruction and block counts
-after the requested compiler pipeline. The log is a dataset export, not a
+after the requested compiler pipeline. It also records the centralized
+hotness thresholds and bounded cold/hot inline-growth configuration. The log is a dataset export, not a
 training loop: it makes future learned-policy experiments reproducible without
 letting a model choose unregistered transforms. Decision replay and measured
 reward collection remain planned.

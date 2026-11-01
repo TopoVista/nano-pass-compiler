@@ -43,6 +43,7 @@ struct AdaptiveFunctionTelemetry {
   uint64_t tier1Instructions = 0;
   uint64_t tier0Blocks = 0;
   uint64_t tier1Blocks = 0;
+  bool tier1ProfileLoopEffortEnabled = false;
 };
 
 enum class AdaptiveJITEventKind { Tier0Compiled, HotThresholdReached,

@@ -30,7 +30,10 @@ This also keeps the completed profile fingerprint compatible with
 `nano optimize --profile` for the same source. Tier 1 starts
 from a fresh SSA copy, supplies observed call counters to the ordinary inliner
 only as its documented hot-callee cost input, then runs the bounded O3
-pipeline plus loop canonicalization, LICM, and strength reduction. Recursion,
+pipeline plus strength reduction. When a runtime profile classifies the
+promoted function hot using the configured promotion threshold, Tier 1 also
+enables its bounded loop canonicalization/LICM effort; force-tier operation
+keeps that full effort available without a profile. Recursion,
 growth budgets, CFG legality, and SSA verification remain mandatory. The
 implementation verifies SSA before lowering; `SSALLVMLowering` verifies the
 function/module before the new address is installed.

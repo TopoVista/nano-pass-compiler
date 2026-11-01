@@ -17,6 +17,7 @@
 //   - nano passes           shows all registered passes
 //   - nano analyses         shows all registered analyses
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -658,6 +659,7 @@ PolicyDecisionObservation policyObservation(const nanopass::SSAFunction &functio
 
 std::string policyConfigurationJson() {
     const nanopass::opt::HotnessThresholds thresholds;
+    const nanopass::opt::OptimizationBudget budget;
     std::ostringstream out;
     out << "{\"policy\":\"heuristic-v1\",\"thresholds\":{"
         << "\"warm_function_calls\":" << thresholds.warmFunctionCalls
@@ -666,7 +668,14 @@ std::string policyConfigurationJson() {
         << ",\"hot_dynamic_blocks\":" << thresholds.hotDynamicBlocks
         << ",\"hot_loop_backedges\":" << thresholds.hotLoopBackedges
         << ",\"hot_loop_trip_count\":" << std::fixed << std::setprecision(6)
-        << thresholds.hotLoopTripCount << std::defaultfloat << "}}";
+        << thresholds.hotLoopTripCount << std::defaultfloat << "}"
+        << ",\"inline_budget\":{\"max_callee_instructions\":"
+        << budget.maxInlineCalleeInstructions
+        << ",\"max_caller_growth\":" << budget.maxCallerGrowth
+        << ",\"max_total_growth\":" << budget.maxTotalInlineGrowth
+        << ",\"hot_callee_instructions\":" << budget.hotInlineCalleeInstructions
+        << ",\"hot_caller_growth\":" << budget.hotMaxCallerGrowth
+        << ",\"hot_total_growth\":" << budget.hotMaxTotalInlineGrowth << "}}";
     return out.str();
 }
 
@@ -1043,15 +1052,16 @@ int main(int argc, char **argv) {
             }
             for (auto &function : irRes.ssa.functions) {
                 nanopass::opt::SSAOptimizationPipeline pipeline;
+                const nanopass::profile::FunctionRuntimeProfile *profileRecord = nullptr;
+                if (optimizationProfile) {
+                    const auto found = optimizationProfile->functions.find(function.name);
+                    if (found != optimizationProfile->functions.end()) profileRecord = &found->second;
+                }
+                const nanopass::opt::HeuristicOptimizationPolicy heuristicPolicy;
+                const auto profileHotness = heuristicPolicy.decideTier(profileRecord, {});
                 if (policyDriven) {
-                    const nanopass::profile::FunctionRuntimeProfile *record = nullptr;
-                    if (optimizationProfile) {
-                        const auto found = optimizationProfile->functions.find(function.name);
-                        if (found != optimizationProfile->functions.end()) record = &found->second;
-                    }
-                    const nanopass::opt::HeuristicOptimizationPolicy policy;
-                    const auto decision = policy.decideTier(record, {});
-                    const auto selected = policy.choosePipeline(decision.hotness);
+                    const auto decision = profileHotness;
+                    const auto selected = heuristicPolicy.choosePipeline(decision.hotness);
                     std::ostringstream selectedNames;
                     bool firstSelectedPass = true;
                     for (const auto &passName : selected) {
@@ -1069,6 +1079,16 @@ int main(int argc, char **argv) {
                         "heuristic-policy",
                         "selected " + std::string(nanopass::opt::hotnessName(decision.hotness)) +
                             " pipeline: " + (selected.empty() ? std::string("<empty>") : selectedNames.str()),
+                        {}, {}, function.origin});
+                    const bool runsLoopEffort = std::find(selected.begin(), selected.end(), "licm") != selected.end();
+                    optimizationContext.remarks.push_back({
+                        runsLoopEffort ? nanopass::opt::OptimizationRemarkKind::Analysis
+                                       : nanopass::opt::OptimizationRemarkKind::Missed,
+                        "pgo-loop-policy",
+                        std::string(runsLoopEffort ? "PROFILE_LOOP_EFFORT_ENABLED: "
+                                                    : "PROFILE_LOOP_EFFORT_SKIPPED: ") +
+                            nanopass::opt::hotnessReasonName(decision.reason) +
+                            " (observed=" + std::to_string(decision.observed) + ")",
                         {}, {}, function.origin});
                 } else if (!options.passes.empty()) {
                     std::stringstream passNames(options.passes);
@@ -1096,8 +1116,27 @@ int main(int argc, char **argv) {
                     const int pipelineLevel = adaptiveTier0 ? 0 : options.optimizationLevel;
                     pipeline = nanopass::opt::buildPipeline(pipelineLevel);
                     if (!adaptiveTier0 && options.optimizationLevel >= 2) {
-                        pipeline.add(nanopass::opt::makeAdvancedPass("loop-simplify"));
-                        pipeline.add(nanopass::opt::makeAdvancedPass("licm"));
+                        // A supplied profile changes optimization effort, not
+                        // LICM legality.  Static -O2/-O3 preserves its normal
+                        // loop pipeline; PGO spends this optional effort only
+                        // on functions classified hot from stable counters.
+                        const bool runLoopEffort = !optimizationProfile ||
+                            profileHotness.hotness == nanopass::opt::Hotness::Hot;
+                        if (optimizationProfile) {
+                            optimizationContext.remarks.push_back({
+                                runLoopEffort ? nanopass::opt::OptimizationRemarkKind::Analysis
+                                              : nanopass::opt::OptimizationRemarkKind::Missed,
+                                "pgo-loop-policy",
+                                std::string(runLoopEffort ? "PROFILE_LOOP_EFFORT_ENABLED: "
+                                                           : "PROFILE_LOOP_EFFORT_SKIPPED: ") +
+                                    nanopass::opt::hotnessReasonName(profileHotness.reason) +
+                                    " (observed=" + std::to_string(profileHotness.observed) + ")",
+                                {}, {}, function.origin});
+                        }
+                        if (runLoopEffort) {
+                            pipeline.add(nanopass::opt::makeAdvancedPass("loop-simplify"));
+                            pipeline.add(nanopass::opt::makeAdvancedPass("licm"));
+                        }
                     }
                     if (!adaptiveTier0 && options.optimizationLevel >= 3)
                         pipeline.add(nanopass::opt::makeAdvancedPass("strength-reduce"));
@@ -1344,7 +1383,9 @@ int main(int argc, char **argv) {
                                   << ",\"tier0_instructions\":" << telemetry.tier0Instructions
                                   << ",\"tier1_instructions\":" << telemetry.tier1Instructions
                                   << ",\"tier0_blocks\":" << telemetry.tier0Blocks
-                                  << ",\"tier1_blocks\":" << telemetry.tier1Blocks << '}';
+                                  << ",\"tier1_blocks\":" << telemetry.tier1Blocks
+                                  << ",\"tier1_profile_loop_effort_enabled\":"
+                                  << (telemetry.tier1ProfileLoopEffortEnabled ? "true" : "false") << '}';
                     }
                     std::cout << "]},\"stdout\":\"" << jsonEscape(adaptive.execution.stdoutText)
                               << "\",\"return_value\":" << adaptive.execution.returnValue << "}\n";
@@ -1363,7 +1404,9 @@ int main(int argc, char **argv) {
                         if (telemetry.tier1CompilationUs) {
                             std::cout << "; tier1=" << telemetry.tier1CompilationUs << " us, "
                                       << telemetry.tier1Instructions << " instructions, "
-                                      << telemetry.tier1Blocks << " blocks";
+                                      << telemetry.tier1Blocks << " blocks"
+                                      << (telemetry.tier1ProfileLoopEffortEnabled
+                                          ? "; profile loop effort enabled" : "");
                         }
                         std::cout << '\n';
                     }
