@@ -119,9 +119,10 @@
 - [x] ORC indirect-stub Tier-0 → Tier-1 promotion with force-tier test modes
 - [x] Profile compatibility gates and bounded hot-inline cost tuning
 - [x] Heuristic policy interface and stable static/dynamic feature schema
-- [ ] Native block/edge hook instrumentation (adaptive profiles are currently partial)
+- [x] Native function/block/edge instrumentation for complete adaptive profiles
 - [ ] Profile-guided branch layout and loop-effort selection
-- [ ] Decision JSONL replay/dataset export and measured rewards
+- [x] Deterministic decision JSONL dataset export (`--decision-log=file`)
+- [ ] Decision-log replay and measured reward collection
 
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs

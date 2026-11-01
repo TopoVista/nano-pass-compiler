@@ -101,6 +101,7 @@ struct Options {
     std::string optimizationProfile;
     std::string telemetryOutput;
     std::string runtimeProfileOutput;
+    std::string policyDecisionLog;
     std::string diagnosticsFormat = "text";
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
@@ -120,6 +121,7 @@ struct Options {
     bool adaptiveJit        = false;
     bool forceTier0         = false;
     bool forceTier1         = false;
+    bool jitEventsJson      = false;
     uint64_t hotThreshold   = 1000;
 };
 
@@ -172,7 +174,9 @@ void printHelp(std::ostream &out) {
         << "  --adaptive               Use ORC dispatch stubs and Tier-0 → Tier-1 promotion.\n"
         << "  --hot-threshold=<count> Promote a non-recursive function after this many calls.\n"
         << "  --force-tier0|--force-tier1  Deterministic adaptive-JIT test modes.\n"
-        << "  --profile-output=<file> Write the native adaptive (partial) runtime profile.\n"
+        << "  --profile-output=<file> Write the native adaptive runtime profile.\n"
+        << "  --jit-events=text|json  Render adaptive JIT events (default: text).\n"
+        << "  --decision-log=<file>  Export deterministic policy decisions as JSONL.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
         << "  --remarks[=json]         Print optimization remarks as text or JSON.\n"
         << "  --telemetry=<file>       Write measured AST desugaring pass telemetry as JSON.\n\n"
@@ -254,11 +258,17 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.telemetryOutput = std::string(arg.substr(12));
         } else if (arg.starts_with("--profile-output=")) {
             o.runtimeProfileOutput = std::string(arg.substr(17));
+        } else if (arg.starts_with("--decision-log=")) {
+            o.policyDecisionLog = std::string(arg.substr(15));
         } else if (arg.starts_with("--hot-threshold=")) {
             try { o.hotThreshold = std::stoull(std::string(arg.substr(16))); }
             catch (...) { err << "error: --hot-threshold requires a positive integer\n"; return false; }
             if (o.hotThreshold == 0) { err << "error: --hot-threshold must be positive\n"; return false; }
         } else if (arg == "--adaptive") {
+            o.adaptiveJit = true;
+        } else if (arg == "--jit-events=json") {
+            o.adaptiveJit = true; o.jitEventsJson = true;
+        } else if (arg == "--jit-events=text") {
             o.adaptiveJit = true;
         } else if (arg == "--force-tier0") {
             o.adaptiveJit = true; o.forceTier0 = true;
@@ -596,6 +606,39 @@ void printRuntimeProfile(const nanopass::profile::ProgramRuntimeProfile &profile
     }
 }
 
+bool writePolicyDecisionLog(
+    const std::string &path, const nanopass::SSAProgram &program,
+    const nanopass::profile::ProgramRuntimeProfile *profile, std::ostream &err) {
+    std::ofstream out(path);
+    if (!out) { err << "error: could not write policy decision log '" << path << "'\n"; return false; }
+    const nanopass::opt::HeuristicOptimizationPolicy policy;
+    const std::string fingerprint = nanopass::profile::stableProgramFingerprint(program);
+    for (const auto &function : program.functions) {
+        const nanopass::profile::FunctionRuntimeProfile *record = nullptr;
+        if (profile) {
+            const auto found = profile->functions.find(function.name);
+            if (found != profile->functions.end()) record = &found->second;
+        }
+        const auto tier = policy.decideTier(record, {});
+        const auto pipeline = policy.choosePipeline(tier.hotness);
+        std::ostringstream action;
+        for (size_t index = 0; index < pipeline.size(); ++index) {
+            if (index) action << ',';
+            action << pipeline[index];
+        }
+        nanopass::opt::OptimizationPolicyDecision decision;
+        decision.decisionType = "pipeline";
+        decision.subject = function.name;
+        decision.features = nanopass::opt::extractOptimizationFeatures(program, function, profile);
+        decision.action = action.str();
+        decision.reason = tier.reason;
+        decision.estimatedCost = static_cast<double>(decision.features.instructionCount);
+        out << "{\"program_fingerprint\":\"" << fingerprint << "\",\"record\":"
+            << nanopass::opt::optimizationPolicyDecisionJson(decision) << "}\n";
+    }
+    return true;
+}
+
 } // anonymous namespace
 
 // ============================================================
@@ -820,6 +863,12 @@ int main(int argc, char **argv) {
             }
         }
 
+        if (!options.policyDecisionLog.empty() &&
+            !writePolicyDecisionLog(options.policyDecisionLog, irRes.ssa,
+                                    optimizationProfile ? &*optimizationProfile : nullptr,
+                                    std::cerr))
+            return 1;
+
         if (options.command == Command::Features) {
             std::cout << "{\"schema_version\":1,\"program_fingerprint\":\""
                       << nanopass::profile::stableProgramFingerprint(irRes.ssa)
@@ -863,9 +912,10 @@ int main(int argc, char **argv) {
         nanopass::opt::SSAOptimizationResult optimizationResult;
         if (optimizeSSA) {
             ssaBefore = irRes.ssa;
-            const bool requestInline = options.passes.empty()
+            const bool adaptiveTier0 = options.command == Command::Jit && options.adaptiveJit;
+            const bool requestInline = !adaptiveTier0 && (options.passes.empty()
                 ? options.optimizationLevel >= 2
-                : options.passes.find("inline") != std::string::npos;
+                : options.passes.find("inline") != std::string::npos);
             if (requestInline) {
                 nanopass::opt::SSAProgramInliner inliner;
                 nanopass::opt::OptimizationBudget inlineBudget;
@@ -905,12 +955,13 @@ int main(int argc, char **argv) {
                         pipeline.add(std::move(pass));
                     }
                 } else {
-                    pipeline = nanopass::opt::buildPipeline(options.optimizationLevel);
-                    if (options.optimizationLevel >= 2) {
+                    const int pipelineLevel = adaptiveTier0 ? 1 : options.optimizationLevel;
+                    pipeline = nanopass::opt::buildPipeline(pipelineLevel);
+                    if (!adaptiveTier0 && options.optimizationLevel >= 2) {
                         pipeline.add(nanopass::opt::makeAdvancedPass("loop-simplify"));
                         pipeline.add(nanopass::opt::makeAdvancedPass("licm"));
                     }
-                    if (options.optimizationLevel >= 3)
+                    if (!adaptiveTier0 && options.optimizationLevel >= 3)
                         pipeline.add(nanopass::opt::makeAdvancedPass("strength-reduce"));
                 }
                 const auto one = pipeline.run(function, optimizationContext);
@@ -1099,27 +1150,43 @@ int main(int argc, char **argv) {
                     std::cerr << "error: adaptive ORC JIT execution failed: " << adaptive.execution.error << '\n';
                     return 1;
                 }
-                for (const auto &event : adaptive.events) {
-                    const char *kind = "tier0 compiled";
-                    switch (event.kind) {
-                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier0Compiled: break;
-                    case nanopass::llvm_backend::AdaptiveJITEventKind::HotThresholdReached: kind = "hot threshold reached"; break;
-                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1CompilationStarted: kind = "tier1 compilation started"; break;
-                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Installed: kind = "tier1 installed"; break;
-                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Rejected: kind = "tier1 rejected"; break;
+                auto eventName = [](nanopass::llvm_backend::AdaptiveJITEventKind event) {
+                    switch (event) {
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier0Compiled: return "tier0_compiled";
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::HotThresholdReached: return "hot_threshold_reached";
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1CompilationStarted: return "tier1_compilation_started";
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Installed: return "tier1_installed";
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Rejected: return "tier1_rejected";
                     }
-                    std::cout << "[jit] @" << event.function << " " << kind;
-                    if (event.calls) std::cout << " (calls=" << event.calls << ")";
-                    if (!event.detail.empty()) std::cout << ": " << event.detail;
-                    std::cout << '\n';
-                }
+                    return "unknown";
+                };
                 if (!options.runtimeProfileOutput.empty()) {
                     std::ofstream profileOut(options.runtimeProfileOutput);
                     if (!profileOut) { std::cerr << "error: could not write '" << options.runtimeProfileOutput << "'\n"; return 1; }
                     nanopass::profile::writeRuntimeProfileJson(adaptive.runtimeProfile, profileOut);
                 }
-                std::cout << adaptive.execution.stdoutText;
-                std::cout << "JIT return: " << adaptive.execution.returnValue << '\n';
+                if (options.jitEventsJson) {
+                    std::cout << "{\"schema_version\":1,\"events\":[";
+                    for (size_t index = 0; index < adaptive.events.size(); ++index) {
+                        if (index) std::cout << ',';
+                        const auto &event = adaptive.events[index];
+                        std::cout << "{\"kind\":\"" << eventName(event.kind)
+                                  << "\",\"function\":\"" << jsonEscape(event.function)
+                                  << "\",\"calls\":" << event.calls
+                                  << ",\"detail\":\"" << jsonEscape(event.detail) << "\"}";
+                    }
+                    std::cout << "],\"stdout\":\"" << jsonEscape(adaptive.execution.stdoutText)
+                              << "\",\"return_value\":" << adaptive.execution.returnValue << "}\n";
+                } else {
+                    for (const auto &event : adaptive.events) {
+                        std::cout << "[jit] @" << event.function << " " << eventName(event.kind);
+                        if (event.calls) std::cout << " (calls=" << event.calls << ")";
+                        if (!event.detail.empty()) std::cout << ": " << event.detail;
+                        std::cout << '\n';
+                    }
+                    std::cout << adaptive.execution.stdoutText;
+                    std::cout << "JIT return: " << adaptive.execution.returnValue << '\n';
+                }
                 return 0;
             }
             const auto execution = nanopass::llvm_backend::executeWithLLJIT(irRes.ssa);

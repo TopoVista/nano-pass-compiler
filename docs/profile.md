@@ -7,9 +7,11 @@ SSA block entries, CFG edges, and natural-loop entry/backedge/exit counts.
 Profiles contain a canonical SSA fingerprint and stable function names and
 numeric `BlockId`s, never pointer identities or machine paths.
 
-This is complete interpreter-collected profile data, not proof of an
-optimization's profitability. The adaptive JIT's native function-entry output
-is explicitly marked partial and cannot be consumed as PGO input.
+This is complete profile data, not proof of an optimization's profitability.
+The interpreter and successful adaptive ORC executions both produce the same
+schema-v1 function/block/edge/loop counter model.  A native adaptive profile
+is only written as `complete` after the run returns and loop summaries have
+been finalized; failed or interrupted runs are never accepted as PGO input.
 
 The optional SSA optimization consumer is deliberately narrow:
 

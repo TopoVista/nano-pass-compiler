@@ -2,9 +2,9 @@
 
 Last updated: Phase 9 runtime foundation — complete deterministic SSA profiles,
 ORC Tier-0 → Tier-1 dispatch-stub promotion, PGO compatibility gates, and
-versioned optimization-policy features are implemented. Native adaptive
-profiles currently contain real function-entry counts only and are explicitly
-marked partial; complete block/edge/loop profiles come from the SSA interpreter.
+versioned optimization-policy features are implemented. Adaptive ORC profiles
+use the same stable function/block/edge/loop identities as interpreter
+profiles, while preserving single-threaded execution ownership.
 
 ---
 
@@ -56,10 +56,10 @@ marked partial; complete block/edge/loop profiles come from the SSA interpreter.
   `nano profile show` renders saved profiles. Schema, malformed input,
   incomplete status, and fingerprint mismatches are rejected before PGO use.
 - **Adaptive ORC JIT** — `nano jit --adaptive` compiles each function behind an
-  LLVM 18 indirect stub, counts real native function entries, and promotes a
-  non-recursive hot function once through `updatePointer`. Tier-0 active frames
-  finish normally; only future calls use Tier 1. Tier-1 candidates remain
-  SSA- and LLVM-verifier gated.
+  LLVM 18 indirect stub, records real native function/block/edge counters, and
+  promotes a non-recursive hot function once through `updatePointer`. Tier-0
+  active frames finish normally; only future calls use Tier 1. Tier-1
+  candidates remain SSA- and LLVM-verifier gated.
 - **Policy substrate** — `nano features` emits schema-v1 static/dynamic feature
   JSON, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
   choices from counter-derived hotness. No ML model or LLM is required.
@@ -240,7 +240,7 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] Deterministic CoreIR profile collection (`nano profile`)
 - [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
 - [x] Native fixed-array bounds traps for SSA LLVM lowering
-- [ ] Native execution limits, branch/loop profile use, and adaptive JIT
+- [ ] Native execution limits and branch/loop profile use for layout decisions
 
 ### Phase 9 — Observability
 - `nano explain` full polished UX

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,6 +25,7 @@ struct Options {
   GeneratorOptions generator{};
   size_t startCase = 0;
   size_t cases = 1000;
+  uint64_t hotThreshold = 2;
   std::filesystem::path failureDirectory;
 };
 
@@ -53,6 +55,7 @@ Options parseOptions(int argc, char **argv) {
     else if (optionValue(argument, "--max-loop-nesting", value)) options.generator.maxLoopNesting = std::stoull(value);
     else if (optionValue(argument, "--max-source-bytes", value)) options.generator.maxSourceBytes = std::stoull(value);
     else if (optionValue(argument, "--save-failures", value)) options.failureDirectory = value;
+    else if (optionValue(argument, "--hot-threshold", value)) options.hotThreshold = std::stoull(value);
     else throw std::runtime_error("unknown jit-fuzz option: " + std::string(argument));
   }
   return options;
@@ -80,8 +83,9 @@ void saveFailure(const Options &options, size_t caseIndex, const std::string &so
 } // namespace
 
 int main(int argc, char **argv) {
-  if (argc < 2 || std::string_view(argv[1]) != "fuzz") {
-    std::cerr << "usage: nano-jit-correctness fuzz [--seed=N] [--start-case=N] [--cases=N] "
+  const bool adaptive = argc >= 2 && std::string_view(argv[1]) == "adaptive-fuzz";
+  if (argc < 2 || (!adaptive && std::string_view(argv[1]) != "fuzz")) {
+    std::cerr << "usage: nano-jit-correctness fuzz|adaptive-fuzz [--seed=N] [--start-case=N] [--cases=N] "
                  "[--max-depth=N] [--max-statements=N] [--max-functions=N] "
                  "[--max-call-depth=N] [--max-loop-nesting=N] "
                  "[--max-source-bytes=N] [--save-failures=dir]\n";
@@ -90,7 +94,7 @@ int main(int argc, char **argv) {
   try {
     const Options options = parseOptions(argc, argv);
     NanoProgramGenerator generator(options.generator);
-    size_t compared = 0;
+    size_t compared = 0, promotions = 0, promotedCases = 0;
     for (size_t offset = 0; offset < options.cases; ++offset) {
       const size_t caseIndex = options.startCase + offset;
       const auto generated = generator.generate(caseIndex);
@@ -116,6 +120,26 @@ int main(int argc, char **argv) {
                      << ", native return=" << native.returnValue << ')';
           throw std::runtime_error(error.str());
         }
+        if (adaptive) {
+          llvm_backend::AdaptiveJITConfig tiering;
+          tiering.hotFunctionCallThreshold = options.hotThreshold;
+          const auto adaptiveNative = llvm_backend::executeAdaptivelyWithLLJIT(pipeline.ssa, tiering);
+          if (!adaptiveNative.execution.error.empty() ||
+              adaptiveNative.execution.stdoutText != oracle.stdoutText ||
+              adaptiveNative.execution.returnValue != expectedReturn) {
+            std::ostringstream error;
+            error << "adaptive native mismatch";
+            if (!adaptiveNative.execution.error.empty()) error << ": " << adaptiveNative.execution.error;
+            throw std::runtime_error(error.str());
+          }
+          const size_t casePromotions = static_cast<size_t>(std::count_if(
+              adaptiveNative.events.begin(), adaptiveNative.events.end(),
+              [](const llvm_backend::AdaptiveJITEvent &event) {
+                return event.kind == llvm_backend::AdaptiveJITEventKind::Tier1Installed;
+              }));
+          promotions += casePromotions;
+          if (casePromotions) ++promotedCases;
+        }
       } catch (const std::exception &error) {
         saveFailure(options, caseIndex, generated.source);
         std::cerr << "jit-fuzz failure: seed=" << options.generator.seed
@@ -130,6 +154,11 @@ int main(int argc, char **argv) {
               << ",\"startCase\":" << options.startCase
               << ",\"compared\":" << compared
               << ",\"optimization\":\"O3\""
+              << ",\"adaptive\":" << (adaptive ? "true" : "false")
+              << ",\"hot_threshold\":" << options.hotThreshold
+              << ",\"tier1_promotions\":" << promotions
+              << ",\"promoted_cases\":" << promotedCases
+              << ",\"crashes\":0,\"timeouts\":0"
               << ",\"mismatches\":0}\n";
     return 0;
   } catch (const std::exception &error) {

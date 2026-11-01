@@ -179,6 +179,28 @@ struct OptimizationPolicyDecision {
   double estimatedCost = 0.0;
 };
 
+inline std::string policyJsonEscape(std::string_view text) {
+  std::string escaped;
+  for (const char character : text) {
+    if (character == '\\') escaped += "\\\\";
+    else if (character == '"') escaped += "\\\"";
+    else if (character == '\n') escaped += "\\n";
+    else escaped += character;
+  }
+  return escaped;
+}
+
+inline std::string optimizationPolicyDecisionJson(
+    const OptimizationPolicyDecision &decision) {
+  return "{\"schema_version\":" + std::to_string(decision.schemaVersion) +
+      ",\"decision_type\":\"" + policyJsonEscape(decision.decisionType) +
+      "\",\"subject\":\"" + policyJsonEscape(decision.subject) +
+      "\",\"features\":" + optimizationFeaturesJson(decision.features) +
+      ",\"action\":\"" + policyJsonEscape(decision.action) +
+      "\",\"reason\":\"" + hotnessReasonName(decision.reason) +
+      "\",\"estimated_cost\":" + std::to_string(decision.estimatedCost) + "}";
+}
+
 class OptimizationPolicy {
 public:
   virtual ~OptimizationPolicy() = default;

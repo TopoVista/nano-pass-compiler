@@ -155,7 +155,9 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 ./build/compiler/nano features examples/loops.nano --profile=loops.nprof
 
 # Promote deterministic hot calls through LLVM ORC dispatch stubs.
-./build/compiler/nano jit examples/loops.nano --adaptive --hot-threshold=1000
+./build/compiler/nano profile examples/hot_loop.nano -o hot.nprof.json
+./build/compiler/nano optimize examples/hot_loop.nano --profile=hot.nprof.json -O3 --why-not-optimized
+./build/compiler/nano jit examples/hot_loop.nano --adaptive --hot-threshold=2
 
 # Persist measured desugaring-pass events in a versioned JSON schema.
 ./build/compiler/nano emit examples/desugaring.nano --format=core \

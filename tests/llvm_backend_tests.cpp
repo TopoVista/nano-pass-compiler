@@ -141,6 +141,11 @@ int main() {
   const auto arrayExecution = executeWithLLJIT(arrays);
   CHECK(arrayExecution.error.empty());
   CHECK(arrayExecution.returnValue == 17);
+  AdaptiveJITConfig adaptiveArrays; adaptiveArrays.hotFunctionCallThreshold = 100;
+  const auto adaptiveArrayExecution = executeAdaptivelyWithLLJIT(arrays, adaptiveArrays);
+  CHECK(adaptiveArrayExecution.execution.error.empty());
+  CHECK(adaptiveArrayExecution.execution.returnValue == 17);
+  CHECK(adaptiveArrayExecution.runtimeProfile.status == profile::ProfileStatus::Complete);
 
   // This uses the real parser → CoreIR → SSA pipeline and compares the JIT
   // result to the independent Core interpreter at each Nano O level.
@@ -173,6 +178,29 @@ int main() {
   CHECK(inlinedExecution.stdoutText == expected.stdoutText);
   CHECK(inlinedExecution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
 
+  // CFG simplification may retain blocks in a storage order that is not a
+  // dominance order after general inlining. LLVM lowering must use a stable
+  // reverse-postorder, not vector order, for value-producing instructions.
+  auto reorderedCFG = compilePipeline(R"(
+    int increment(int value) { return value + 1; }
+    int main() { int i = 0; int total = 0; while (i < 8) { total = total + increment(i); i = i + 1; } print(total); return total; }
+  )");
+  const auto reorderedOracle = CoreInterpreter{}.run(reorderedCFG.core);
+  CHECK(nanopass::opt::SSAProgramInliner{}.run(reorderedCFG.ssa).changed);
+  for (auto &function : reorderedCFG.ssa.functions) {
+    nanopass::opt::SSAOptimizationContext context;
+    nanopass::opt::buildPipeline(2).run(function, context);
+    auto loopSimplify = nanopass::opt::makeAdvancedPass("loop-simplify");
+    auto licm = nanopass::opt::makeAdvancedPass("licm");
+    loopSimplify->run(function, context);
+    licm->run(function, context);
+    CHECK(verifySSA(function).ok);
+  }
+  const auto reorderedExecution = executeWithLLJIT(reorderedCFG.ssa);
+  CHECK(reorderedExecution.error.empty());
+  CHECK(reorderedExecution.stdoutText == reorderedOracle.stdoutText);
+  CHECK(reorderedExecution.returnValue == std::stoll(runtimeValueText(*reorderedOracle.returnValue)));
+
   // Adaptive ORC uses public indirect stubs, so this exercises a real
   // Tier-0 → Tier-1 pointer replacement while callers keep their original
   // direct Nano call instruction. The Tier-0 frame that triggers promotion
@@ -188,13 +216,23 @@ int main() {
   CHECK(adaptiveTier0.execution.stdoutText == adaptiveOracle.stdoutText);
   CHECK(adaptiveTier0.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
   CHECK(adaptiveTier0.tiers.at("add").activeTier == CompilationTier::Tier0);
+  AdaptiveJITConfig naturallyCold; naturallyCold.hotFunctionCallThreshold = 100;
+  const auto adaptiveCold = executeAdaptivelyWithLLJIT(adaptiveProgram.ssa, naturallyCold);
+  CHECK(adaptiveCold.execution.error.empty());
+  CHECK(adaptiveCold.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
+  CHECK(adaptiveCold.tiers.at("add").activeTier == CompilationTier::Tier0);
+  CHECK(std::none_of(adaptiveCold.events.begin(), adaptiveCold.events.end(),
+      [](const AdaptiveJITEvent &event) { return event.kind == AdaptiveJITEventKind::Tier1Installed; }));
   AdaptiveJITConfig promote; promote.hotFunctionCallThreshold = 2;
   const auto adaptivePromoted = executeAdaptivelyWithLLJIT(adaptiveProgram.ssa, promote);
   CHECK(adaptivePromoted.execution.error.empty());
   CHECK(adaptivePromoted.execution.stdoutText == adaptiveOracle.stdoutText);
   CHECK(adaptivePromoted.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
-  CHECK(adaptivePromoted.runtimeProfile.status == profile::ProfileStatus::Partial);
+  CHECK(adaptivePromoted.runtimeProfile.status == profile::ProfileStatus::Complete);
   CHECK(adaptivePromoted.runtimeProfile.functions.at("add").calls == 5u);
+  CHECK(adaptivePromoted.runtimeProfile.functions.at("main").blocksExecuted > 0u);
+  CHECK(!adaptivePromoted.runtimeProfile.functions.at("main").edgeCounts.empty());
+  CHECK(!adaptivePromoted.runtimeProfile.functions.at("main").loops.empty());
   CHECK(adaptivePromoted.tiers.at("add").activeTier == CompilationTier::Tier1);
   CHECK(adaptivePromoted.tiers.at("add").recompilationComplete);
   CHECK(std::any_of(adaptivePromoted.events.begin(), adaptivePromoted.events.end(),

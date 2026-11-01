@@ -259,6 +259,13 @@ endif()
     add_test(NAME nano_ssa_backend_jit
              COMMAND nano jit ${CMAKE_SOURCE_DIR}/examples/factorial.nano -O3
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_adaptive_jit_promotion
+             COMMAND nano jit ${CMAKE_SOURCE_DIR}/examples/hot_loop.nano
+                      --adaptive --hot-threshold=2 -O0
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    add_test(NAME nano_adaptive_jit_fuzz_smoke
+             COMMAND nano_jit_correctness adaptive-fuzz --seed=918273 --cases=8 --hot-threshold=2
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   endif()
   # SSA LLVM emission and host AOT are independent of ORC JIT.  Keep their
   # coverage active in the default NANO_BUILD_JIT=OFF configuration as well.
@@ -295,6 +302,10 @@ endif()
                     --format=llvm --backend=ssa --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   set_tests_properties(nano_ssa_backend_profile_consume PROPERTIES DEPENDS nano_profile_loops)
+  add_test(NAME nano_profile_show
+           COMMAND nano profile show ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set_tests_properties(nano_profile_show PROPERTIES DEPENDS nano_profile_loops)
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example

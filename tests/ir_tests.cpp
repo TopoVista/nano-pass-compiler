@@ -1412,6 +1412,8 @@ static void test_policy_features_and_hotness_are_stable() {
     ASSERT(decision.hotness==Hotness::Hot);ASSERT(decision.reason==HotnessReason::HotFunctionCallCount);
     const auto cold=HeuristicOptimizationPolicy{}.decideTier(nullptr,thresholds);ASSERT(cold.reason==HotnessReason::InsufficientProfileData);
     const auto pipeline=HeuristicOptimizationPolicy{}.choosePipeline(Hotness::Hot);ASSERT(std::find(pipeline.begin(),pipeline.end(),"licm")!=pipeline.end());
+    OptimizationPolicyDecision record;record.decisionType="pipeline";record.subject="helper";record.features=dynamicFeatures;record.action="sccp,dce";record.reason=decision.reason;record.estimatedCost=static_cast<double>(dynamicFeatures.instructionCount);
+    const auto decisionJson=optimizationPolicyDecisionJson(record);ASSERT(decisionJson.find("\"decision_type\":\"pipeline\"")!=std::string::npos);ASSERT(decisionJson.find("\"reason\":\"HOT_FUNCTION_CALL_COUNT\"")!=std::string::npos);
 }
 
 static void test_ssa_retains_inner_scalar_memory_metadata() {

@@ -1,7 +1,10 @@
 #include "backend/llvm/ssa_llvm_lowering.h"
 
 #include <map>
+#include <functional>
+#include <set>
 #include <sstream>
+#include <vector>
 
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
@@ -194,7 +197,28 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
         ++statistics.phis;
       }
     }
-    for (const auto &block : source.blocks) {
+    // CFG-changing passes are free to append/reorder storage blocks. LLVM
+    // lowering must therefore not rely on vector order for SSA definitions:
+    // process the reachable graph in deterministic RPO, then any unreachable
+    // blocks in their stable source order. Phi operands are still filled only
+    // after every instruction definition has received an LLVM mapping.
+    std::map<int, const SSABlock *> sourceBlocks;
+    for (const auto &block : source.blocks) sourceBlocks.emplace(block.id.index, &block);
+    std::set<int> visited;
+    std::vector<const SSABlock *> postorder;
+    std::function<void(BlockId)> visit = [&](BlockId id) {
+      if (!visited.insert(id.index).second) return;
+      const auto found = sourceBlocks.find(id.index);
+      if (found == sourceBlocks.end()) return;
+      for (const BlockId successor : found->second->successors) visit(successor);
+      postorder.push_back(found->second);
+    };
+    visit(source.entryBlock);
+    std::reverse(postorder.begin(), postorder.end());
+    for (const auto &block : source.blocks)
+      if (!visited.contains(block.id.index)) postorder.push_back(&block);
+    for (const SSABlock *orderedBlock : postorder) {
+      const auto &block = *orderedBlock;
       ctx.builder.SetInsertPoint(ctx.blocks.at(block.id.index));
       for (const auto &instruction : block.instructions) {
         llvm::Value *result = nullptr;

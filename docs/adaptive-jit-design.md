@@ -26,10 +26,12 @@ body is retained, other lowered bodies are converted to declarations, and the
 module is verified again before ORC accepts it.
 
 Tier 0 installs verified SSA with no expensive middle-end work. Tier 1 starts
-from a fresh SSA copy and runs the bounded O3 pipeline plus loop
-canonicalization, LICM, and strength reduction. The implementation verifies
-SSA before lowering; `SSALLVMLowering` verifies the function/module before the
-new address is installed.
+from a fresh SSA copy, supplies observed call counters to the ordinary inliner
+only as its documented hot-callee cost input, then runs the bounded O3
+pipeline plus loop canonicalization, LICM, and strength reduction. Recursion,
+growth budgets, CFG legality, and SSA verification remain mandatory. The
+implementation verifies SSA before lowering; `SSALLVMLowering` verifies the
+function/module before the new address is installed.
 
 ## Promotion and safety
 
@@ -52,7 +54,9 @@ nano jit file.nano --force-tier1
 nano jit file.nano --adaptive --hot-threshold=100
 ```
 
-The adaptive profile emitted with `--profile-output` is explicitly `partial`:
-native function-entry counts are real, but it does not yet instrument stable
-SSA block/edge identities. `nano profile` is the complete block/edge/loop
-profile source for PGO.
+Tier modules instrument stable function names and SSA `BlockId`s at function
+entry, basic-block entry, and every emitted CFG edge. The resulting
+`--profile-output` profile is complete when execution completes, can be shown
+with `nano profile show`, and has the same schema/fingerprint contract as
+interpreter-collected profiles. `--jit-events=json` emits a separate
+schema-v1 machine-readable event record without mixing terminal text.

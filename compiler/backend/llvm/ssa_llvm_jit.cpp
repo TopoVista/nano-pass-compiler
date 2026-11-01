@@ -1,6 +1,8 @@
 #include "backend/llvm/ssa_llvm_jit.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 
@@ -26,15 +28,80 @@ class AdaptiveSession;
 thread_local AdaptiveSession *activeAdaptiveSession = nullptr;
 
 extern "C" void nano_adaptive_function_entry(const char *name);
+extern "C" void nano_adaptive_block_entry(const char *name, std::int64_t block);
+extern "C" void nano_adaptive_edge(const char *name, std::int64_t from,
+                                    std::int64_t to);
 
-void insertFunctionEntryHook(llvm::Module &module, llvm::Function &function,
-                             const std::string &nanoName) {
+void insertRuntimeProfileHooks(llvm::Module &module, llvm::Function &function,
+                               const SSAFunction &source) {
   auto &context = module.getContext();
   auto *i8Pointer = llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(context));
-  auto hook = module.getOrInsertFunction("nano_adaptive_function_entry",
+  auto *i64 = llvm::Type::getInt64Ty(context);
+  auto functionEntry = module.getOrInsertFunction("nano_adaptive_function_entry",
       llvm::FunctionType::get(llvm::Type::getVoidTy(context), {i8Pointer}, false));
-  llvm::IRBuilder<> builder(&*function.getEntryBlock().getFirstInsertionPt());
-  builder.CreateCall(hook, {builder.CreateGlobalStringPtr(nanoName)});
+  auto blockEntry = module.getOrInsertFunction("nano_adaptive_block_entry",
+      llvm::FunctionType::get(llvm::Type::getVoidTy(context), {i8Pointer, i64}, false));
+  auto edge = module.getOrInsertFunction("nano_adaptive_edge",
+      llvm::FunctionType::get(llvm::Type::getVoidTy(context), {i8Pointer, i64, i64}, false));
+  auto stringFor = [&] {
+    return llvm::IRBuilder<>(context).CreateGlobalStringPtr(
+        source.name, "nano.profile.function", 0, &module);
+  };
+  std::map<int, llvm::BasicBlock *> blocks;
+  for (auto &block : function)
+    if (block.getName().starts_with("bb")) {
+      int id = -1;
+      const auto suffix = block.getName().drop_front(2);
+      if (!suffix.getAsInteger(10, id)) blocks.emplace(id, &block);
+    }
+  for (const auto &sourceBlock : source.blocks) {
+    const auto found = blocks.find(sourceBlock.id.index);
+    if (found == blocks.end()) continue;
+    llvm::BasicBlock *block = found->second;
+    llvm::IRBuilder<> builder(&*block->getFirstInsertionPt());
+    if (sourceBlock.id == source.entryBlock)
+      builder.CreateCall(functionEntry, {stringFor()});
+    builder.CreateCall(blockEntry, {stringFor(), llvm::ConstantInt::get(i64, sourceBlock.id.index)});
+    auto *branch = llvm::dyn_cast<llvm::BranchInst>(block->getTerminator());
+    if (!branch) continue;
+    auto emitDirectEdge = [&](int target) {
+      llvm::IRBuilder<> edgeBuilder(branch);
+      edgeBuilder.CreateCall(edge, {stringFor(), llvm::ConstantInt::get(i64, sourceBlock.id.index),
+                                    llvm::ConstantInt::get(i64, target)});
+    };
+    if (const auto *jump = std::get_if<SSATerminator::Jump>(&sourceBlock.terminator.value)) {
+      emitDirectEdge(jump->target.index);
+      continue;
+    }
+    const auto *sourceBranch =
+        std::get_if<SSATerminator::Branch>(&sourceBlock.terminator.value);
+    if (!sourceBranch) continue;
+    // A collapsed conditional has one CFG edge. Preserve phi structure and
+    // record that edge directly rather than creating duplicate predecessors.
+    if (sourceBranch->thenTarget == sourceBranch->elseTarget ||
+        branch->getSuccessor(0) == branch->getSuccessor(1)) {
+      emitDirectEdge(sourceBranch->thenTarget.index);
+      continue;
+    }
+    auto makeEdgeBlock = [&](unsigned successorIndex, BlockId targetId) {
+      llvm::BasicBlock *target = branch->getSuccessor(successorIndex);
+      auto *hookBlock = llvm::BasicBlock::Create(
+          context, "nano.edge." + std::to_string(sourceBlock.id.index) + "." + std::to_string(targetId.index),
+          &function, target);
+      llvm::IRBuilder<> hookBuilder(hookBlock);
+      hookBuilder.CreateCall(edge, {stringFor(), llvm::ConstantInt::get(i64, sourceBlock.id.index),
+                                    llvm::ConstantInt::get(i64, targetId.index)});
+      hookBuilder.CreateBr(target);
+      for (auto &instruction : *target)
+        if (auto *phi = llvm::dyn_cast<llvm::PHINode>(&instruction)) {
+          const int incoming = phi->getBasicBlockIndex(block);
+          if (incoming >= 0) phi->setIncomingBlock(static_cast<unsigned>(incoming), hookBlock);
+        } else break;
+      branch->setSuccessor(successorIndex, hookBlock);
+    };
+    makeEdgeBlock(0, sourceBranch->thenTarget);
+    makeEdgeBlock(1, sourceBranch->elseTarget);
+  }
 }
 
 class AdaptiveSession {
@@ -78,8 +145,17 @@ class AdaptiveSession {
     return true;
   }
 
-  SSAProgram tier1Program(std::string_view name) const {
+  SSAProgram tier1Program(std::string_view name) {
     SSAProgram tier1 = source_;
+    // Reuse the ordinary, verifier-gated inliner rather than inventing a JIT
+    // variant. Counters observed before this recompilation can widen only its
+    // documented hot-callee cost limit; recursion, growth, CFG and SSA checks
+    // stay mandatory.
+    opt::OptimizationBudget inlineBudget;
+    inlineBudget.hotFunctionThreshold = config_.hotFunctionCallThreshold;
+    for (const auto &[functionName, record] : result_.runtimeProfile.functions)
+      inlineBudget.observedFunctionCalls.emplace(functionName, record.calls);
+    opt::SSAProgramInliner{}.run(tier1, inlineBudget);
     const auto found = std::find_if(tier1.functions.begin(), tier1.functions.end(),
         [&](const SSAFunction &candidate) { return candidate.name == name; });
     if (found == tier1.functions.end()) return tier1;
@@ -111,7 +187,7 @@ class AdaptiveSession {
           candidate, name, implementation, "nano_adaptive_" + name);
       llvm::Function *body = lowered.module->getFunction(implementation);
       if (!body) { error = "adaptive lowering did not produce implementation for @" + name; return false; }
-      insertFunctionEntryHook(*lowered.module, *body, name);
+      insertRuntimeProfileHooks(*lowered.module, *body, *selected);
       if (auto failure = jit_->addIRModule(llvm::orc::ThreadSafeModule(
               std::move(lowered.module), std::move(context)))) {
         error = errorText(std::move(failure)); return false;
@@ -132,10 +208,7 @@ public:
   AdaptiveSession(const SSAProgram &source, AdaptiveJITConfig config)
       : source_(source), config_(config), callGraph_(CallGraphAnalysis::run(source)) {
     result_.runtimeProfile.programFingerprint = profile::stableProgramFingerprint(source);
-    // Native adaptive instrumentation currently observes function entries in
-    // generated code. The complete SSA block/edge profile remains available
-    // through `nano profile`; marking this partial prevents accidental PGO use.
-    result_.runtimeProfile.status = profile::ProfileStatus::Partial;
+    result_.runtimeProfile.status = profile::ProfileStatus::Complete;
   }
 
   AdaptiveJITExecutionResult run() {
@@ -198,7 +271,11 @@ public:
       }
     } else { result_.execution.error = "JIT @main must return an integer or void"; return std::move(result_); }
     result_.execution.stdoutText = std::move(output);
-    if (fatalError_) result_.execution.error = *fatalError_;
+    result_.runtimeProfile.finalizeLoops(source_);
+    if (fatalError_) {
+      result_.runtimeProfile.status = profile::ProfileStatus::Failed;
+      result_.execution.error = *fatalError_;
+    }
     return std::move(result_);
   }
 
@@ -226,11 +303,29 @@ public:
     state->second.recompilationComplete = true;
     event(AdaptiveJITEventKind::Tier1Installed, name, state->second.callCount);
   }
+
+  void onBlockEntry(const char *rawName, std::int64_t block) {
+    if (rawName && block >= 0)
+      result_.runtimeProfile.blockEntry(rawName, BlockId{static_cast<int>(block)});
+  }
+
+  void onEdge(const char *rawName, std::int64_t from, std::int64_t to) {
+    if (rawName && from >= 0 && to >= 0)
+      result_.runtimeProfile.edge(rawName, BlockId{static_cast<int>(from)},
+                                  BlockId{static_cast<int>(to)});
+  }
 };
 }
 
 extern "C" void nano_adaptive_function_entry(const char *name) {
   if (activeAdaptiveSession) activeAdaptiveSession->onFunctionEntry(name);
+}
+extern "C" void nano_adaptive_block_entry(const char *name, std::int64_t block) {
+  if (activeAdaptiveSession) activeAdaptiveSession->onBlockEntry(name, block);
+}
+extern "C" void nano_adaptive_edge(const char *name, std::int64_t from,
+                                    std::int64_t to) {
+  if (activeAdaptiveSession) activeAdaptiveSession->onEdge(name, from, to);
 }
 
 JITExecutionResult executeWithLLJIT(const SSAProgram &program) {
