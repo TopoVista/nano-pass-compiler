@@ -124,6 +124,7 @@
 - [x] Native function/block/edge instrumentation for complete adaptive profiles
 - [x] Profile-guided bounded loop-effort selection (legality unchanged)
 - [x] Deterministic decision JSONL dataset export with policy configuration and observed structural results (`--decision-log=file`)
+- [x] Bounded LLVM 18 CI coverage for profile/Tier-0/Tier-1 adaptive execution
 
 Deferred research extensions: profile-guided branch layout, decision-log replay,
 and measured reward collection belong to the advanced-policy work after the

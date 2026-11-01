@@ -19,3 +19,23 @@ jobs:
         run: ./nano-correctness fuzz --seed=42 --cases=32
       - name: Run malformed-input smoke fuzz
         run: ./nano-correctness malformed-fuzz --seed=8128 --cases=64
+
+  llvm-jit-runtime-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the supported LLVM and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build llvm-18-dev clang-18
+      - name: Configure LLVM-enabled JIT build
+        run: >
+          cmake -S . -B build -G Ninja
+          -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+          -DNANO_BUILD_JIT=ON
+      - name: Build JIT/profile targets
+        run: cmake --build build --parallel 2
+      - name: Run bounded profile and adaptive ORC coverage
+        run: >
+          ctest --test-dir build --output-on-failure -R
+          'nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'

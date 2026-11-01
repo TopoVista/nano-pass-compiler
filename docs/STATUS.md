@@ -6,6 +6,12 @@ versioned optimization-policy features are implemented. Adaptive ORC profiles
 use the same stable function/block/edge/loop identities as interpreter
 profiles, while preserving single-threaded execution ownership.
 
+The GitHub Actions matrix has an LLVM-independent correctness job plus a
+bounded Ubuntu 24.04 / LLVM 18 JIT-profile job. The latter covers profile
+generation/inspection, Tier-0 JIT, adaptive promotion, profile consumption,
+and the small deterministic adaptive fuzz smoke; the larger campaigns remain
+explicit local evidence rather than CI claims.
+
 ---
 
 ## Stable
