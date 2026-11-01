@@ -229,7 +229,7 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 
 ### Phase 9 — Observability
 - `nano explain` full polished UX
-- JSON telemetry (`--pass-telemetry=json`)
+- [x] Versioned AST desugaring telemetry JSON (`--telemetry=file`)
 - Optimization remarks
 
 ### Phase 10 — Web lab

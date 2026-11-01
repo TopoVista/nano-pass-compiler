@@ -23,10 +23,12 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <llvm/IR/Verifier.h>
@@ -93,6 +95,7 @@ struct Options {
     std::string graphTarget;
     std::string passes;       // custom pipeline from --passes=
     std::string optimizationProfile;
+    std::string telemetryOutput;
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
     bool debugPassManager   = false;
@@ -153,7 +156,8 @@ void printHelp(std::ostream &out) {
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
-        << "  --remarks                Print structured optimization remarks.\n\n"
+        << "  --remarks                Print structured optimization remarks.\n"
+        << "  --telemetry=<file>       Write measured AST desugaring pass telemetry as JSON.\n\n"
         << "  --why-not-optimized      Print recorded advanced optimization rejections.\n\n"
         << "Graph options:\n"
         << "  --cfg                    Emit Control-Flow Graph DOT.\n"
@@ -163,7 +167,7 @@ void printHelp(std::ostream &out) {
         << "Planned (not yet implemented):\n"
         << "  --format=optimized\n"
         << "  --opt=<0|1|2|3>  --passes=<list>\n"
-        << "  --diagnostics=json  --telemetry=<file>\n"
+        << "  --diagnostics=json\n"
         << "  nano jit / profile / benchmark\n";
 }
 
@@ -225,6 +229,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.passes = std::string(arg.substr(9));
         } else if (arg.starts_with("--profile=")) {
             o.optimizationProfile = std::string(arg.substr(10));
+        } else if (arg.starts_with("--telemetry=")) {
+            o.telemetryOutput = std::string(arg.substr(12));
         } else if (arg.starts_with("--stop-after=")) {
             o.stopAfter = std::string(arg.substr(13));
         } else if (arg.starts_with("--disable-pass=")) {
@@ -469,6 +475,41 @@ nanopass::PassInstrumentation makeDebugInstrumentation(std::ostream &out,
     return instr;
 }
 
+std::string jsonEscape(std::string_view text) {
+    std::string out;
+    for (const unsigned char c : text) {
+        switch (c) { case '"': out += "\\\""; break; case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break; case '\r': out += "\\r"; break; case '\t': out += "\\t"; break;
+        default: if (c < 0x20) out += "?"; else out += static_cast<char>(c); }
+    }
+    return out;
+}
+
+bool writeDesugarTelemetryJson(const std::string &path,
+                               const std::vector<nanopass::PassTelemetry> &events,
+                               std::ostream &err) {
+    std::ofstream out(path);
+    if (!out) { err << "error: could not write telemetry '" << path << "'\n"; return false; }
+    out << "{\n  \"schema_version\": 1,\n  \"scope\": \"ast-desugar\",\n  \"passes\": [";
+    for (size_t i = 0; i < events.size(); ++i) {
+        const auto &event = events[i]; if (i) out << ',';
+        out << "\n    {\"id\":\"" << jsonEscape(event.passId) << "\",\"name\":\""
+            << jsonEscape(event.passName) << "\",\"unit\":\"" << nanopass::toString(event.unit)
+            << "\",\"changed\":" << (event.changed ? "true" : "false")
+            << ",\"duration_ns\":" << event.durationNs << ",\"statistics\":{";
+        std::map<std::string, nanopass::StatValue> sorted(event.stats.all().begin(), event.stats.all().end());
+        bool first = true; for (const auto &[key, value] : sorted) { if (!first) out << ','; first = false;
+            out << '"' << jsonEscape(key) << "\":";
+            std::visit([&](const auto &item) { using T = std::decay_t<decltype(item)>;
+                if constexpr (std::is_same_v<T, std::string>) out << '"' << jsonEscape(item) << '"'; else out << item; }, value); }
+        out << "},\"invalidated_analyses\":[";
+        for (size_t j = 0; j < event.invalidatedAnalyses.size(); ++j) { if (j) out << ','; out << '"' << jsonEscape(event.invalidatedAnalyses[j]) << '"'; }
+        out << "]}";
+    }
+    out << "\n  ]\n}\n";
+    return true;
+}
+
 // ============================================================
 // Build PassContext from Options
 // ============================================================
@@ -598,13 +639,13 @@ int main(int argc, char **argv) {
 
         // Install debug instrumentation
         if (options.debugPassManager || options.debugAnalyses
-                || options.command == Command::Explain) {
+                || options.command == Command::Explain || !options.telemetryOutput.empty()) {
             nanopass::PassInstrumentation instr = makeDebugInstrumentation(
                 std::cerr,
                 options.debugPassManager,
                 options.debugAnalyses);
             // Always collect telemetry for explain
-            if (options.command == Command::Explain) {
+            if (options.command == Command::Explain || !options.telemetryOutput.empty()) {
                 instr.onPassEnd = [&desugarTelemetry](const nanopass::PassTelemetry &t) {
                     desugarTelemetry.push_back(t);
                 };
@@ -625,6 +666,9 @@ int main(int argc, char **argv) {
 
         // ── Run desugaring pipeline ───────────────────────────────────────
         pm.run(program, ctx);
+        if (!options.telemetryOutput.empty() &&
+            !writeDesugarTelemetryJson(options.telemetryOutput, desugarTelemetry, std::cerr))
+            return 1;
 
         // ── Emit desugared AST ────────────────────────────────────────────
         if (options.command == Command::Emit && options.format == "desugar") {

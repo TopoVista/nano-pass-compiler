@@ -150,6 +150,10 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 ./build/compiler/nano emit examples/loops.nano --format=llvm --backend=ssa \
   --profile=loops.nprof -O2
 
+# Persist measured desugaring-pass events in a versioned JSON schema.
+./build/compiler/nano emit examples/desugaring.nano --format=core \
+  --telemetry=desugar-telemetry.json
+
 # Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
 ```

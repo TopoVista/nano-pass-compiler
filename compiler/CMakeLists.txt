@@ -286,6 +286,10 @@ endif()
            COMMAND nano profile ${CMAKE_SOURCE_DIR}/examples/loops.nano
                     -o ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_desugar_telemetry
+           COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/desugaring.nano
+                    --format=core --telemetry=${CMAKE_CURRENT_BINARY_DIR}/nano_desugar_telemetry.json
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   add_test(NAME nano_ssa_backend_profile_consume
            COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/loops.nano
                     --format=llvm --backend=ssa --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof

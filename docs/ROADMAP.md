@@ -116,7 +116,7 @@
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs
 - [ ] Structured diagnostics: rich source spans, labels, fix-it hints
-- [ ] Pass telemetry JSON (`--pass-telemetry=json`)
+- [x] Versioned AST desugaring telemetry JSON (`--telemetry=file`)
 - [ ] Optimization remarks (`OptimizationApplied` / `OptimizationMissed`)
 - [ ] "Why didn't this optimize?" structured rejection reasons
 - [ ] JSON API server (`nano-server`) for web frontend
