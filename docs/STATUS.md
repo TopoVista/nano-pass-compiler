@@ -30,6 +30,9 @@ and runtime safety traps remain planned.
   predeclared functions for forward calls/recursion, deterministic block and
   phi creation, typed residual memory locals (including non-promoted inner
   scalars and arrays), and mandatory LLVM function and module verifier gates.
+  Every generated fixed-array load/store calls the C-ABI signed bounds check;
+  a failing native check emits a diagnostic and terminates rather than invoking
+  undefined memory behavior.
 - **ORC JIT** — `nano jit` / `nano run` execute optimized SSA through ORCv2
   LLJIT when built with `NANO_BUILD_JIT=ON`; C-ABI print shims capture output.
 - **Host AOT emission** — `nano compile --backend=ssa --emit-obj -o file.o`
@@ -144,7 +147,7 @@ and runtime safety traps remain planned.
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
 | IR/SSA/optimizer/correctness assertions | 5,454 |
-| LLVM backend/JIT assertions | 502 |
+| LLVM backend/JIT assertions | 503 |
 | LLVM 18.1.3 WSL CTest | 85 / 85 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
@@ -154,7 +157,7 @@ and runtime safety traps remain planned.
 | Errors.nano rejection | 1 |
 
 Local WSL validation with LLVM 18.1.3: **85/85 CTest** passed; ASan+UBSan also
-passed the current 5,454-assertion IR suite and 502-assertion LLVM backend
+passed the current 5,454-assertion IR suite and 503-assertion LLVM backend
 suite. The Windows LLVM package remains invalid because its imported targets
 reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 
@@ -201,7 +204,7 @@ reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypass
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
 - [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,454 IR assertions and
-  502 backend/JIT assertions passed. The Windows package remains independently
+  503 backend/JIT assertions passed. The Windows package remains independently
   broken (`C:\llvm\bin\llvm-tblgen.exe` missing).
 
 Latest recorded LLVM-independent campaign: seed `42`, 1,000 generated and
@@ -218,7 +221,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [ ] Packaged/installable runtime library and cross-target linking
 - [x] Deterministic CoreIR profile collection (`nano profile`)
 - [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
-- [ ] Native array bounds traps, execution limits, branch/loop profile use, and adaptive JIT
+- [x] Native fixed-array bounds traps for SSA LLVM lowering
+- [ ] Native execution limits, branch/loop profile use, and adaptive JIT
 
 ### Phase 9 — Observability
 - `nano explain` full polished UX

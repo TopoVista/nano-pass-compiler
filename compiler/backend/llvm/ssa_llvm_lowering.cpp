@@ -97,6 +97,25 @@ llvm::Function *runtimePrint(llvm::Module &module, llvm::Type *argument) {
       llvm::Function::ExternalLinkage, name, module);
 }
 
+llvm::Function *runtimeArrayBoundsCheck(llvm::Module &module) {
+  if (auto *existing = module.getFunction("nano_check_array_bounds_i64")) return existing;
+  auto &context = module.getContext();
+  auto *i64 = llvm::Type::getInt64Ty(context);
+  return llvm::Function::Create(llvm::FunctionType::get(
+      llvm::Type::getVoidTy(context), {i64, i64}, false),
+      llvm::Function::ExternalLinkage, "nano_check_array_bounds_i64", module);
+}
+
+llvm::Value *asSignedI64(llvm::IRBuilder<> &builder, llvm::Value *value) {
+  auto *i64 = llvm::Type::getInt64Ty(builder.getContext());
+  if (!value->getType()->isIntegerTy())
+    throw std::runtime_error("array index is not an integer");
+  const unsigned width = llvm::cast<llvm::IntegerType>(value->getType())->getBitWidth();
+  if (width == 64) return value;
+  if (width < 64) return builder.CreateSExt(value, i64, "array.index.i64");
+  return builder.CreateTrunc(value, i64, "array.index.i64");
+}
+
 struct FunctionContext {
   llvm::Module &module;
   llvm::IRBuilder<> builder;
@@ -274,6 +293,11 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           if (slot == ctx.locals.end()) ctx.fail("unknown array memory local", block.id, instruction.result);
           auto *arrayType = llvm::cast<llvm::ArrayType>(lowerType(context_, local->second));
           auto *index = ctx.operand(instruction.operand1, llvm::Type::getInt64Ty(context_), block.id);
+          try {
+            ctx.builder.CreateCall(runtimeArrayBoundsCheck(*module), {
+                asSignedI64(ctx.builder, index),
+                llvm::ConstantInt::get(llvm::Type::getInt64Ty(context_), local->second.arraySize, true)});
+          } catch (const std::exception &error) { ctx.fail(error.what(), block.id, instruction.result); }
           auto *zero = llvm::ConstantInt::get(index->getType(), 0);
           auto *address = ctx.builder.CreateGEP(arrayType, slot->second, {zero, index});
           result = ctx.builder.CreateLoad(lowerType(context_, *local->second.element), address);
@@ -287,6 +311,11 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
           if (slot == ctx.locals.end()) ctx.fail("unknown array memory local", block.id);
           auto *arrayType = llvm::cast<llvm::ArrayType>(lowerType(context_, local->second));
           auto *index = ctx.operand(instruction.operand1, llvm::Type::getInt64Ty(context_), block.id);
+          try {
+            ctx.builder.CreateCall(runtimeArrayBoundsCheck(*module), {
+                asSignedI64(ctx.builder, index),
+                llvm::ConstantInt::get(llvm::Type::getInt64Ty(context_), local->second.arraySize, true)});
+          } catch (const std::exception &error) { ctx.fail(error.what(), block.id); }
           auto *zero = llvm::ConstantInt::get(index->getType(), 0);
           auto *address = ctx.builder.CreateGEP(arrayType, slot->second, {zero, index});
           ctx.builder.CreateStore(ctx.operand(instruction.operand2, lowerType(context_, *local->second.element), block.id), address);

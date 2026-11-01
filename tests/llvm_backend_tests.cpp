@@ -135,6 +135,9 @@ int main() {
   CHECK(recursiveExecution.returnValue == 120);
 
   SSAProgram arrays; arrays.functions.push_back(arrayMain());
+  llvm::LLVMContext arrayContext;
+  auto loweredArrays = SSALLVMLowering(arrayContext).lower(arrays, "array-bounds-test");
+  CHECK(loweredArrays.module->getFunction("nano_check_array_bounds_i64") != nullptr);
   const auto arrayExecution = executeWithLLJIT(arrays);
   CHECK(arrayExecution.error.empty());
   CHECK(arrayExecution.returnValue == 17);

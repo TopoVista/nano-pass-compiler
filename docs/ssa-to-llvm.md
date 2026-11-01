@@ -17,9 +17,11 @@ string to `i8*`, and fixed arrays to LLVM fixed arrays. Memory-backed SSA
 locals become entry-block allocas. Index operations use typed GEP plus load or
 store. A few legacy CFG instructions leave their result type unknown; lowering
 derives that type from a mapped SSA operand, never from a pointer address or a
-textual printer representation. Runtime bounds checking is not yet part of
-this backend, so native array differential equivalence is claimed only for
-in-bounds programs.
+textual printer representation. Every fixed-array index operation calls the
+linked `nano_check_array_bounds_i64(index, size)` C-ABI runtime check before
+forming the GEP. A negative or out-of-range index emits a deterministic runtime
+diagnostic and terminates, rather than relying on undefined native memory
+behavior. This is a safety trap, not recoverable JIT sandboxing.
 
 The AST LLVM backend remains the default reference backend. The new path is
 explicitly selected with:

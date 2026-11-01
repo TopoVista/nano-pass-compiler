@@ -1,5 +1,7 @@
 #include "backend/llvm/llvm_runtime.h"
 
+#include <cstdlib>
+#include <cstdio>
 #include <iostream>
 #include <string>
 
@@ -24,3 +26,12 @@ extern "C" void nano_print_i64(std::int64_t value) { write(std::to_string(value)
 extern "C" void nano_print_f32(float value) { write(std::to_string(value)); }
 extern "C" void nano_print_f64(double value) { write(std::to_string(value)); }
 extern "C" void nano_print_string(const char *value) { write(value ? value : ""); }
+
+extern "C" void nano_check_array_bounds_i64(std::int64_t index,
+                                              std::int64_t size) {
+  if (index >= 0 && index < size) return;
+  std::fprintf(stderr, "nano runtime error: array index %lld is outside [0, %lld)\n",
+               static_cast<long long>(index), static_cast<long long>(size));
+  std::fflush(stderr);
+  std::abort();
+}
