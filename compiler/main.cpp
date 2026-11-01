@@ -91,6 +91,7 @@ struct Options {
     std::string output;
     std::string graphTarget;
     std::string passes;       // custom pipeline from --passes=
+    std::string optimizationProfile;
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
     bool debugPassManager   = false;
@@ -149,6 +150,7 @@ void printHelp(std::ostream &out) {
         << "Optimization options:\n"
         << "  -O0|-O1|-O2|-O3          Select Nano SSA optimization pipeline.\n"
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
+        << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
         << "  --remarks                Print structured optimization remarks.\n\n"
         << "  --why-not-optimized      Print recorded advanced optimization rejections.\n\n"
@@ -220,6 +222,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.emitLLVM = o.format == "llvm";
         } else if (arg.starts_with("--passes=")) {
             o.passes = std::string(arg.substr(9));
+        } else if (arg.starts_with("--profile=")) {
+            o.optimizationProfile = std::string(arg.substr(10));
         } else if (arg.starts_with("--stop-after=")) {
             o.stopAfter = std::string(arg.substr(13));
         } else if (arg.starts_with("--disable-pass=")) {
@@ -284,6 +288,11 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     }
     if (o.backend != "ast" && o.backend != "ssa") {
         err << "error: --backend must be 'ast' or 'ssa'\n";
+        return false;
+    }
+    if (!o.optimizationProfile.empty() && o.command != Command::Optimize &&
+        o.backend != "ssa" && o.command != Command::Jit && o.command != Command::Run) {
+        err << "error: --profile requires SSA optimization (--backend=ssa, optimize, jit, or run)\n";
         return false;
     }
     return true;
@@ -633,6 +642,22 @@ int main(int argc, char **argv) {
             return 0;
         }
 
+        std::optional<nanopass::profile::NanoProfile> optimizationProfile;
+        if (!options.optimizationProfile.empty()) {
+            std::ifstream profileFile(options.optimizationProfile);
+            if (!profileFile) {
+                std::cerr << "error: could not open profile '" << options.optimizationProfile << "'\n";
+                return 1;
+            }
+            std::string profileError;
+            optimizationProfile = nanopass::profile::readProfileJson(profileFile, profileError);
+            if (!optimizationProfile) {
+                std::cerr << "error: invalid Nano profile '" << options.optimizationProfile
+                          << "': " << profileError << '\n';
+                return 1;
+            }
+        }
+
         // The Nano SSA optimizer is intentionally independent of the AST LLVM
         // backend. It is used for inspected optimized SSA only at this stage.
         const bool optimizeSSA = options.command == Command::Optimize ||
@@ -655,7 +680,10 @@ int main(int argc, char **argv) {
                 : options.passes.find("inline") != std::string::npos;
             if (requestInline) {
                 nanopass::opt::SSAProgramInliner inliner;
-                const auto inlineResult = inliner.run(irRes.ssa);
+                nanopass::opt::OptimizationBudget inlineBudget;
+                if (optimizationProfile)
+                    inlineBudget.observedFunctionCalls = optimizationProfile->functionCounts;
+                const auto inlineResult = inliner.run(irRes.ssa, inlineBudget);
                 optimizationResult.changed |= inlineResult.changed;
                 for (const auto &[key, value] : inlineResult.statistics.counters)
                     optimizationResult.statistics.add(key, value);

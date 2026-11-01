@@ -34,7 +34,18 @@ struct CachedCallGraphAnalysis { using Result=CallGraph; static Result compute(c
 enum class OptimizationReasonCode { SideEffects, LoopVariantOperand, UnsafeToSpeculate, NoPreheader, RecursiveCallee, InlineCostTooHigh, BudgetExceeded, InlineDepthLimit, NoReturn, UnsupportedControlFlow, MemoryDependenceUnknown };
 inline const char *reasonCodeName(OptimizationReasonCode code) { switch(code){case OptimizationReasonCode::SideEffects:return "SIDE_EFFECTS";case OptimizationReasonCode::LoopVariantOperand:return "LOOP_VARIANT_OPERAND";case OptimizationReasonCode::UnsafeToSpeculate:return "UNSAFE_TO_SPECULATE";case OptimizationReasonCode::NoPreheader:return "NO_PREHEADER";case OptimizationReasonCode::RecursiveCallee:return "INLINE_RECURSIVE";case OptimizationReasonCode::InlineCostTooHigh:return "INLINE_COST_TOO_HIGH";case OptimizationReasonCode::BudgetExceeded:return "INLINE_GROWTH_BUDGET";case OptimizationReasonCode::InlineDepthLimit:return "INLINE_DEPTH_LIMIT";case OptimizationReasonCode::NoReturn:return "INLINE_NORETURN_UNSUPPORTED";case OptimizationReasonCode::UnsupportedControlFlow:return "INLINE_UNSUPPORTED_CFG";case OptimizationReasonCode::MemoryDependenceUnknown:return "MEMORY_DEPENDENCE_UNKNOWN";}return "UNKNOWN"; }
 struct OptimizationDecision { std::string passId; bool applied=false; OptimizationReasonCode reason; std::string explanation; std::optional<BlockId> block; std::optional<ValueId> value; SourceOrigin origin; };
-struct OptimizationBudget { size_t maxInlineCalleeInstructions=12; size_t maxCallerGrowth=32; size_t maxTotalInlineGrowth=96; size_t maxInlineDepth=1; };
+struct OptimizationBudget {
+  size_t maxInlineCalleeInstructions=12;
+  size_t maxCallerGrowth=32;
+  size_t maxTotalInlineGrowth=96;
+  size_t maxInlineDepth=1;
+  // Optional, measured function-call counts from a NanoProfile. These values
+  // tune only cost limits; they never override recursion, type, CFG, or SSA
+  // verifier gates.
+  std::map<std::string,uint64_t> observedFunctionCalls;
+  uint64_t hotFunctionThreshold=10;
+  size_t hotInlineCalleeInstructions=24;
+};
 inline bool isSafeToSpeculate(const SSAInstruction &instruction) { return instruction.kind==SSAInstructionKind::Unary || (instruction.kind==SSAInstructionKind::Binary && instruction.binaryOp!=BinaryOpKind::Div && instruction.binaryOp!=BinaryOpKind::Mod); }
 
 class LoopSimplifyPass final : public SSAFunctionPass {
@@ -174,8 +185,16 @@ public:
               continue;
             }
             const SSAFunction &callee = *calleeIt->second;
+            OptimizationBudget decisionBudget = budget;
+            const auto observedCalls = budget.observedFunctionCalls.find(callee.name);
+            const bool hotByProfile = observedCalls != budget.observedFunctionCalls.end() &&
+                observedCalls->second >= budget.hotFunctionThreshold;
+            if (hotByProfile)
+              decisionBudget.maxInlineCalleeInstructions = std::max(
+                  decisionBudget.maxInlineCalleeInstructions,
+                  decisionBudget.hotInlineCalleeInstructions);
             const InlineDecision decision = model.decide(
-                callee, graphSnapshot.recursive(callee.name), budget,
+                callee, graphSnapshot.recursive(callee.name), decisionBudget,
                 callerGrowth[caller.name], totalGrowth, 1);
             if (!decision.inlineCall) {
               addMissed(result, decision.reason, decision.explanation,
@@ -381,7 +400,11 @@ public:
             for (const auto &block : callee.blocks) result.statistics.add("phisCloned", block.phis.size());
             callerGrowth[caller.name] += decision.estimatedCost;
             totalGrowth += decision.estimatedCost;
-            result.remarks.push_back({OptimizationRemarkKind::Applied, "inline", "inlined CFG " + callee.name, original.id, {}, call.origin});
+            const std::string inlineMessage = hotByProfile
+                ? "inlined hot CFG " + callee.name + " (profile calls=" + std::to_string(observedCalls->second) + ")"
+                : "inlined CFG " + callee.name;
+            result.remarks.push_back({OptimizationRemarkKind::Applied, "inline", inlineMessage, original.id, {}, call.origin});
+            if (hotByProfile) result.statistics.add("hotProfileInlines");
             if (analyses) {
               analyses->invalidateFunction(program, caller);
               analyses->invalidateProgram(program);

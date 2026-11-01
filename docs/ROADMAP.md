@@ -19,7 +19,7 @@
 - [x] Conservative LICM and scalar strength reduction
 - [x] Direct call graph, recursive SCC detection, and deterministic SSA CFG inlining
 - [x] Multi-block/multi-return and void-return continuation handling
-- [ ] SSA-to-LLVM lowering and differential runtime validation
+- [x] SSA-to-LLVM lowering, ORC execution, and differential runtime validation
 
 ## Phase 1 — Stabilize existing compiler ✅
 - [x] Root CMake with LLVM detection and clear error messages
@@ -106,9 +106,10 @@
 - [x] Host AOT object/executable emission (`nano compile --backend=ssa --emit-obj|--emit-exe`)
 - [x] Reproducible CoreIR-vs-optimized-SSA/JIT differential runner
 - [x] Versioned CoreIR execution profile collection (`nano profile`)
+- [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
 - [ ] Packaged/installable runtime library and cross-target linking
 - [ ] Optional adaptive JIT (tiered recompilation on hot functions)
-- [ ] Profile consumption for inlining/layout decisions
+- [ ] Branch/loop profile consumption for layout decisions
 
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs

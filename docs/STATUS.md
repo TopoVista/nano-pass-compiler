@@ -1,9 +1,9 @@
 # Project Status
 
 Last updated: Phase 8 foundation — verified SSA-to-LLVM lowering, optional ORC
-JIT execution, host object emission, and reproducible native differential
-testing are implemented. Standalone AOT linking and runtime safety traps remain
-planned.
+JIT execution, host object/executable emission, and reproducible native
+differential testing are implemented. Installable/cross-target AOT packaging
+and runtime safety traps remain planned.
 
 ---
 
@@ -28,8 +28,8 @@ planned.
 ### LLVM backend and JIT (Phase 8 foundation)
 - **SSA → LLVM lowering** — direct lowering of verified SSA functions,
   predeclared functions for forward calls/recursion, deterministic block and
-  phi creation, typed memory-backed array locals, and mandatory LLVM function
-  and module verifier gates.
+  phi creation, typed residual memory locals (including non-promoted inner
+  scalars and arrays), and mandatory LLVM function and module verifier gates.
 - **ORC JIT** — `nano jit` / `nano run` execute optimized SSA through ORCv2
   LLJIT when built with `NANO_BUILD_JIT=ON`; C-ABI print shims capture output.
 - **Host AOT emission** — `nano compile --backend=ssa --emit-obj -o file.o`
@@ -40,7 +40,9 @@ planned.
   `12648430`, 1,000 generated programs, 1,000 comparisons, 0 mismatches.
 - **Nano profile format** — `nano profile file -o file.nprof` records
   deterministic function-call, branch-outcome, and loop-iteration counts from
-  the bounded CoreIR reference interpreter in schema-versioned JSON.
+  the bounded CoreIR reference interpreter in schema-versioned JSON. Its
+  function-call counts can conservatively guide SSA inlining through
+  `--profile=file.nprof`; all legality and verifier gates remain unchanged.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
@@ -141,9 +143,9 @@ planned.
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,440 |
-| LLVM backend/JIT assertions | 496 |
-| LLVM 18.1.3 WSL CTest | 84 / 84 passed |
+| IR/SSA/optimizer/correctness assertions | 5,454 |
+| LLVM backend/JIT assertions | 502 |
+| LLVM 18.1.3 WSL CTest | 85 / 85 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -151,10 +153,10 @@ planned.
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-Local WSL validation with LLVM 18.1.3: **84/84 CTest** passed; ASan+UBSan
-passed the 5,440-assertion IR suite and 496-assertion LLVM backend suite. The
-Windows LLVM package remains invalid because its imported targets reference a
-missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
+Local WSL validation with LLVM 18.1.3: **85/85 CTest** passed; ASan+UBSan also
+passed the current 5,454-assertion IR suite and 502-assertion LLVM backend
+suite. The Windows LLVM package remains invalid because its imported targets
+reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 
 ---
 
@@ -198,8 +200,8 @@ missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 - [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
-- [x] WSL LLVM 18.1.3 ASan+UBSan execution: 5,440 IR assertions and 496
-  backend/JIT assertions passed. The Windows package remains independently
+- [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,454 IR assertions and
+  502 backend/JIT assertions passed. The Windows package remains independently
   broken (`C:\llvm\bin\llvm-tblgen.exe` missing).
 
 Latest recorded LLVM-independent campaign: seed `42`, 1,000 generated and
@@ -215,7 +217,8 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] Host object/executable emission and replayable native differential runner
 - [ ] Packaged/installable runtime library and cross-target linking
 - [x] Deterministic CoreIR profile collection (`nano profile`)
-- [ ] Native array bounds traps, execution limits, profile consumption, and adaptive JIT
+- [x] Profile-guided hot-inline cost tuning (`--profile=file.nprof`)
+- [ ] Native array bounds traps, execution limits, branch/loop profile use, and adaptive JIT
 
 ### Phase 9 — Observability
 - `nano explain` full polished UX

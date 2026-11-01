@@ -273,6 +273,11 @@ endif()
            COMMAND nano profile ${CMAKE_SOURCE_DIR}/examples/loops.nano
                     -o ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_test(NAME nano_ssa_backend_profile_consume
+           COMMAND nano emit ${CMAKE_SOURCE_DIR}/examples/loops.nano
+                    --format=llvm --backend=ssa --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  set_tests_properties(nano_ssa_backend_profile_consume PROPERTIES DEPENDS nano_profile_loops)
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example

@@ -141,6 +141,11 @@ The produced binary is `build/compiler/nano`.
 # Collect deterministic interpreter execution facts in versioned JSON.
 ./build/compiler/nano profile examples/loops.nano -o loops.nprof
 
+# Feed measured function-call counts into the bounded inliner. This only
+# relaxes a cost choice for hot direct callees; correctness gates remain on.
+./build/compiler/nano emit examples/loops.nano --format=llvm --backend=ssa \
+  --profile=loops.nprof -O2
+
 # Verify all available compiler invariants, including SSA
 ./build/compiler/nano verify examples/factorial.nano
 ```

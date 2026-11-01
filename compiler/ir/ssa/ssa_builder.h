@@ -40,6 +40,22 @@ private:
     out.entryBlock = cfg.entryBlock; out.origin = cfg.origin;
     out.memoryLocals = cfg.memoryLocals;
     const auto locals = collectPromotableLocals(cfg);
+    // Inner-scope scalar locals are intentionally not promotable because the
+    // CFG lacks lexical lifetime ranges. They remain memory-backed in SSA and
+    // therefore need the same durable type metadata as arrays for backends.
+    // Recover it from typed loads (or, for store-only locals, the typed source
+    // operand) before renaming erases the original local operand.
+    for (const auto &block : cfg.blocks) for (const auto &instruction : block->instructions) {
+      if ((instruction.kind != CFGInstructionKind::LoadLocal &&
+           instruction.kind != CFGInstructionKind::StoreLocal) ||
+          locals.contains(instruction.local) || out.memoryLocals.contains(instruction.local))
+        continue;
+      const LangType type = instruction.kind == CFGInstructionKind::LoadLocal
+          ? instruction.type : instruction.op1.type;
+      if (type.kind == LangTypeKind::Unknown)
+        throw std::runtime_error("SSA builder could not determine memory local type for " + instruction.local.str());
+      out.memoryLocals.emplace(instruction.local, type);
+    }
     for (const auto &[local, _] : locals) out.promotedLocals.push_back(local);
     stats.functions = 1; stats.blocks = cfg.blocks.size();
     stats.promotableLocals = locals.size(); stats.promotedLocals = locals.size();

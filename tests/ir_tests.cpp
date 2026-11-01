@@ -1360,6 +1360,28 @@ static void test_reference_profile_is_deterministic_and_site_distinct() {
     if(ifSite!=first.branchCounts.end()){ASSERT_EQ(ifSite->second.taken,2u);ASSERT_EQ(ifSite->second.notTaken,1u);}
     if(loopSite!=first.branchCounts.end()){ASSERT_EQ(loopSite->second.taken,3u);ASSERT_EQ(loopSite->second.notTaken,1u);}
     std::ostringstream firstJson,secondJson;profile::writeProfileJson(first,firstJson);profile::writeProfileJson(second,secondJson);ASSERT_EQ(firstJson.str(),secondJson.str());ASSERT(firstJson.str().find("\"schema_version\": 1")!=std::string::npos);
+    std::istringstream serialized(firstJson.str());std::string profileError;auto read=profile::readProfileJson(serialized,profileError);ASSERT(read.has_value());if(read)ASSERT_EQ(read->functionCounts.at("worker"),1u);
+    std::istringstream malformed(R"({"schema_version": 99, "function_counts": {}, "branch_counts": {}, "loop_iterations": {}})");auto rejected=profile::readProfileJson(malformed,profileError);ASSERT(!rejected.has_value());
+    std::istringstream malformedCounts(R"({"schema_version": 1, "function_counts": 1, "branch_counts": {}, "loop_iterations": {}})");rejected=profile::readProfileJson(malformedCounts,profileError);ASSERT(!rejected.has_value());
+}
+
+static void test_profile_guided_inline_remains_verifier_gated() {
+    auto result=compileToIR(R"(int hot(int x){int a=x+1;int b=a+1;int c=b+1;int d=c+1;int e=d+1;int f=e+1;int g=f+1;int h=g+1;int i=h+1;int j=i+1;int k=j+1;return k;}int main(){return hot(1);})");
+    SSAProgram cold=result.ssa,hot=result.ssa;OptimizationBudget budget;
+    auto coldResult=SSAProgramInliner{}.run(cold,budget);ASSERT(!coldResult.changed);ASSERT(coldResult.statistics.get("callsRejectedCost")>0u);
+    budget.observedFunctionCalls["hot"]=10;auto hotResult=SSAProgramInliner{}.run(hot,budget);ASSERT(hotResult.changed);ASSERT(hotResult.statistics.get("hotProfileInlines")>0u);
+    for(const auto&function:hot.functions)ASSERT(verifySSA(function).ok);
+}
+
+static void test_ssa_retains_inner_scalar_memory_metadata() {
+    auto result=compileToIR(R"(int f(int n){int i=0;while(i<n){int j=0;while(j<n){j=j+1;}i=i+1;}return i;}int main(){return f(2);})");
+    const auto function=std::find_if(result.ssa.functions.begin(),result.ssa.functions.end(),[](const SSAFunction&candidate){return candidate.name=="f";});
+    ASSERT(function!=result.ssa.functions.end());
+    if(function!=result.ssa.functions.end()){
+      ASSERT(function->memoryLocals.contains(LocalId{"j",0}));
+      ASSERT(function->memoryLocals.at(LocalId{"j",0}).isInt());
+      ASSERT(verifySSA(*function).ok);
+    }
 }
 
 static void test_differential_execution_regression_corpus() {
@@ -1496,6 +1518,8 @@ int main() {
     RUN_TEST(test_execution_limits_and_defined_errors);
     RUN_TEST(test_interpreters_execute_fixed_size_arrays);
     RUN_TEST(test_reference_profile_is_deterministic_and_site_distinct);
+    RUN_TEST(test_profile_guided_inline_remains_verifier_gated);
+    RUN_TEST(test_ssa_retains_inner_scalar_memory_metadata);
     RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);
     RUN_TEST(test_fuzz_summary_and_deterministic_reducer);

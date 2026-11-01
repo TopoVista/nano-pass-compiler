@@ -181,6 +181,33 @@ int main() {
   CHECK(shortCircuitNative.stdoutText == shortCircuitOracle.stdoutText);
   CHECK(shortCircuitNative.returnValue == std::stoll(runtimeValueText(*shortCircuitOracle.returnValue)));
 
+  // An inner-scope scalar must remain typed memory in SSA; this exercises the
+  // residual LoadLocal/StoreLocal lowering path after O2 transforms.
+  auto nestedMemory = compilePipeline(R"(
+    int countPairs(int n, int target) {
+      int count = 0;
+      int i = 1;
+      while (i <= n) {
+        int j = 1;
+        while (j <= n) { if ((i + j) == target) { count = count + 1; } j = j + 1; }
+        i = i + 1;
+      }
+      return count;
+    }
+    int main() { int result = countPairs(5, 6); print(result); return result; }
+  )");
+  const auto nestedMemoryOracle = CoreInterpreter{}.run(nestedMemory.core);
+  CHECK(nestedMemoryOracle.status == ExecutionStatus::Success);
+  for (auto &function : nestedMemory.ssa.functions) {
+    nanopass::opt::SSAOptimizationContext context;
+    nanopass::opt::buildPipeline(2).run(function, context);
+    CHECK(verifySSA(function).ok);
+  }
+  const auto nestedMemoryNative = executeWithLLJIT(nestedMemory.ssa);
+  CHECK(nestedMemoryNative.error.empty());
+  CHECK(nestedMemoryNative.stdoutText == nestedMemoryOracle.stdoutText);
+  CHECK(nestedMemoryNative.returnValue == std::stoll(runtimeValueText(*nestedMemoryOracle.returnValue)));
+
   // A bounded deterministic campaign supplements the structural cases above.
   // The Phase 7 generator produces the scalar subset whose reference semantics
   // are already established independently of LLVM.
