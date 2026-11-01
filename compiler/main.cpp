@@ -105,6 +105,7 @@ struct Options {
     int optimizationLevel   = 2;
     bool showBeforeAfter    = false;
     bool remarks            = false;
+    bool remarksJson        = false;
     bool whyNotOptimized    = false;
     bool emitLLVM           = false;
     bool emitObject         = false;
@@ -156,7 +157,7 @@ void printHelp(std::ostream &out) {
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
-        << "  --remarks                Print structured optimization remarks.\n"
+        << "  --remarks[=json]         Print optimization remarks as text or JSON.\n"
         << "  --telemetry=<file>       Write measured AST desugaring pass telemetry as JSON.\n\n"
         << "  --why-not-optimized      Print recorded advanced optimization rejections.\n\n"
         << "Graph options:\n"
@@ -249,6 +250,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.showBeforeAfter = true;
         } else if (arg == "--remarks") {
             o.remarks = true;
+        } else if (arg == "--remarks=json") {
+            o.remarks = true; o.remarksJson = true;
         } else if (arg == "--why-not-optimized") {
             o.whyNotOptimized = true;
         } else if (arg == "--cfg") {
@@ -818,7 +821,13 @@ int main(int argc, char **argv) {
                           << pass.instructionsBefore << " -> " << pass.instructionsAfter
                           << " instructions, " << pass.blocksBefore << " -> "
                           << pass.blocksAfter << " blocks, " << pass.durationUs << " us\n";
-            if (options.remarks) for (const auto &remark : optimizationContext.remarks)
+            if (options.remarks && options.remarksJson) {
+                std::cout << "{\"schema_version\":1,\"remarks\":[";
+                for (size_t i=0;i<optimizationContext.remarks.size();++i) { const auto &remark=optimizationContext.remarks[i]; if(i)std::cout<<',';
+                    const char *kind=remark.kind==nanopass::opt::OptimizationRemarkKind::Applied?"applied":remark.kind==nanopass::opt::OptimizationRemarkKind::Missed?"missed":"analysis";
+                    std::cout << "{\"kind\":\""<<kind<<"\",\"pass\":\""<<jsonEscape(remark.passId)<<"\",\"message\":\""<<jsonEscape(remark.message)<<"\"}"; }
+                std::cout << "]}\n";
+            } else if (options.remarks) for (const auto &remark : optimizationContext.remarks)
                 std::cout << "  [" << remark.passId << "] " << remark.message << "\n";
             if (options.whyNotOptimized) {
                 std::cout << "Missed optimizations\n";
