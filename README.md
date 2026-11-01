@@ -150,6 +150,13 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 ./build/compiler/nano emit examples/loops.nano --format=llvm --backend=ssa \
   --profile=loops.nprof -O2
 
+# Inspect complete SSA block/edge/loop counters and export policy features.
+./build/compiler/nano profile show loops.nprof
+./build/compiler/nano features examples/loops.nano --profile=loops.nprof
+
+# Promote deterministic hot calls through LLVM ORC dispatch stubs.
+./build/compiler/nano jit examples/loops.nano --adaptive --hot-threshold=1000
+
 # Persist measured desugaring-pass events in a versioned JSON schema.
 ./build/compiler/nano emit examples/desugaring.nano --format=core \
   --telemetry=desugar-telemetry.json

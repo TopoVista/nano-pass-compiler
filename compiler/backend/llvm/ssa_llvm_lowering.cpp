@@ -347,4 +347,34 @@ LoweringResult SSALLVMLowering::lower(const SSAProgram &program,
   return {std::move(module), statistics};
 }
 
+LoweringResult SSALLVMLowering::lowerFunction(const SSAProgram &program,
+                                               std::string_view functionName,
+                                               std::string implementationName,
+                                               std::string moduleName) const {
+  // Reuse the established whole-program lowering path to preserve every
+  // opcode, type rule, and verifier gate. The non-selected definitions are
+  // then converted to declarations: the ORC adaptive runtime resolves those
+  // public names through stable dispatch stubs.
+  auto lowered = lower(program, std::move(moduleName));
+  llvm::Function *body = lowered.module->getFunction(std::string(functionName));
+  if (!body)
+    throw LoweringError({"unknown function selected for function-level lowering",
+                         std::string(functionName), {}, {}});
+  if (lowered.module->getFunction(implementationName))
+    throw LoweringError({"implementation symbol already exists", std::string(functionName), {}, {}});
+  body->setName(implementationName);
+  for (const auto &source : program.functions) {
+    if (source.name == functionName) continue;
+    if (llvm::Function *declaration = lowered.module->getFunction(source.name))
+      declaration->deleteBody();
+  }
+  std::string verifierText;
+  llvm::raw_string_ostream verifierStream(verifierText);
+  if (llvm::verifyModule(*lowered.module, &verifierStream))
+    throw LoweringError({"function-level LLVM verification failed: " + verifierStream.str(),
+                         std::string(functionName), {}, {}});
+  lowered.statistics.functions = 1;
+  return lowered;
+}
+
 } // namespace nanopass::llvm_backend

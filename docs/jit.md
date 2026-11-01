@@ -16,6 +16,11 @@ LLVM `Error` values, and captures the C-ABI print runtime's output in the
 returned `JITExecutionResult`. `nano run` is an alias for `nano jit` in a
 JIT-enabled build.
 
+`nano jit file.nano --adaptive --hot-threshold=1000` uses LLVM 18 ORC indirect
+stubs to promote non-recursive hot functions from Tier 0 to Tier 1. An active
+frame is never migrated; later calls use the updated stable stub. See
+`adaptive-jit-design.md` for verifier gates and implementation lifecycle.
+
 `nano_jit_correctness` is the reproducible native differential runner. It
 builds a CoreIR reference execution and an independently optimized O3 SSA JIT
 execution for each grammar-generated program:

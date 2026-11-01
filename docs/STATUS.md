@@ -1,9 +1,10 @@
 # Project Status
 
-Last updated: Phase 8 foundation — verified SSA-to-LLVM lowering, optional ORC
-JIT execution, host object/executable emission, and reproducible native
-differential testing are implemented. Installable/cross-target AOT packaging
-and runtime safety traps remain planned.
+Last updated: Phase 9 runtime foundation — complete deterministic SSA profiles,
+ORC Tier-0 → Tier-1 dispatch-stub promotion, PGO compatibility gates, and
+versioned optimization-policy features are implemented. Native adaptive
+profiles currently contain real function-entry counts only and are explicitly
+marked partial; complete block/edge/loop profiles come from the SSA interpreter.
 
 ---
 
@@ -48,6 +49,20 @@ and runtime safety traps remain planned.
   the bounded CoreIR reference interpreter in schema-versioned JSON. Its
   function-call counts can conservatively guide SSA inlining through
   `--profile=file.nprof`; all legality and verifier gates remain unchanged.
+
+### Runtime profiles and adaptive JIT (Phase 9 foundation)
+- **SSA runtime profiles** — `nano profile` records deterministic
+  function/block/edge/loop counters under a canonical SSA fingerprint;
+  `nano profile show` renders saved profiles. Schema, malformed input,
+  incomplete status, and fingerprint mismatches are rejected before PGO use.
+- **Adaptive ORC JIT** — `nano jit --adaptive` compiles each function behind an
+  LLVM 18 indirect stub, counts real native function entries, and promotes a
+  non-recursive hot function once through `updatePointer`. Tier-0 active frames
+  finish normally; only future calls use Tier 1. Tier-1 candidates remain
+  SSA- and LLVM-verifier gated.
+- **Policy substrate** — `nano features` emits schema-v1 static/dynamic feature
+  JSON, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
+  choices from counter-derived hotness. No ML model or LLM is required.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,

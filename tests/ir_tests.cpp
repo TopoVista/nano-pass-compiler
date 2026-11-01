@@ -50,6 +50,7 @@
 #include "ir/ssa/ssa_verifier.h"
 #include "optimizer/ssa_optimizer.h"
 #include "optimizer/advanced_optimizer.h"
+#include "optimizer/optimization_policy.h"
 #include "interpreter/core_interpreter.h"
 #include "interpreter/ssa_interpreter.h"
 #include "profile/nano_profile.h"
@@ -1365,12 +1366,52 @@ static void test_reference_profile_is_deterministic_and_site_distinct() {
     std::istringstream malformedCounts(R"({"schema_version": 1, "function_counts": 1, "branch_counts": {}, "loop_iterations": {}})");rejected=profile::readProfileJson(malformedCounts,profileError);ASSERT(!rejected.has_value());
 }
 
+static void test_ssa_runtime_profile_is_deterministic_serializable_and_compatible() {
+    auto result=compileToIR(R"(int helper(int n){int i=0;while(i<n){i=i+1;}return i;}int main(){return helper(3)+helper(2);})");
+    profile::ProgramRuntimeProfile first,second;
+    auto firstRun=SSAInterpreter{}.run(result.ssa,"main",{},&first);
+    auto secondRun=SSAInterpreter{}.run(result.ssa,"main",{},&second);
+    ASSERT(firstRun.status==ExecutionStatus::Success); ASSERT(secondRun.status==ExecutionStatus::Success);
+    ASSERT(first.status==profile::ProfileStatus::Complete); ASSERT_EQ(first.functions.at("main").calls,1u);
+    ASSERT_EQ(first.functions.at("helper").calls,2u); ASSERT(first.functions.at("helper").blocksExecuted>0u);
+    ASSERT(!first.functions.at("helper").edgeCounts.empty()); ASSERT(!first.functions.at("helper").loops.empty());
+    const auto &loop=first.functions.at("helper").loops.begin()->second;
+    ASSERT(loop.entries>0u); ASSERT(loop.backedges>0u); ASSERT(loop.exits>0u); ASSERT(loop.averageTripCount()>0.0);
+    ASSERT(profile::runtimeProfileMatches(first,result.ssa));
+    std::ostringstream a,b; profile::writeRuntimeProfileJson(first,a); profile::writeRuntimeProfileJson(second,b);
+    ASSERT_EQ(a.str(),b.str()); ASSERT(a.str().find("\"profile_kind\": \"ssa-runtime\"")!=std::string::npos);
+    std::istringstream encoded(a.str()); std::string error; auto decoded=profile::readRuntimeProfileJson(encoded,error);
+    ASSERT(decoded.has_value()); if(decoded){ASSERT(profile::runtimeProfileMatches(*decoded,result.ssa));ASSERT_EQ(decoded->functions.at("helper").calls,2u);}
+    SSAProgram different=compileToIR(R"(int main(){return 9;})").ssa; ASSERT(!profile::runtimeProfileMatches(first,different));
+    std::istringstream malformed("{\"schema_version\":99}"); ASSERT(!profile::readRuntimeProfileJson(malformed,error).has_value());
+    std::istringstream incomplete("{\"schema_version\":1,\"profile_kind\":\"ssa-runtime\"}"); ASSERT(!profile::readRuntimeProfileJson(incomplete,error).has_value());
+    profile::ProgramRuntimeProfile failed; ExecutionLimits limited; limited.maxSteps=1;
+    const auto failedRun=SSAInterpreter{}.run(result.ssa,"main",limited,&failed);
+    ASSERT(failedRun.status==ExecutionStatus::StepLimitExceeded); ASSERT(failed.status==profile::ProfileStatus::Failed);
+}
+
 static void test_profile_guided_inline_remains_verifier_gated() {
     auto result=compileToIR(R"(int hot(int x){int a=x+1;int b=a+1;int c=b+1;int d=c+1;int e=d+1;int f=e+1;int g=f+1;int h=g+1;int i=h+1;int j=i+1;int k=j+1;return k;}int main(){return hot(1);})");
     SSAProgram cold=result.ssa,hot=result.ssa;OptimizationBudget budget;
     auto coldResult=SSAProgramInliner{}.run(cold,budget);ASSERT(!coldResult.changed);ASSERT(coldResult.statistics.get("callsRejectedCost")>0u);
     budget.observedFunctionCalls["hot"]=10;auto hotResult=SSAProgramInliner{}.run(hot,budget);ASSERT(hotResult.changed);ASSERT(hotResult.statistics.get("hotProfileInlines")>0u);
     for(const auto&function:hot.functions)ASSERT(verifySSA(function).ok);
+}
+
+static void test_policy_features_and_hotness_are_stable() {
+    auto result=compileToIR(R"(int helper(int n){int i=0;while(i<n){i=i+1;}return i;}int main(){return helper(3)+helper(2);})");
+    profile::ProgramRuntimeProfile runtime; ASSERT(SSAInterpreter{}.run(result.ssa,"main",{},&runtime).status==ExecutionStatus::Success);
+    const auto helper=std::find_if(result.ssa.functions.begin(),result.ssa.functions.end(),[](const SSAFunction&f){return f.name=="helper";});
+    ASSERT(helper!=result.ssa.functions.end()); if(helper==result.ssa.functions.end())return;
+    const auto staticFeatures=extractOptimizationFeatures(result.ssa,*helper);
+    const auto dynamicFeatures=extractOptimizationFeatures(result.ssa,*helper,&runtime);
+    ASSERT(staticFeatures.instructionCount>0u); ASSERT(staticFeatures.blockCount>1u); ASSERT(staticFeatures.loopCount>0u);
+    ASSERT(dynamicFeatures.dynamicCallCount==2u); ASSERT(dynamicFeatures.dynamicBlockExecutions>0u); ASSERT(dynamicFeatures.dynamicLoopBackedges>0u);
+    const auto jsonA=optimizationFeaturesJson(dynamicFeatures),jsonB=optimizationFeaturesJson(dynamicFeatures);ASSERT_EQ(jsonA,jsonB);ASSERT(jsonA.find("\"schema_version\":1")!=std::string::npos);
+    HotnessThresholds thresholds;thresholds.hotFunctionCalls=2;const auto decision=HeuristicOptimizationPolicy{}.decideTier(&runtime.functions.at("helper"),thresholds);
+    ASSERT(decision.hotness==Hotness::Hot);ASSERT(decision.reason==HotnessReason::HotFunctionCallCount);
+    const auto cold=HeuristicOptimizationPolicy{}.decideTier(nullptr,thresholds);ASSERT(cold.reason==HotnessReason::InsufficientProfileData);
+    const auto pipeline=HeuristicOptimizationPolicy{}.choosePipeline(Hotness::Hot);ASSERT(std::find(pipeline.begin(),pipeline.end(),"licm")!=pipeline.end());
 }
 
 static void test_ssa_retains_inner_scalar_memory_metadata() {
@@ -1518,7 +1559,9 @@ int main() {
     RUN_TEST(test_execution_limits_and_defined_errors);
     RUN_TEST(test_interpreters_execute_fixed_size_arrays);
     RUN_TEST(test_reference_profile_is_deterministic_and_site_distinct);
+    RUN_TEST(test_ssa_runtime_profile_is_deterministic_serializable_and_compatible);
     RUN_TEST(test_profile_guided_inline_remains_verifier_gated);
+    RUN_TEST(test_policy_features_and_hotness_are_stable);
     RUN_TEST(test_ssa_retains_inner_scalar_memory_metadata);
     RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);

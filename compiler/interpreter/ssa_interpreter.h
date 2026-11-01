@@ -5,6 +5,7 @@
 
 #include "interpreter/core_interpreter.h"
 #include "ir/ssa/ssa_ir.h"
+#include "profile/runtime_profile.h"
 
 namespace nanopass {
 
@@ -15,6 +16,7 @@ class SSAInterpreter {
   ExecutionLimits limits_;
   ExecutionResult result_;
   size_t callDepth_ = 0;
+  profile::ProgramRuntimeProfile *profile_ = nullptr;
   using Registers = std::map<int, RuntimeValue>;
   using Locals = std::map<LocalId, RuntimeValue>;
 
@@ -134,6 +136,7 @@ class SSAInterpreter {
     if (args.size() != function->parameters.size()) fail(ExecutionStatus::RuntimeError, "arity", "wrong argument count");
     if (++callDepth_ > limits_.maxCallDepth)
       fail(ExecutionStatus::RecursionLimitExceeded, "recursion-limit", "call depth limit exceeded");
+    if (profile_) profile_->functionEntry(name);
     Registers registers; Locals locals;
     for (size_t index = 0; index < args.size(); ++index) registers[function->parameters[index].value.index] = args[index];
     initializeMemory(*function, locals);
@@ -149,6 +152,7 @@ class SSAInterpreter {
     std::optional<BlockId> predecessor;
     while (true) {
       step(); const SSABlock &block = *current->second;
+      if (profile_) profile_->blockEntry(function.name, block.id);
       if (predecessor) {
         // Read every phi input before assigning any phi result: parallel phi semantics.
         std::vector<std::pair<int, RuntimeValue>> pending;
@@ -176,6 +180,7 @@ class SSAInterpreter {
         if (instruction.result) registers[instruction.result->index] = std::move(value);
       }
       if (const auto jump = std::get_if<SSATerminator::Jump>(&block.terminator.value)) {
+        if (profile_) profile_->edge(function.name, block.id, jump->target);
         predecessor = block.id; current = blocks.find(jump->target.index);
         if (current == blocks.end())
           fail(ExecutionStatus::InternalError, "bad-jump", "unknown jump target");
@@ -183,7 +188,9 @@ class SSAInterpreter {
       }
       if (const auto branch = std::get_if<SSATerminator::Branch>(&block.terminator.value)) {
         predecessor = block.id;
-        current = blocks.find((truth(operand(branch->condition, registers)) ? branch->thenTarget : branch->elseTarget).index);
+        const BlockId target = truth(operand(branch->condition, registers)) ? branch->thenTarget : branch->elseTarget;
+        if (profile_) profile_->edge(function.name, block.id, target);
+        current = blocks.find(target.index);
         if (current == blocks.end())
           fail(ExecutionStatus::InternalError, "bad-branch", "unknown branch target");
         continue;
@@ -194,8 +201,12 @@ class SSAInterpreter {
     }
   }
 public:
-  ExecutionResult run(const SSAProgram &program, std::string entry = "main", ExecutionLimits limits = {}) {
-    program_ = &program; limits_ = limits; result_ = {}; callDepth_ = 0;
+  ExecutionResult run(const SSAProgram &program, std::string entry = "main", ExecutionLimits limits = {}, profile::ProgramRuntimeProfile *profile = nullptr) {
+    program_ = &program; limits_ = limits; result_ = {}; callDepth_ = 0; profile_ = profile;
+    if (profile_) {
+      *profile_ = {};
+      profile_->programFingerprint = profile::stableProgramFingerprint(program);
+    }
     try {
       const auto value = call(entry, {});
       const SSAFunction *function = nullptr;
@@ -203,6 +214,12 @@ public:
       if (function && function->returnType.kind != LangTypeKind::Void) result_.returnValue = value;
     } catch (const std::runtime_error &) {
       if (result_.status == ExecutionStatus::Success) { result_.status = ExecutionStatus::InternalError; result_.error = RuntimeError{"internal", "interpreter failure"}; }
+    }
+    if (profile_) {
+      profile_->status = result_.status == ExecutionStatus::Success
+          ? profile::ProfileStatus::Complete : profile::ProfileStatus::Failed;
+      profile_->finalizeLoops(program);
+      profile_ = nullptr;
     }
     return result_;
   }

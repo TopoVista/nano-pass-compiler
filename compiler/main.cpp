@@ -53,7 +53,9 @@
 #include "sema/resolve_scopes.h"
 #include "sema/type_check.h"
 #include "interpreter/core_interpreter.h"
+#include "interpreter/ssa_interpreter.h"
 #include "profile/nano_profile.h"
+#include "profile/runtime_profile.h"
 #include "visualize/ast_graphviz.h"
 
 // Pass infrastructure
@@ -61,6 +63,7 @@
 #include "ir/pipeline.h"              // CoreIR, ANF, CFG pipeline
 #include "optimizer/ssa_optimizer.h"
 #include "optimizer/advanced_optimizer.h"
+#include "optimizer/optimization_policy.h"
 
 // ============================================================
 // Version
@@ -82,6 +85,7 @@ enum class Command {
     Explain,
     Graph,
     Optimize,
+    Features,
     Passes,    // nano passes
     Analyses,  // nano analyses
 };
@@ -96,6 +100,7 @@ struct Options {
     std::string passes;       // custom pipeline from --passes=
     std::string optimizationProfile;
     std::string telemetryOutput;
+    std::string runtimeProfileOutput;
     std::string diagnosticsFormat = "text";
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
@@ -111,6 +116,11 @@ struct Options {
     bool emitLLVM           = false;
     bool emitObject         = false;
     bool emitExecutable     = false;
+    bool profileShow        = false;
+    bool adaptiveJit        = false;
+    bool forceTier0         = false;
+    bool forceTier1         = false;
+    uint64_t hotThreshold   = 1000;
 };
 
 // ============================================================
@@ -127,10 +137,12 @@ void printHelp(std::ostream &out) {
         << "  passes            List all registered compiler passes.\n"
         << "  analyses          List all registered compiler analyses.\n"
         << "  jit <file>        Execute optimized SSA through ORC LLJIT.\n"
-        << "  profile <file>    Collect a deterministic Nano execution profile.\n"
+        << "  profile <file>    Collect a deterministic SSA execution profile.\n"
+        << "  profile show <file>  Inspect a saved SSA runtime profile.\n"
         << "  explain <file>    Show full transformation journey.\n"
         << "  graph <file>      Emit a Graphviz graph.\n"
         << "  optimize <file>   Run optimizer (planned).\n\n"
+        << "  features <file>   Emit deterministic optimization-policy features.\n\n"
         << "Emit formats:\n"
         << "  --format=tokens   Tokenize only.\n"
         << "  --format=ast      Parse and print the AST.\n"
@@ -157,6 +169,10 @@ void printHelp(std::ostream &out) {
         << "  -O0|-O1|-O2|-O3          Select Nano SSA optimization pipeline.\n"
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
+        << "  --adaptive               Use ORC dispatch stubs and Tier-0 → Tier-1 promotion.\n"
+        << "  --hot-threshold=<count> Promote a non-recursive function after this many calls.\n"
+        << "  --force-tier0|--force-tier1  Deterministic adaptive-JIT test modes.\n"
+        << "  --profile-output=<file> Write the native adaptive (partial) runtime profile.\n"
         << "  --show-before-after      Print SSA before and after optimization.\n"
         << "  --remarks[=json]         Print optimization remarks as text or JSON.\n"
         << "  --telemetry=<file>       Write measured AST desugaring pass telemetry as JSON.\n\n"
@@ -198,10 +214,12 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     else if (first == "verify")   { o.command = Command::Verify;   ++i; }
     else if (first == "run")      { o.command = Command::Run;      ++i; }
     else if (first == "jit")      { o.command = Command::Jit;      ++i; }
-    else if (first == "profile")  { o.command = Command::Profile;  ++i; }
+    else if (first == "profile")  { o.command = Command::Profile;  ++i;
+        if (i < argc && std::string_view(argv[i]) == "show") { o.profileShow = true; ++i; } }
     else if (first == "explain")  { o.command = Command::Explain;  ++i; }
     else if (first == "graph")    { o.command = Command::Graph;    ++i; }
     else if (first == "optimize") { o.command = Command::Optimize; ++i; }
+    else if (first == "features") { o.command = Command::Features; ++i; }
     else if (first == "passes")   { o.command = Command::Passes;   ++i; }
     else if (first == "analyses") { o.command = Command::Analyses; ++i; }
     else if (!first.empty() && first.front() != '-') {
@@ -234,6 +252,18 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.optimizationProfile = std::string(arg.substr(10));
         } else if (arg.starts_with("--telemetry=")) {
             o.telemetryOutput = std::string(arg.substr(12));
+        } else if (arg.starts_with("--profile-output=")) {
+            o.runtimeProfileOutput = std::string(arg.substr(17));
+        } else if (arg.starts_with("--hot-threshold=")) {
+            try { o.hotThreshold = std::stoull(std::string(arg.substr(16))); }
+            catch (...) { err << "error: --hot-threshold requires a positive integer\n"; return false; }
+            if (o.hotThreshold == 0) { err << "error: --hot-threshold must be positive\n"; return false; }
+        } else if (arg == "--adaptive") {
+            o.adaptiveJit = true;
+        } else if (arg == "--force-tier0") {
+            o.adaptiveJit = true; o.forceTier0 = true;
+        } else if (arg == "--force-tier1") {
+            o.adaptiveJit = true; o.forceTier1 = true;
         } else if (arg.starts_with("--diagnostics=")) {
             o.diagnosticsFormat = std::string(arg.substr(14));
         } else if (arg.starts_with("--stop-after=")) {
@@ -308,9 +338,17 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
         err << "error: --diagnostics must be 'text' or 'json'\n";
         return false;
     }
-    if (!o.optimizationProfile.empty() && o.command != Command::Optimize &&
+    if (!o.optimizationProfile.empty() && o.command != Command::Optimize && o.command != Command::Features &&
         o.backend != "ssa" && o.command != Command::Jit && o.command != Command::Run) {
         err << "error: --profile requires SSA optimization (--backend=ssa, optimize, jit, or run)\n";
+        return false;
+    }
+    if ((o.adaptiveJit || !o.runtimeProfileOutput.empty()) && o.command != Command::Jit) {
+        err << "error: adaptive JIT options require the 'nano jit' command\n";
+        return false;
+    }
+    if (o.forceTier0 && o.forceTier1) {
+        err << "error: --force-tier0 and --force-tier1 are mutually exclusive\n";
         return false;
     }
     return true;
@@ -535,6 +573,29 @@ nanopass::CompilerPassOptions toPassOptions(const Options &opts) {
     return po;
 }
 
+void printRuntimeProfile(const nanopass::profile::ProgramRuntimeProfile &profile,
+                         std::ostream &out) {
+    out << "Profile (" << nanopass::profile::runtimeProfileStatusName(profile.status)
+        << ")\n  fingerprint: " << profile.programFingerprint << "\n";
+    for (const auto &[name, function] : profile.functions) {
+        out << "\nFunction @" << name << "\n  calls: " << function.calls
+            << "\n  blocks executed: " << function.blocksExecuted << "\n";
+        if (!function.blockCounts.empty()) {
+            out << "  blocks:\n";
+            for (const auto &[block, count] : function.blockCounts)
+                out << "    bb" << block << ": " << count << "\n";
+        }
+        if (!function.loops.empty()) {
+            out << "  loops:\n";
+            for (const auto &[header, loop] : function.loops)
+                out << "    header bb" << header << ": entries=" << loop.entries
+                    << ", backedges=" << loop.backedges << ", exits=" << loop.exits
+                    << ", avg-trip=" << std::fixed << std::setprecision(2)
+                    << loop.averageTripCount() << std::defaultfloat << "\n";
+        }
+    }
+}
+
 } // anonymous namespace
 
 // ============================================================
@@ -567,6 +628,22 @@ int main(int argc, char **argv) {
     }
     if (options.command == Command::Analyses) {
         nanopass::PassRegistry::get().printAnalyses(std::cout);
+        return 0;
+    }
+    if (options.command == Command::Profile && options.profileShow) {
+        std::ifstream profileFile(options.input);
+        if (!profileFile) {
+            std::cerr << "error: could not open profile '" << options.input << "'\n";
+            return 1;
+        }
+        std::string error;
+        const auto profile = nanopass::profile::readRuntimeProfileJson(profileFile, error);
+        if (!profile) {
+            std::cerr << "error: invalid SSA runtime profile '" << options.input
+                      << "': " << error << '\n';
+            return 1;
+        }
+        printRuntimeProfile(*profile, std::cout);
         return 0;
     }
 
@@ -703,24 +780,23 @@ int main(int argc, char **argv) {
         auto irRes = nanopass::IRPipeline::runAll(program);
 
         if (options.command == Command::Profile) {
-            nanopass::profile::NanoProfile profile;
-            const auto execution = nanopass::CoreInterpreter{}.run(irRes.core, "main", {}, &profile);
+            nanopass::profile::ProgramRuntimeProfile profile;
+            const auto execution = nanopass::SSAInterpreter{}.run(irRes.ssa, "main", {}, &profile);
             if (execution.status != nanopass::ExecutionStatus::Success) {
-                const std::string reason = execution.error ? execution.error->message : "reference execution failed";
+                const std::string reason = execution.error ? execution.error->message : "SSA profile execution failed";
                 throw std::runtime_error("profile execution failed: " + reason);
             }
-            const std::string destination = options.output.empty() ? options.input + ".nprof" : options.output;
+            const std::string destination = options.output.empty() ? options.input + ".nprof.json" : options.output;
             std::ofstream out(destination);
             if (!out) { std::cerr << "error: could not write '" << destination << "'\n"; return 1; }
-            nanopass::profile::writeProfileJson(profile, out);
+            nanopass::profile::writeRuntimeProfileJson(profile, out);
             std::cout << "profile written to '" << destination << "'\n"
-                      << "  functions: " << profile.functionCounts.size() << "\n"
-                      << "  branches: " << profile.branchCounts.size() << "\n"
-                      << "  loops: " << profile.loopIterations.size() << "\n";
+                      << "  fingerprint: " << profile.programFingerprint << "\n"
+                      << "  functions: " << profile.functions.size() << "\n";
             return 0;
         }
 
-        std::optional<nanopass::profile::NanoProfile> optimizationProfile;
+        std::optional<nanopass::profile::ProgramRuntimeProfile> optimizationProfile;
         if (!options.optimizationProfile.empty()) {
             std::ifstream profileFile(options.optimizationProfile);
             if (!profileFile) {
@@ -728,12 +804,46 @@ int main(int argc, char **argv) {
                 return 1;
             }
             std::string profileError;
-            optimizationProfile = nanopass::profile::readProfileJson(profileFile, profileError);
+            optimizationProfile = nanopass::profile::readRuntimeProfileJson(profileFile, profileError);
             if (!optimizationProfile) {
-                std::cerr << "error: invalid Nano profile '" << options.optimizationProfile
+                std::cerr << "error: invalid SSA runtime profile '" << options.optimizationProfile
                           << "': " << profileError << '\n';
                 return 1;
             }
+            if (!nanopass::profile::runtimeProfileMatches(*optimizationProfile, irRes.ssa)) {
+                std::cerr << "error[PROFILE_PROGRAM_MISMATCH]: profile does not match the input SSA program\n";
+                return 1;
+            }
+            if (optimizationProfile->status != nanopass::profile::ProfileStatus::Complete) {
+                std::cerr << "error: profile is not complete and cannot guide optimization\n";
+                return 1;
+            }
+        }
+
+        if (options.command == Command::Features) {
+            std::cout << "{\"schema_version\":1,\"program_fingerprint\":\""
+                      << nanopass::profile::stableProgramFingerprint(irRes.ssa)
+                      << "\",\"functions\":[";
+            for (size_t index = 0; index < irRes.ssa.functions.size(); ++index) {
+                if (index) std::cout << ',';
+                const auto &function = irRes.ssa.functions[index];
+                const auto features = nanopass::opt::extractOptimizationFeatures(
+                    irRes.ssa, function,
+                    optimizationProfile ? &*optimizationProfile : nullptr);
+                const nanopass::profile::FunctionRuntimeProfile *record = nullptr;
+                if (optimizationProfile) {
+                    const auto dynamic = optimizationProfile->functions.find(function.name);
+                    if (dynamic != optimizationProfile->functions.end()) record = &dynamic->second;
+                }
+                const auto decision = nanopass::opt::HeuristicOptimizationPolicy{}.decideTier(record, {});
+                std::cout << "{\"function\":\"" << jsonEscape(function.name)
+                          << "\",\"features\":" << nanopass::opt::optimizationFeaturesJson(features)
+                          << ",\"hotness\":\"" << nanopass::opt::hotnessName(decision.hotness)
+                          << "\",\"reason\":\"" << nanopass::opt::hotnessReasonName(decision.reason)
+                          << "\"}";
+            }
+            std::cout << "]}\n";
+            return 0;
         }
 
         // The Nano SSA optimizer is intentionally independent of the AST LLVM
@@ -760,7 +870,8 @@ int main(int argc, char **argv) {
                 nanopass::opt::SSAProgramInliner inliner;
                 nanopass::opt::OptimizationBudget inlineBudget;
                 if (optimizationProfile)
-                    inlineBudget.observedFunctionCalls = optimizationProfile->functionCounts;
+                    for (const auto &[name, function] : optimizationProfile->functions)
+                        inlineBudget.observedFunctionCalls[name] = function.calls;
                 const auto inlineResult = inliner.run(irRes.ssa, inlineBudget);
                 optimizationResult.changed |= inlineResult.changed;
                 for (const auto &[key, value] : inlineResult.statistics.counters)
@@ -978,6 +1089,39 @@ int main(int argc, char **argv) {
         // ── LLVM lowering ─────────────────────────────────────────────────
         if (options.command == Command::Jit || options.command == Command::Run) {
 #if defined(NANO_HAS_ORC_JIT)
+            if (options.command == Command::Jit && options.adaptiveJit) {
+                nanopass::llvm_backend::AdaptiveJITConfig config;
+                config.hotFunctionCallThreshold = options.hotThreshold;
+                config.forceTier0 = options.forceTier0;
+                config.forceTier1 = options.forceTier1;
+                auto adaptive = nanopass::llvm_backend::executeAdaptivelyWithLLJIT(irRes.ssa, config);
+                if (!adaptive.execution.error.empty()) {
+                    std::cerr << "error: adaptive ORC JIT execution failed: " << adaptive.execution.error << '\n';
+                    return 1;
+                }
+                for (const auto &event : adaptive.events) {
+                    const char *kind = "tier0 compiled";
+                    switch (event.kind) {
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier0Compiled: break;
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::HotThresholdReached: kind = "hot threshold reached"; break;
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1CompilationStarted: kind = "tier1 compilation started"; break;
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Installed: kind = "tier1 installed"; break;
+                    case nanopass::llvm_backend::AdaptiveJITEventKind::Tier1Rejected: kind = "tier1 rejected"; break;
+                    }
+                    std::cout << "[jit] @" << event.function << " " << kind;
+                    if (event.calls) std::cout << " (calls=" << event.calls << ")";
+                    if (!event.detail.empty()) std::cout << ": " << event.detail;
+                    std::cout << '\n';
+                }
+                if (!options.runtimeProfileOutput.empty()) {
+                    std::ofstream profileOut(options.runtimeProfileOutput);
+                    if (!profileOut) { std::cerr << "error: could not write '" << options.runtimeProfileOutput << "'\n"; return 1; }
+                    nanopass::profile::writeRuntimeProfileJson(adaptive.runtimeProfile, profileOut);
+                }
+                std::cout << adaptive.execution.stdoutText;
+                std::cout << "JIT return: " << adaptive.execution.returnValue << '\n';
+                return 0;
+            }
             const auto execution = nanopass::llvm_backend::executeWithLLJIT(irRes.ssa);
             if (!execution.error.empty()) {
                 std::cerr << "error: ORC JIT execution failed: " << execution.error << '\n';

@@ -173,6 +173,44 @@ int main() {
   CHECK(inlinedExecution.stdoutText == expected.stdoutText);
   CHECK(inlinedExecution.returnValue == std::stoll(runtimeValueText(*expected.returnValue)));
 
+  // Adaptive ORC uses public indirect stubs, so this exercises a real
+  // Tier-0 → Tier-1 pointer replacement while callers keep their original
+  // direct Nano call instruction. The Tier-0 frame that triggers promotion
+  // finishes normally; only later calls observe Tier-1.
+  auto adaptiveProgram = compilePipeline(R"(
+    int add(int value) { return value + 1; }
+    int main() { int i = 0; int total = 0; while (i < 5) { total = total + add(i); i = i + 1; } print(total); return total; }
+  )");
+  const auto adaptiveOracle = CoreInterpreter{}.run(adaptiveProgram.core);
+  AdaptiveJITConfig tier0Only; tier0Only.forceTier0 = true;
+  const auto adaptiveTier0 = executeAdaptivelyWithLLJIT(adaptiveProgram.ssa, tier0Only);
+  CHECK(adaptiveTier0.execution.error.empty());
+  CHECK(adaptiveTier0.execution.stdoutText == adaptiveOracle.stdoutText);
+  CHECK(adaptiveTier0.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
+  CHECK(adaptiveTier0.tiers.at("add").activeTier == CompilationTier::Tier0);
+  AdaptiveJITConfig promote; promote.hotFunctionCallThreshold = 2;
+  const auto adaptivePromoted = executeAdaptivelyWithLLJIT(adaptiveProgram.ssa, promote);
+  CHECK(adaptivePromoted.execution.error.empty());
+  CHECK(adaptivePromoted.execution.stdoutText == adaptiveOracle.stdoutText);
+  CHECK(adaptivePromoted.execution.returnValue == std::stoll(runtimeValueText(*adaptiveOracle.returnValue)));
+  CHECK(adaptivePromoted.runtimeProfile.status == profile::ProfileStatus::Partial);
+  CHECK(adaptivePromoted.runtimeProfile.functions.at("add").calls == 5u);
+  CHECK(adaptivePromoted.tiers.at("add").activeTier == CompilationTier::Tier1);
+  CHECK(adaptivePromoted.tiers.at("add").recompilationComplete);
+  CHECK(std::any_of(adaptivePromoted.events.begin(), adaptivePromoted.events.end(),
+      [](const AdaptiveJITEvent &event) { return event.kind == AdaptiveJITEventKind::Tier1Installed && event.function == "add"; }));
+  AdaptiveJITConfig forced; forced.forceTier1 = true;
+  const auto adaptiveForced = executeAdaptivelyWithLLJIT(adaptiveProgram.ssa, forced);
+  CHECK(adaptiveForced.execution.error.empty());
+  CHECK(adaptiveForced.execution.returnValue == adaptivePromoted.execution.returnValue);
+  CHECK(adaptiveForced.tiers.at("add").activeTier == CompilationTier::Tier1);
+  AdaptiveJITConfig recursiveAdaptive; recursiveAdaptive.hotFunctionCallThreshold = 1;
+  const auto adaptiveRecursive = executeAdaptivelyWithLLJIT(recursive, recursiveAdaptive);
+  CHECK(adaptiveRecursive.execution.error.empty());
+  CHECK(adaptiveRecursive.execution.returnValue == 120);
+  CHECK(adaptiveRecursive.tiers.at("fact").activeTier == CompilationTier::Tier0);
+  CHECK(adaptiveRecursive.runtimeProfile.functions.at("fact").calls == 5u);
+
   // Short-circuit lowering must keep the dead division off the executed path.
   auto shortCircuit = compilePipeline(R"(
     int main() { int x = 0; if (false && ((1 / 0) > 0)) { x = 1; } else { x = 2; } print(x); return x; }

@@ -50,6 +50,14 @@ public:
   explicit SSALLVMLowering(llvm::LLVMContext &context) : context_(context) {}
   LoweringResult lower(const SSAProgram &program,
                        std::string moduleName = "nano_ssa_module") const;
+  // Emit exactly one function body while retaining declarations for every
+  // Nano direct callee.  The body may have a private implementation symbol;
+  // this lets ORC dispatch stubs keep the public Nano symbol stable across
+  // tier replacement without rewriting callers.
+  LoweringResult lowerFunction(const SSAProgram &program,
+                               std::string_view functionName,
+                               std::string implementationName,
+                               std::string moduleName = "nano_ssa_function") const;
 private:
   llvm::LLVMContext &context_;
 };

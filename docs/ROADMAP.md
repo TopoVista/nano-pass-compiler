@@ -110,8 +110,18 @@
 - [x] Fixed-array bounds checks in generated SSA LLVM code
 - [x] Packaged/installable host runtime library and AOT linking
 - [ ] Cross-target linking
-- [ ] Optional adaptive JIT (tiered recompilation on hot functions)
+- [x] Optional adaptive JIT (tiered recompilation on hot functions)
 - [ ] Branch/loop profile consumption for layout decisions
+
+## Phase 9 — Runtime profiling, adaptive JIT, and policy infrastructure
+- [x] Schema-versioned SSA function/block/edge/loop profiles with fingerprint validation
+- [x] `nano profile show` and deterministic `nano features` JSON output
+- [x] ORC indirect-stub Tier-0 → Tier-1 promotion with force-tier test modes
+- [x] Profile compatibility gates and bounded hot-inline cost tuning
+- [x] Heuristic policy interface and stable static/dynamic feature schema
+- [ ] Native block/edge hook instrumentation (adaptive profiles are currently partial)
+- [ ] Profile-guided branch layout and loop-effort selection
+- [ ] Decision JSONL replay/dataset export and measured rewards
 
 ## Phase 9 — Observability
 - [ ] `nano explain` — full transformation journey with before/after diffs
