@@ -20,6 +20,19 @@ warm: sccp,simplify-cfg,cse,dce
 hot:  sccp,simplify-cfg,loop-simplify,licm,cse,dce
 ```
 
+The default `-O` pipelines remain the normal compiler behavior. To execute a
+policy-selected, function-local pipeline instead, opt in explicitly:
+
+```text
+nano optimize app.nano --profile=app.nprof.json --policy=heuristic --remarks
+```
+
+The compiler records the selected hotness class and ordered pass list as an
+analysis remark. The policy cannot emit arbitrary transformations: every name
+is resolved through the compiler's registered pass allowlist, and ordinary
+post-pass SSA verification remains in force. Global inlining is intentionally
+left to the default/profile-guided optimizer pipeline for now.
+
 Hotness derives only from counters and centralized thresholds, never wall-clock
 time. A future learned policy may implement the same interface but may only
 choose among these legal, verifier-gated actions; it may not waive SSA, type,

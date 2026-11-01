@@ -62,7 +62,9 @@ profiles, while preserving single-threaded execution ownership.
   candidates remain SSA- and LLVM-verifier gated.
 - **Policy substrate** — `nano features` emits schema-v1 static/dynamic feature
   JSON, while `HeuristicOptimizationPolicy` makes only allowlisted pipeline
-  choices from counter-derived hotness. No ML model or LLM is required.
+  choices from counter-derived hotness. `nano optimize --policy=heuristic`
+  executes that opt-in function-local choice and records it as an analysis
+  remark. No ML model or LLM is required.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,

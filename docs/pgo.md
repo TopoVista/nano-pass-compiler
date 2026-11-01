@@ -24,6 +24,12 @@ rejection, type checking, CFG constraints, growth budgets, inline-depth limits,
 or post-pass SSA verification. Profile mismatch and incomplete-profile checks
 occur before any optimization decision.
 
+Use `--remarks` to inspect a concrete profile decision. When a callee crosses
+the hot-call threshold, the inliner records `PROFILE_HOT_CALLEE` with its
+observed calls and the actual threshold change. It does not claim that the
+inline is profitable or that it improved runtime; it only reports the bounded
+cost-model input that was used.
+
 The static/observed feature and hotness infrastructure is available now for
 future loop-policy and layout work. It does not claim measured speedups and it
 does not make LICM or speculative transformations legal.

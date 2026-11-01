@@ -102,6 +102,7 @@ struct Options {
     std::string telemetryOutput;
     std::string runtimeProfileOutput;
     std::string policyDecisionLog;
+    std::string optimizationPolicy = "default";
     std::string diagnosticsFormat = "text";
     std::string stopAfter;    // --stop-after=<id>
     std::vector<std::string> disabledPasses; // --disable-pass=<id>
@@ -143,7 +144,7 @@ void printHelp(std::ostream &out) {
         << "  profile show <file>  Inspect a saved SSA runtime profile.\n"
         << "  explain <file>    Show full transformation journey.\n"
         << "  graph <file>      Emit a Graphviz graph.\n"
-        << "  optimize <file>   Run optimizer (planned).\n\n"
+        << "  optimize <file>   Run the verified Nano SSA optimizer.\n"
         << "  features <file>   Emit deterministic optimization-policy features.\n\n"
         << "Emit formats:\n"
         << "  --format=tokens   Tokenize only.\n"
@@ -171,6 +172,7 @@ void printHelp(std::ostream &out) {
         << "  -O0|-O1|-O2|-O3          Select Nano SSA optimization pipeline.\n"
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
+        << "  --policy=heuristic       Select an allowlisted per-function pipeline from profile facts.\n"
         << "  --adaptive               Use ORC dispatch stubs and Tier-0 → Tier-1 promotion.\n"
         << "  --hot-threshold=<count> Promote a non-recursive function after this many calls.\n"
         << "  --force-tier0|--force-tier1  Deterministic adaptive-JIT test modes.\n"
@@ -188,10 +190,7 @@ void printHelp(std::ostream &out) {
         << "  --loops                  Emit natural-loop annotated DOT.\n"
         << "  --callgraph              Planned.\n\n"
         << "Planned (not yet implemented):\n"
-        << "  --format=optimized\n"
-        << "  --opt=<0|1|2|3>  --passes=<list>\n"
-        << "  --diagnostics=json\n"
-        << "  nano jit / profile / benchmark\n";
+        << "  nano benchmark\n";
 }
 
 // ============================================================
@@ -260,6 +259,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.runtimeProfileOutput = std::string(arg.substr(17));
         } else if (arg.starts_with("--decision-log=")) {
             o.policyDecisionLog = std::string(arg.substr(15));
+        } else if (arg.starts_with("--policy=")) {
+            o.optimizationPolicy = std::string(arg.substr(9));
         } else if (arg.starts_with("--hot-threshold=")) {
             try { o.hotThreshold = std::stoull(std::string(arg.substr(16))); }
             catch (...) { err << "error: --hot-threshold requires a positive integer\n"; return false; }
@@ -342,6 +343,18 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     }
     if (o.backend != "ast" && o.backend != "ssa") {
         err << "error: --backend must be 'ast' or 'ssa'\n";
+        return false;
+    }
+    if (o.optimizationPolicy != "default" && o.optimizationPolicy != "heuristic") {
+        err << "error: --policy must be 'default' or 'heuristic'\n";
+        return false;
+    }
+    if (o.optimizationPolicy != "default" && o.command != Command::Optimize) {
+        err << "error: --policy currently applies only to 'nano optimize'\n";
+        return false;
+    }
+    if (o.optimizationPolicy != "default" && !o.passes.empty()) {
+        err << "error: --policy and --passes select different pipelines; choose one\n";
         return false;
     }
     if (o.diagnosticsFormat != "text" && o.diagnosticsFormat != "json") {
@@ -913,7 +926,8 @@ int main(int argc, char **argv) {
         if (optimizeSSA) {
             ssaBefore = irRes.ssa;
             const bool adaptiveTier0 = options.command == Command::Jit && options.adaptiveJit;
-            const bool requestInline = !adaptiveTier0 && (options.passes.empty()
+            const bool policyDriven = options.optimizationPolicy == "heuristic";
+            const bool requestInline = !adaptiveTier0 && !policyDriven && (options.passes.empty()
                 ? options.optimizationLevel >= 2
                 : options.passes.find("inline") != std::string::npos);
             if (requestInline) {
@@ -936,7 +950,34 @@ int main(int argc, char **argv) {
             }
             for (auto &function : irRes.ssa.functions) {
                 nanopass::opt::SSAOptimizationPipeline pipeline;
-                if (!options.passes.empty()) {
+                if (policyDriven) {
+                    const nanopass::profile::FunctionRuntimeProfile *record = nullptr;
+                    if (optimizationProfile) {
+                        const auto found = optimizationProfile->functions.find(function.name);
+                        if (found != optimizationProfile->functions.end()) record = &found->second;
+                    }
+                    const nanopass::opt::HeuristicOptimizationPolicy policy;
+                    const auto decision = policy.decideTier(record, {});
+                    const auto selected = policy.choosePipeline(decision.hotness);
+                    std::ostringstream selectedNames;
+                    bool firstSelectedPass = true;
+                    for (const auto &passName : selected) {
+                        if (!firstSelectedPass) selectedNames << ',';
+                        firstSelectedPass = false;
+                        selectedNames << passName;
+                        auto pass = nanopass::opt::makePass(passName);
+                        if (!pass) pass = nanopass::opt::makeAdvancedPass(passName);
+                        if (!pass)
+                            throw std::runtime_error("internal compiler error: heuristic policy selected unknown pass `" + passName + "`");
+                        pipeline.add(std::move(pass));
+                    }
+                    optimizationContext.remarks.push_back({
+                        nanopass::opt::OptimizationRemarkKind::Analysis,
+                        "heuristic-policy",
+                        "selected " + std::string(nanopass::opt::hotnessName(decision.hotness)) +
+                            " pipeline: " + (selected.empty() ? std::string("<empty>") : selectedNames.str()),
+                        {}, {}, function.origin});
+                } else if (!options.passes.empty()) {
                     std::stringstream passNames(options.passes);
                     std::string passName;
                     while (std::getline(passNames, passName, ',')) {

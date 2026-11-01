@@ -153,6 +153,8 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 # Inspect complete SSA block/edge/loop counters and export policy features.
 ./build/compiler/nano profile show loops.nprof
 ./build/compiler/nano features examples/loops.nano --profile=loops.nprof
+./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
+  --policy=heuristic --remarks
 
 # Promote deterministic hot calls through LLVM ORC dispatch stubs.
 ./build/compiler/nano profile examples/hot_loop.nano -o hot.nprof.json

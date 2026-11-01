@@ -1394,7 +1394,7 @@ static void test_profile_guided_inline_remains_verifier_gated() {
     auto result=compileToIR(R"(int hot(int x){int a=x+1;int b=a+1;int c=b+1;int d=c+1;int e=d+1;int f=e+1;int g=f+1;int h=g+1;int i=h+1;int j=i+1;int k=j+1;return k;}int main(){return hot(1);})");
     SSAProgram cold=result.ssa,hot=result.ssa;OptimizationBudget budget;
     auto coldResult=SSAProgramInliner{}.run(cold,budget);ASSERT(!coldResult.changed);ASSERT(coldResult.statistics.get("callsRejectedCost")>0u);
-    budget.observedFunctionCalls["hot"]=10;auto hotResult=SSAProgramInliner{}.run(hot,budget);ASSERT(hotResult.changed);ASSERT(hotResult.statistics.get("hotProfileInlines")>0u);
+    budget.observedFunctionCalls["hot"]=10;auto hotResult=SSAProgramInliner{}.run(hot,budget);ASSERT(hotResult.changed);ASSERT(hotResult.statistics.get("hotProfileInlines")>0u);ASSERT(hotResult.statistics.get("profileHotCallees")==1u);ASSERT(std::any_of(hotResult.remarks.begin(),hotResult.remarks.end(),[](const auto&remark){return remark.message.find("PROFILE_HOT_CALLEE")!=std::string::npos;}));
     for(const auto&function:hot.functions)ASSERT(verifySSA(function).ok);
 }
 

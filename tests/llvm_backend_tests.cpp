@@ -249,6 +249,41 @@ int main() {
   CHECK(adaptiveRecursive.tiers.at("fact").activeTier == CompilationTier::Tier0);
   CHECK(adaptiveRecursive.runtimeProfile.functions.at("fact").calls == 5u);
 
+  // Independent stubs and counters must let more than one function promote
+  // during the same run; identifiers and updates cannot collide by call order.
+  auto multipleHot = compilePipeline(R"(
+    int addOne(int value) { return value + 1; }
+    int addTwo(int value) { return value + 2; }
+    int main() { int i = 0; int total = 0; while (i < 5) { total = addOne(total); total = addTwo(total); i = i + 1; } print(total); return total; }
+  )");
+  const auto multipleHotOracle = CoreInterpreter{}.run(multipleHot.core);
+  AdaptiveJITConfig multipleHotConfig; multipleHotConfig.hotFunctionCallThreshold = 2;
+  const auto multipleHotAdaptive = executeAdaptivelyWithLLJIT(multipleHot.ssa, multipleHotConfig);
+  CHECK(multipleHotAdaptive.execution.error.empty());
+  CHECK(multipleHotAdaptive.execution.stdoutText == multipleHotOracle.stdoutText);
+  CHECK(multipleHotAdaptive.execution.returnValue == std::stoll(runtimeValueText(*multipleHotOracle.returnValue)));
+  CHECK(multipleHotAdaptive.tiers.at("addOne").activeTier == CompilationTier::Tier1);
+  CHECK(multipleHotAdaptive.tiers.at("addTwo").activeTier == CompilationTier::Tier1);
+  CHECK(multipleHotAdaptive.runtimeProfile.functions.at("addOne").calls == 5u);
+  CHECK(multipleHotAdaptive.runtimeProfile.functions.at("addTwo").calls == 5u);
+
+  // A promoted function may itself contain a natural loop. Runtime loop facts
+  // remain attached to the original stable SSA BlockIds and Tier-1 still uses
+  // normal loop legality/verification gates.
+  auto hotLoopCallee = compilePipeline(R"(
+    int spin(int n) { int i = 0; while (i < n) { i = i + 1; } return i; }
+    int main() { int i = 0; int total = 0; while (i < 3) { total = total + spin(5); i = i + 1; } print(total); return total; }
+  )");
+  const auto hotLoopOracle = CoreInterpreter{}.run(hotLoopCallee.core);
+  AdaptiveJITConfig hotLoopConfig; hotLoopConfig.hotFunctionCallThreshold = 2;
+  const auto hotLoopAdaptive = executeAdaptivelyWithLLJIT(hotLoopCallee.ssa, hotLoopConfig);
+  CHECK(hotLoopAdaptive.execution.error.empty());
+  CHECK(hotLoopAdaptive.execution.stdoutText == hotLoopOracle.stdoutText);
+  CHECK(hotLoopAdaptive.execution.returnValue == std::stoll(runtimeValueText(*hotLoopOracle.returnValue)));
+  CHECK(hotLoopAdaptive.tiers.at("spin").activeTier == CompilationTier::Tier1);
+  CHECK(!hotLoopAdaptive.runtimeProfile.functions.at("spin").loops.empty());
+  CHECK(hotLoopAdaptive.runtimeProfile.functions.at("spin").loops.begin()->second.backedges == 15u);
+
   // Short-circuit lowering must keep the dead division off the executed path.
   auto shortCircuit = compilePipeline(R"(
     int main() { int x = 0; if (false && ((1 / 0) > 0)) { x = 1; } else { x = 2; } print(x); return x; }

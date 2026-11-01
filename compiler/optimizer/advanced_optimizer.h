@@ -189,10 +189,18 @@ public:
             const auto observedCalls = budget.observedFunctionCalls.find(callee.name);
             const bool hotByProfile = observedCalls != budget.observedFunctionCalls.end() &&
                 observedCalls->second >= budget.hotFunctionThreshold;
-            if (hotByProfile)
+            if (hotByProfile) {
               decisionBudget.maxInlineCalleeInstructions = std::max(
                   decisionBudget.maxInlineCalleeInstructions,
                   decisionBudget.hotInlineCalleeInstructions);
+              result.remarks.push_back({OptimizationRemarkKind::Analysis, "inline",
+                  "PROFILE_HOT_CALLEE: @" + callee.name + " observed " +
+                      std::to_string(observedCalls->second) + " calls; inline threshold " +
+                      std::to_string(budget.maxInlineCalleeInstructions) + " -> " +
+                      std::to_string(decisionBudget.maxInlineCalleeInstructions),
+                  caller.blocks[blockIndex].id, call.result, call.origin});
+              result.statistics.add("profileHotCallees");
+            }
             const InlineDecision decision = model.decide(
                 callee, graphSnapshot.recursive(callee.name), decisionBudget,
                 callerGrowth[caller.name], totalGrowth, 1);

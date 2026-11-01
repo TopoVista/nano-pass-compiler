@@ -313,6 +313,11 @@ endif()
            COMMAND nano profile show ${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   set_tests_properties(nano_profile_show PROPERTIES DEPENDS nano_profile_loops)
+  add_test(NAME nano_heuristic_policy_optimize
+           COMMAND nano optimize ${CMAKE_SOURCE_DIR}/examples/loops.nano
+                   --profile=${CMAKE_CURRENT_BINARY_DIR}/nano_loops.nprof
+                   --policy=heuristic --remarks)
+  set_tests_properties(nano_heuristic_policy_optimize PROPERTIES DEPENDS nano_profile_loops)
 
   # ── Per-example integration tests ────────────────────────────────────
   foreach(example

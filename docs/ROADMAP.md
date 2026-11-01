@@ -119,6 +119,7 @@
 - [x] ORC indirect-stub Tier-0 → Tier-1 promotion with force-tier test modes
 - [x] Profile compatibility gates and bounded hot-inline cost tuning
 - [x] Heuristic policy interface and stable static/dynamic feature schema
+- [x] Opt-in heuristic-policy pipeline selection (`nano optimize --policy=heuristic`)
 - [x] Native function/block/edge instrumentation for complete adaptive profiles
 - [ ] Profile-guided branch layout and loop-effort selection
 - [x] Deterministic decision JSONL dataset export (`--decision-log=file`)
