@@ -87,9 +87,12 @@ telemetry.json
 # Node / web artifacts
 web/node_modules/
 web/.next/
+web/dist/
 web/out/
 web/.env
 web/.env.*
+web/*.log
+web/*.tsbuildinfo
 .env
 .env.*
 

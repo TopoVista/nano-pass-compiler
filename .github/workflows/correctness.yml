@@ -38,4 +38,25 @@ jobs:
       - name: Run bounded profile and adaptive ORC coverage
         run: >
           ctest --test-dir build --output-on-failure -R
-          'nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
+          'nano_service_unit|nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
+
+  web-lab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web dependencies
+        run: npm ci
+      - name: Typecheck the compiler lab
+        run: npm run typecheck
+      - name: Test the compiler lab
+        run: npm test -- --run
+      - name: Build the compiler lab
+        run: npm run build

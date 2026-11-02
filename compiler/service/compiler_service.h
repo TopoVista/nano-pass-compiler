@@ -1,0 +1,343 @@
+#pragma once
+
+// The service layer is deliberately an in-process adapter around the real
+// compiler pipeline.  It owns no alternate parser, IR, optimizer, or runtime;
+// every browser-visible fact comes from the same C++ implementation used by
+// the command-line tools and tests.
+
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "common/error.h"
+#include "interpreter/core_interpreter.h"
+#include "interpreter/ssa_interpreter.h"
+#include "ir/pipeline.h"
+#include "ir/ssa/call_graph.h"
+#include "ir/ssa/loop_analysis.h"
+#include "lexer/lexer.h"
+#include "optimizer/advanced_optimizer.h"
+#include "optimizer/ssa_optimizer.h"
+#include "parser/parser.h"
+#include "passes/PipelineBuilder.h"
+#include "sema/resolve_scopes.h"
+#include "sema/type_check.h"
+
+#if defined(NANO_SERVICE_HAS_LLVM)
+#include "backend/llvm/ssa_llvm_lowering.h"
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/Support/raw_ostream.h>
+#endif
+#if defined(NANO_SERVICE_HAS_JIT)
+#include "backend/llvm/ssa_llvm_jit.h"
+#endif
+
+namespace nanopass::service {
+
+inline constexpr uint32_t kCompilerServiceSchemaVersion = 1;
+
+enum class ExecutionMode { CoreInterpreter, SSAInterpreter, JIT, AdaptiveJIT };
+
+struct ArtifactSelection {
+  bool ast = false;
+  bool desugaredAst = false;
+  bool core = false;
+  bool anf = false;
+  bool cfg = false;
+  bool ssa = false;
+  bool optimizedSsa = false;
+  bool llvm = false;
+  bool graphs = false;
+  bool remarks = false;
+  bool telemetry = false;
+  bool provenance = false;
+};
+
+struct CompileRequestV1 {
+  uint32_t schemaVersion = kCompilerServiceSchemaVersion;
+  std::string source;
+  int optimizationLevel = 2;
+  std::optional<std::vector<std::string>> passes;
+  ArtifactSelection include;
+};
+
+struct ServiceLimits {
+  size_t maxSourceBytes = 256 * 1024;
+  uint64_t maxExecutionSteps = 250000;
+  size_t maxCallDepth = 128;
+  size_t maxOutputBytes = 64 * 1024;
+  size_t maxArrayElements = 1 << 20;
+  size_t maxFuzzCases = 64;
+};
+
+enum class ErrorKind { None, User, Runtime, ResourceLimit, Internal, Transport };
+
+struct ServiceDiagnostic {
+  std::string severity;
+  std::string code;
+  std::string message;
+  int line = 0;
+  int column = 0;
+  ErrorKind kind = ErrorKind::None;
+};
+
+struct IRSnapshot { std::string stageId; std::string displayName; std::string text; };
+struct TransformationSnapshot { std::string passId; std::string before; std::string after; };
+
+struct PassEvent {
+  std::string id;
+  std::string displayName;
+  std::string category;
+  bool changed = false;
+  uint64_t durationUs = 0;
+  size_t instructionsBefore = 0, instructionsAfter = 0;
+  size_t blocksBefore = 0, blocksAfter = 0;
+  size_t valuesBefore = 0, valuesAfter = 0;
+  bool verified = true;
+  std::map<std::string, size_t> counters;
+};
+
+struct GraphNode { std::string id; std::string label; std::map<std::string, std::string> metadata; };
+struct GraphEdge { std::string from; std::string to; std::string kind; std::map<std::string, std::string> metadata; };
+struct GraphArtifact { std::string kind; std::string function; std::vector<GraphNode> nodes; std::vector<GraphEdge> edges; };
+
+struct Remark { std::string kind; std::string passId; std::string message; std::optional<int> block; std::optional<int> value; int line = 0; int column = 0; };
+
+struct SSAValueUse { std::string kind; int block = -1; std::string detail; };
+struct SSAValueInfo {
+  int value = -1;
+  std::string function;
+  std::string kind;
+  std::string type;
+  int definingBlock = -1;
+  int line = 0;
+  int column = 0;
+  std::vector<SSAValueUse> uses;
+};
+
+struct CompileResponseV1 {
+  uint32_t schemaVersion = kCompilerServiceSchemaVersion;
+  bool success = false;
+  std::string compilerRevision = "phase10-service-v1";
+  std::vector<ServiceDiagnostic> diagnostics;
+  std::vector<IRSnapshot> snapshots;
+  std::vector<TransformationSnapshot> transformations;
+  std::vector<PassEvent> passes;
+  std::vector<Remark> remarks;
+  std::vector<GraphArtifact> graphs;
+  std::vector<SSAValueInfo> values;
+  uint64_t totalCompileUs = 0;
+  size_t functions = 0, blocks = 0, valuesCount = 0;
+};
+
+struct RunRequestV1 { CompileRequestV1 compile; ExecutionMode mode = ExecutionMode::SSAInterpreter; };
+struct RunResponseV1 {
+  uint32_t schemaVersion = kCompilerServiceSchemaVersion;
+  bool success = false;
+  ErrorKind errorKind = ErrorKind::None;
+  std::string stdoutText, stderrText, returnValue, status;
+  uint64_t stepsExecuted = 0;
+  std::string runtimeProfileJson;
+  std::vector<std::string> adaptiveEvents;
+  CompileResponseV1 compilation;
+};
+
+inline std::string jsonEscape(std::string_view value) {
+  std::string escaped;
+  for (unsigned char ch : value) {
+    switch (ch) {
+    case '\\': escaped += "\\\\"; break; case '"': escaped += "\\\""; break;
+    case '\n': escaped += "\\n"; break; case '\r': escaped += "\\r"; break;
+    case '\t': escaped += "\\t"; break;
+    default: if (ch < 0x20) { std::ostringstream hex; hex << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(ch); escaped += hex.str(); } else escaped += static_cast<char>(ch);
+    }
+  }
+  return escaped;
+}
+inline const char *errorKindName(ErrorKind kind) {
+  switch (kind) { case ErrorKind::None: return "none"; case ErrorKind::User: return "user"; case ErrorKind::Runtime: return "runtime"; case ErrorKind::ResourceLimit: return "resource_limit"; case ErrorKind::Internal: return "internal"; case ErrorKind::Transport: return "transport"; }
+  return "internal";
+}
+inline const char *remarkKindName(opt::OptimizationRemarkKind kind) {
+  switch (kind) { case opt::OptimizationRemarkKind::Applied: return "applied"; case opt::OptimizationRemarkKind::Missed: return "missed"; case opt::OptimizationRemarkKind::Analysis: return "analysis"; }
+  return "analysis";
+}
+inline std::string astText(const std::vector<std::unique_ptr<Stmt>> &program) {
+  // Legacy AST printing targets std::cout.  Capture it only inside this
+  // single-threaded local service call; all durable API artifacts use streams.
+  std::ostringstream output; auto *previous = std::cout.rdbuf(output.rdbuf());
+  for (const auto &statement : program) statement->print(0);
+  std::cout.rdbuf(previous); return output.str();
+}
+inline std::string toText(const CoreProgram &program) { std::ostringstream out; printCoreIR(program, out); return out.str(); }
+inline std::string toText(const ANFProgram &program) { std::ostringstream out; printANF(program, out); return out.str(); }
+inline std::string toText(const CFGProgram &program) { std::ostringstream out; printCFG(program, out); return out.str(); }
+inline std::string toText(const SSAProgram &program) { std::ostringstream out; printSSA(program, out); return out.str(); }
+inline size_t programBlocks(const SSAProgram &program) { size_t count = 0; for (const auto &function : program.functions) count += function.blocks.size(); return count; }
+inline size_t programValues(const SSAProgram &program) { size_t count = 0; for (const auto &function : program.functions) count += opt::valueCount(function); return count; }
+inline size_t programInstructions(const SSAProgram &program) { size_t count = 0; for (const auto &function : program.functions) count += opt::instructionCount(function); return count; }
+
+inline GraphArtifact cfgGraph(const SSAFunction &function) {
+  GraphArtifact graph{"cfg", function.name, {}, {}};
+  const auto loops = LoopInfoAnalysis::run(function);
+  for (const auto &block : function.blocks) {
+    GraphNode node{function.name + ":bb" + std::to_string(block.id.index), block.id.str() + (block.label.empty() ? "" : "." + block.label), {}};
+    node.metadata["block_id"] = std::to_string(block.id.index);
+    node.metadata["instructions"] = std::to_string(block.instructions.size() + block.phis.size());
+    if (const auto loop = loops.innermostLoopContaining(block.id)) node.metadata["loop_id"] = std::to_string(loop->index);
+    graph.nodes.push_back(std::move(node));
+    for (const auto successor : block.successors) graph.edges.push_back({function.name + ":bb" + std::to_string(block.id.index), function.name + ":bb" + std::to_string(successor.index), "cfg", {}});
+  }
+  return graph;
+}
+inline GraphArtifact dominatorGraph(const SSAFunction &function) {
+  CFGFunction view; view.entryBlock = function.entryBlock;
+  for (const auto &block : function.blocks) { auto item = std::make_unique<BasicBlock>(); item->id = block.id; item->predecessors = block.predecessors; item->successors = block.successors; view.blockIndexMap[block.id.index] = view.blocks.size(); view.blocks.push_back(std::move(item)); }
+  const auto dom = DominatorAnalysis::run(view); GraphArtifact graph{"dominator-tree", function.name, {}, {}};
+  for (const auto &block : function.blocks) { graph.nodes.push_back({function.name + ":bb" + std::to_string(block.id.index), block.id.str(), {}}); if (const auto idom = dom.immediateDominator(block.id)) graph.edges.push_back({function.name + ":bb" + std::to_string(idom->index), function.name + ":bb" + std::to_string(block.id.index), "idom", {}}); }
+  return graph;
+}
+inline GraphArtifact loopGraph(const SSAFunction &function) {
+  GraphArtifact graph{"loops", function.name, {}, {}}; const auto loops = LoopInfoAnalysis::run(function);
+  for (const auto &loop : loops.loops) { GraphNode node{function.name + ":loop" + std::to_string(loop.id.index), "loop " + std::to_string(loop.id.index) + " / " + loop.header.str(), {}}; node.metadata["header"] = std::to_string(loop.header.index); node.metadata["depth"] = std::to_string(loop.depth); if (loop.preheader) node.metadata["preheader"] = std::to_string(loop.preheader->index); node.metadata["latches"] = std::to_string(loop.backedgeSources.size()); node.metadata["exits"] = std::to_string(loop.exitEdges.size()); graph.nodes.push_back(std::move(node)); if (loop.parent) graph.edges.push_back({function.name + ":loop" + std::to_string(loop.parent->index), function.name + ":loop" + std::to_string(loop.id.index), "contains", {}}); }
+  return graph;
+}
+inline GraphArtifact callGraph(const SSAProgram &program) {
+  GraphArtifact graph{"call-graph", "program", {}, {}}; const auto calls = CallGraphAnalysis::run(program);
+  for (const auto &function : program.functions) { GraphNode node{"fn:" + function.name, "@" + function.name, {}}; node.metadata["recursive"] = calls.recursive(function.name) ? "true" : "false"; graph.nodes.push_back(std::move(node)); }
+  for (const auto &site : calls.sites) graph.edges.push_back({"fn:" + site.caller, "fn:" + site.callee, "call", {{"block", std::to_string(site.block.index)}}});
+  return graph;
+}
+inline std::vector<SSAValueInfo> valueInformation(const SSAProgram &program) {
+  std::vector<SSAValueInfo> result;
+  for (const auto &function : program.functions) {
+    SSADefUseIndex uses; uses.rebuild(function);
+    for (const auto &parameter : function.parameters) result.push_back({parameter.value.index, function.name, "parameter", ssaTypeName(parameter.type), function.entryBlock.index, 0, 0, {}});
+    for (const auto &block : function.blocks) {
+      for (const auto &phi : block.phis) result.push_back({phi.result.index, function.name, "phi", ssaTypeName(phi.type), block.id.index, phi.origin.loc.line, phi.origin.loc.col, {}});
+      for (const auto &instruction : block.instructions) if (instruction.result) result.push_back({instruction.result->index, function.name, "instruction", ssaTypeName(instruction.type), block.id.index, instruction.origin.loc.line, instruction.origin.loc.col, {}});
+    }
+    for (auto &info : result) if (info.function == function.name) for (const auto &use : uses.usesOf({info.value})) info.uses.push_back({use.kind == SSAUseKind::Phi ? "phi" : use.kind == SSAUseKind::Instruction ? "instruction" : "terminator", use.block.index, ""});
+  }
+  std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) { return std::tie(a.function, a.value) < std::tie(b.function, b.value); }); return result;
+}
+
+class CompilerService {
+public:
+  explicit CompilerService(ServiceLimits limits = {}) : limits_(limits) {}
+  const ServiceLimits &limits() const noexcept { return limits_; }
+
+  CompileResponseV1 compile(const CompileRequestV1 &request) const {
+    CompileResponseV1 response; const auto started = std::chrono::steady_clock::now();
+    if (request.schemaVersion != kCompilerServiceSchemaVersion) return fail(response, ErrorKind::User, "API_SCHEMA_UNSUPPORTED", "unsupported compile request schema version", 0, 0, started);
+    if (request.source.size() > limits_.maxSourceBytes) return fail(response, ErrorKind::ResourceLimit, "SOURCE_LIMIT_EXCEEDED", "source exceeds server byte limit", 0, 0, started);
+    if (request.optimizationLevel < 0 || request.optimizationLevel > 3) return fail(response, ErrorKind::User, "INVALID_OPTIMIZATION_LEVEL", "optimization level must be O0 through O3", 0, 0, started);
+    try {
+      Lexer lexer(request.source); Parser parser(lexer.scanTokens()); auto program = parser.parseProgram();
+      if (request.include.ast) response.snapshots.push_back({"ast", "AST", astText(program)});
+      ResolveScopesPass resolver; resolver.resolve(program); TypeCheckPass checker; checker.check(program);
+      PipelineBuilder::initialise(); AnalysisManager analyses; PipelineBuilder::registerAnalysesWithManager(analyses); CompilerPassOptions options; std::ostringstream diagnostics; PassContext context(analyses, options, diagnostics); auto desugar = PipelineBuilder::buildDesugarPipeline();
+      desugar.instrumentation().onPassEnd = [&](const PassTelemetry &event) { PassEvent pass; pass.id=event.passId; pass.displayName=event.passName; pass.category="desugar"; pass.changed=event.changed; pass.durationUs=static_cast<uint64_t>(event.durationUs()); pass.verified=true; for (const auto &[key,value] : event.stats.all()) if (const auto *integer=std::get_if<int64_t>(&value)) pass.counters[key]=static_cast<size_t>(*integer); response.passes.push_back(std::move(pass)); };
+      desugar.run(program, context); if (request.include.desugaredAst) response.snapshots.push_back({"desugared-ast", "Desugared AST", astText(program)});
+      auto pipeline = IRPipeline::runAll(program);
+      if (request.include.core) response.snapshots.push_back({"core", "CoreIR", toText(pipeline.core)});
+      if (request.include.anf) response.snapshots.push_back({"anf", "ANF", toText(pipeline.anf)});
+      if (request.include.cfg) response.snapshots.push_back({"cfg", "CFG", toText(pipeline.cfg)});
+      if (request.include.ssa) response.snapshots.push_back({"ssa", "SSA", toText(pipeline.ssa)});
+      SSAProgram optimized = pipeline.ssa; const std::string before = toText(optimized); opt::SSAOptimizationContext optimizationContext;
+      if (request.optimizationLevel > 0 || request.passes) {
+        for (auto &function : optimized.functions) {
+          const auto instructionsBefore=opt::instructionCount(function), blocksBefore=function.blocks.size(), valuesBefore=opt::valueCount(function);
+          const auto passStarted=std::chrono::steady_clock::now(); opt::SSAOptimizationResult result;
+          if (request.passes) { opt::SSAOptimizationPipeline custom; for (const auto &id : *request.passes) { auto pass=opt::makePass(id); if (!pass) throw CompileError("unknown SSA pass '" + id + "'", 0, 0); custom.add(std::move(pass)); } result=custom.run(function, optimizationContext); }
+          else { auto standard=opt::buildPipeline(request.optimizationLevel); result=standard.run(function, optimizationContext); }
+          const auto passEnded=std::chrono::steady_clock::now(); PassEvent event; event.id=request.passes?"custom-ssa":"ssa-o"+std::to_string(request.optimizationLevel); event.displayName=request.passes?"Custom SSA Pipeline":"Nano SSA Optimization"; event.category="optimization"; event.changed=result.changed; event.durationUs=std::chrono::duration_cast<std::chrono::microseconds>(passEnded-passStarted).count(); event.instructionsBefore=instructionsBefore; event.instructionsAfter=opt::instructionCount(function); event.blocksBefore=blocksBefore; event.blocksAfter=function.blocks.size(); event.valuesBefore=valuesBefore; event.valuesAfter=opt::valueCount(function); event.counters=result.statistics.counters; event.verified=verifySSA(function).ok; response.passes.push_back(std::move(event));
+          for (const auto &remark : result.remarks) response.remarks.push_back({remarkKindName(remark.kind),remark.passId,remark.message,remark.block ? std::optional<int>(remark.block->index):std::nullopt,remark.value ? std::optional<int>(remark.value->index):std::nullopt,remark.origin.loc.line,remark.origin.loc.col});
+        }
+      }
+      const std::string after = toText(optimized); if (before != after && (request.include.telemetry || request.include.optimizedSsa)) response.transformations.push_back({"ssa-optimization", before, after});
+      if (request.include.optimizedSsa) response.snapshots.push_back({"optimized-ssa", "Optimized SSA", after});
+      if (request.include.graphs) { for (const auto &function : optimized.functions) { response.graphs.push_back(cfgGraph(function)); response.graphs.push_back(dominatorGraph(function)); response.graphs.push_back(loopGraph(function)); } response.graphs.push_back(callGraph(optimized)); }
+      if (request.include.provenance) response.values=valueInformation(optimized);
+#if defined(NANO_SERVICE_HAS_LLVM)
+      if (request.include.llvm) {
+        llvm::LLVMContext context; llvm_backend::SSALLVMLowering lowering(context);
+        auto lowered=lowering.lower(optimized, "nanopass_service"); std::string text; llvm::raw_string_ostream out(text); lowered.module->print(out, nullptr); out.flush();
+        response.snapshots.push_back({"llvm", "LLVM IR", std::move(text)});
+      }
+#endif
+      response.functions=optimized.functions.size(); response.blocks=programBlocks(optimized); response.valuesCount=programValues(optimized); response.success=true;
+    } catch (const CompileError &error) { return fail(response, ErrorKind::User, "E1000", error.message, error.line, error.col, started); }
+    catch (const std::exception &error) {
+      // A few legacy frontend branches still throw std::runtime_error rather
+      // than CompileError. They are user-facing unless the pipeline itself
+      // explicitly labels the failure as an internal compiler error.
+      const std::string message = error.what();
+      const bool internal = message.starts_with("internal compiler error");
+      return fail(response, internal ? ErrorKind::Internal : ErrorKind::User,
+                  internal ? "INTERNAL_COMPILER_ERROR" : "E1000", message,
+                  0, 0, started);
+    }
+    response.totalCompileUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started).count(); return response;
+  }
+
+  RunResponseV1 run(const RunRequestV1 &request) const {
+    RunResponseV1 response; response.compilation=compile(request.compile); if (!response.compilation.success) { response.errorKind=response.compilation.diagnostics.empty()?ErrorKind::Internal:response.compilation.diagnostics.front().kind; response.status="compile_error"; return response; }
+    try {
+      Lexer lexer(request.compile.source); Parser parser(lexer.scanTokens()); auto ast=parser.parseProgram(); ResolveScopesPass resolver; resolver.resolve(ast); TypeCheckPass{}.check(ast); PipelineBuilder::initialise(); AnalysisManager analyses; PipelineBuilder::registerAnalysesWithManager(analyses); CompilerPassOptions options; std::ostringstream diagnostics; PassContext context(analyses,options,diagnostics); auto desugar=PipelineBuilder::buildDesugarPipeline(); desugar.run(ast,context); auto pipeline=IRPipeline::runAll(ast); SSAProgram ssa=pipeline.ssa; if (request.compile.optimizationLevel>0) for(auto &function:ssa.functions){auto optimizer=opt::buildPipeline(request.compile.optimizationLevel); opt::SSAOptimizationContext ctx; optimizer.run(function,ctx);}
+      ExecutionLimits limits; limits.maxSteps=limits_.maxExecutionSteps; limits.maxCallDepth=limits_.maxCallDepth; limits.maxOutputBytes=limits_.maxOutputBytes; limits.maxArrayElements=limits_.maxArrayElements;
+      ExecutionResult execution; profile::ProgramRuntimeProfile profile;
+      if (request.mode == ExecutionMode::CoreInterpreter) execution=CoreInterpreter{}.run(pipeline.core,"main",limits);
+      else if (request.mode == ExecutionMode::SSAInterpreter) execution=SSAInterpreter{}.run(ssa,"main",limits,&profile);
+#if defined(NANO_SERVICE_HAS_JIT)
+      else if (request.mode == ExecutionMode::JIT) {
+        const auto jit=llvm_backend::executeWithLLJIT(ssa);
+        response.stdoutText=jit.stdoutText; response.returnValue=std::to_string(jit.returnValue);
+        response.success=jit.error.empty(); response.errorKind=jit.error.empty()?ErrorKind::None:ErrorKind::Runtime;
+        response.status=jit.error.empty()?"success":"runtime_error"; response.stderrText=jit.error;
+        return response;
+      } else if (request.mode == ExecutionMode::AdaptiveJIT) {
+        llvm_backend::AdaptiveJITConfig config; config.hotFunctionCallThreshold=2;
+        const auto adaptive=llvm_backend::executeAdaptivelyWithLLJIT(pipeline.ssa,config);
+        response.stdoutText=adaptive.execution.stdoutText; response.returnValue=std::to_string(adaptive.execution.returnValue);
+        response.success=adaptive.execution.error.empty(); response.errorKind=response.success?ErrorKind::None:ErrorKind::Runtime;
+        response.status=response.success?"success":"runtime_error"; response.stderrText=adaptive.execution.error;
+        profile=adaptive.runtimeProfile; std::ostringstream json; profile::writeRuntimeProfileJson(profile,json); response.runtimeProfileJson=json.str();
+        for(const auto &event:adaptive.events) response.adaptiveEvents.push_back(event.function+":"+event.detail);
+        return response;
+      }
+#else
+      else { response.errorKind=ErrorKind::Runtime; response.status="capability_unavailable"; response.stderrText="JIT execution is unavailable in this service build; configure nano-server with NANO_BUILD_JIT=ON."; return response; }
+#endif
+      response.stdoutText=execution.stdoutText; response.stderrText=execution.stderrText; response.stepsExecuted=execution.stepsExecuted; response.status=execution.status==ExecutionStatus::Success?"success":"runtime_error"; response.success=execution.status==ExecutionStatus::Success; response.errorKind=execution.status==ExecutionStatus::Success?ErrorKind::None:(execution.status==ExecutionStatus::StepLimitExceeded||execution.status==ExecutionStatus::OutputLimitExceeded||execution.status==ExecutionStatus::RecursionLimitExceeded?ErrorKind::ResourceLimit:ErrorKind::Runtime); if(execution.returnValue)response.returnValue=runtimeValueText(*execution.returnValue); if(execution.error)response.stderrText=execution.error->message; if(request.mode==ExecutionMode::SSAInterpreter){profile.executionMode="ssa-interpreter";std::ostringstream json;profile::writeRuntimeProfileJson(profile,json);response.runtimeProfileJson=json.str();}
+    } catch(const std::exception &error) { response.errorKind=ErrorKind::Internal; response.status="internal_error"; response.stderrText=error.what(); }
+    return response;
+  }
+private:
+  ServiceLimits limits_;
+  static CompileResponseV1 fail(CompileResponseV1 response, ErrorKind kind, std::string code, std::string message, int line, int column, std::chrono::steady_clock::time_point started) { response.success=false; response.diagnostics.push_back({kind==ErrorKind::Internal?"fatal":"error",std::move(code),std::move(message),line,column,kind}); response.totalCompileUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started).count(); return response; }
+};
+
+inline std::string compileResponseJson(const CompileResponseV1 &response) {
+  std::ostringstream out; out << "{\"schemaVersion\":" << response.schemaVersion << ",\"success\":" << (response.success?"true":"false") << ",\"compilerRevision\":\"" << jsonEscape(response.compilerRevision) << "\",\"diagnostics\":[";
+  for(size_t i=0;i<response.diagnostics.size();++i){if(i)out<<',';const auto &d=response.diagnostics[i];out<<"{\"severity\":\""<<jsonEscape(d.severity)<<"\",\"code\":\""<<jsonEscape(d.code)<<"\",\"message\":\""<<jsonEscape(d.message)<<"\",\"line\":"<<d.line<<",\"column\":"<<d.column<<",\"kind\":\""<<errorKindName(d.kind)<<"\"}";} out<<"],\"snapshots\":[";
+  for(size_t i=0;i<response.snapshots.size();++i){if(i)out<<',';const auto&s=response.snapshots[i];out<<"{\"stageId\":\""<<jsonEscape(s.stageId)<<"\",\"displayName\":\""<<jsonEscape(s.displayName)<<"\",\"text\":\""<<jsonEscape(s.text)<<"\"}";} out<<"],\"passes\":[";
+  for(size_t i=0;i<response.passes.size();++i){if(i)out<<',';const auto&p=response.passes[i];out<<"{\"id\":\""<<jsonEscape(p.id)<<"\",\"displayName\":\""<<jsonEscape(p.displayName)<<"\",\"category\":\""<<p.category<<"\",\"changed\":"<<(p.changed?"true":"false")<<",\"durationUs\":"<<p.durationUs<<",\"instructionsBefore\":"<<p.instructionsBefore<<",\"instructionsAfter\":"<<p.instructionsAfter<<",\"blocksBefore\":"<<p.blocksBefore<<",\"blocksAfter\":"<<p.blocksAfter<<",\"valuesBefore\":"<<p.valuesBefore<<",\"valuesAfter\":"<<p.valuesAfter<<",\"verified\":"<<(p.verified?"true":"false")<<",\"counters\":{";size_t n=0;for(const auto&[key,value]:p.counters){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":"<<value;}out<<"}}";} out<<"],\"remarks\":[";
+  for(size_t i=0;i<response.remarks.size();++i){if(i)out<<',';const auto&r=response.remarks[i];out<<"{\"kind\":\""<<r.kind<<"\",\"passId\":\""<<jsonEscape(r.passId)<<"\",\"message\":\""<<jsonEscape(r.message)<<"\"}";} out<<"],\"graphs\":[";
+  for(size_t i=0;i<response.graphs.size();++i){if(i)out<<',';const auto&g=response.graphs[i];out<<"{\"kind\":\""<<g.kind<<"\",\"function\":\""<<jsonEscape(g.function)<<"\",\"nodes\":[";for(size_t j=0;j<g.nodes.size();++j){if(j)out<<',';const auto&node=g.nodes[j];out<<"{\"id\":\""<<jsonEscape(node.id)<<"\",\"label\":\""<<jsonEscape(node.label)<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:node.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"],\"edges\":[";for(size_t j=0;j<g.edges.size();++j){if(j)out<<',';const auto&edge=g.edges[j];out<<"{\"from\":\""<<jsonEscape(edge.from)<<"\",\"to\":\""<<jsonEscape(edge.to)<<"\",\"kind\":\""<<edge.kind<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:edge.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"]}";} out<<"],\"values\":[";
+  for(size_t i=0;i<response.values.size();++i){if(i)out<<',';const auto&v=response.values[i];out<<"{\"value\":"<<v.value<<",\"function\":\""<<jsonEscape(v.function)<<"\",\"kind\":\""<<v.kind<<"\",\"type\":\""<<v.type<<"\",\"definingBlock\":"<<v.definingBlock<<",\"line\":"<<v.line<<",\"column\":"<<v.column<<",\"uses\":[";for(size_t j=0;j<v.uses.size();++j){if(j)out<<',';const auto&use=v.uses[j];out<<"{\"kind\":\""<<use.kind<<"\",\"block\":"<<use.block<<",\"detail\":\""<<jsonEscape(use.detail)<<"\"}";}out<<"]}";} out<<"],\"telemetry\":{\"totalCompileUs\":"<<response.totalCompileUs<<",\"functions\":"<<response.functions<<",\"blocks\":"<<response.blocks<<",\"values\":"<<response.valuesCount<<"}}"; return out.str();
+}
+inline std::string runResponseJson(const RunResponseV1 &response) { std::ostringstream out; out<<"{\"schemaVersion\":"<<response.schemaVersion<<",\"success\":"<<(response.success?"true":"false")<<",\"errorKind\":\""<<errorKindName(response.errorKind)<<"\",\"status\":\""<<jsonEscape(response.status)<<"\",\"stdout\":\""<<jsonEscape(response.stdoutText)<<"\",\"stderr\":\""<<jsonEscape(response.stderrText)<<"\",\"returnValue\":\""<<jsonEscape(response.returnValue)<<"\",\"stepsExecuted\":"<<response.stepsExecuted<<",\"runtimeProfile\":"<< (response.runtimeProfileJson.empty()?"null":response.runtimeProfileJson) <<",\"adaptiveEvents\":[";for(size_t i=0;i<response.adaptiveEvents.size();++i){if(i)out<<',';out<<"\""<<jsonEscape(response.adaptiveEvents[i])<<"\"";}out<<"],\"compilation\":"<<compileResponseJson(response.compilation)<<"}";return out.str(); }
+
+} // namespace nanopass::service

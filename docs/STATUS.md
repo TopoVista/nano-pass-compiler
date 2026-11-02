@@ -1,10 +1,9 @@
 # Project Status
 
-Last updated: Phase 9 — complete deterministic SSA profiles,
-ORC Tier-0 → Tier-1 dispatch-stub promotion, PGO compatibility gates, and
-versioned optimization-policy features are implemented. Adaptive ORC profiles
-use the same stable function/block/edge/loop identities as interpreter
-profiles, while preserving single-threaded execution ownership.
+Last updated: Phase 10 — a local versioned compiler service and browser
+Compiler Lab are implemented on top of the existing deterministic pipeline.
+The lab receives structured compiler facts rather than parsed terminal text;
+LLVM emission and JIT execution remain explicit build capabilities.
 
 The GitHub Actions matrix has an LLVM-independent correctness job plus a
 bounded Ubuntu 24.04 / LLVM 18 JIT-profile job. The latter covers profile
@@ -79,6 +78,19 @@ explicit local evidence rather than CI claims.
   loop-simplify/LICM effort for hot functions. Profile data never changes
   transformation legality; `--why-not-optimized` exposes skipped cold-loop
   effort with its recorded hotness reason.
+
+### Local Compiler API and web lab (Phase 10)
+- **Versioned API** — `compiler/service/compiler_service.h` provides schema-v1
+  compile/run responses with diagnostics, requested AST→LLVM snapshots, pass
+  telemetry, remarks, CFG/dominator/loop/call graph JSON, and SSA provenance.
+- **Local server** — optional `nano-server` exposes health, compile, analyze,
+  optimize, run, and profile routes on loopback. It accepts source text and
+  allowlisted compiler options only; it has bounded request/execution limits.
+- **React lab** — `web/` supplies Monaco Nano highlighting, real source
+  examples, stages, pass timeline, React Flow graphs, SSA use/definition
+  inspector, runtime/adaptive profile pane, diagnostics, remarks, and
+  fragment-based sharing. See `docs/compiler-api.md`, `docs/web-lab.md`, and
+  `docs/web-security.md`.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
@@ -181,7 +193,9 @@ explicit local evidence rather than CI claims.
 | Pass manager assertions | 90 |
 | IR/SSA/optimizer/correctness assertions | 5,454 |
 | LLVM backend/JIT assertions | 503 |
-| LLVM 18.1.3 WSL CTest | 85 / 85 passed |
+| Compiler service assertions | 41 |
+| Compiler service LLVM/JIT assertions | 17 |
+| LLVM 18.1.3 WSL CTest | 99 / 99 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -189,9 +203,10 @@ explicit local evidence rather than CI claims.
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-Local WSL validation with LLVM 18.1.3: **85/85 CTest** passed; ASan+UBSan also
-passed the current 5,454-assertion IR suite and 503-assertion LLVM backend
-suite. The Windows LLVM package remains invalid because its imported targets
+Local WSL validation with LLVM 18.1.3: **99/99 CTest** passed; ASan+UBSan also
+passed the 41-assertion service suite and 17-assertion service LLVM/JIT suite
+alongside the existing current 5,454-assertion IR suite and 503-assertion
+LLVM backend suite. The Windows LLVM package remains invalid because its imported targets
 reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 
 ---
@@ -263,9 +278,11 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] Versioned AST desugaring telemetry JSON (`--telemetry=file`)
 - [x] Optimization remarks in text or JSON (`--remarks[=json]`)
 
-### Phase 10 — Web lab
-- JSON API server (`nano-server`)
-- Next.js compiler lab with Monaco, pipeline timeline, CFG explorer
+### Phase 10 — Web lab ✅
+- [x] Versioned `nano-server` source-only API with structured compiler output
+- [x] TypeScript React lab with Monaco, pipeline timeline, graph explorer,
+  SSA provenance inspector, runtime profiles, and factual remarks
+- [x] Local-service unit/JIT smoke coverage and web type/unit/build coverage
 
 ---
 
@@ -283,3 +300,6 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
   compilation is not implemented.
 - **Native bounds/runtime isolation** are not implemented. The JIT test claim
   covers in-bounds generated programs only; it does not claim a sandbox.
+- **Web service deployment** is local-development only. It has explicit input
+  and interpreter execution bounds, but not process isolation or a separate
+  compile wall-clock/memory limit; see `docs/web-security.md`.

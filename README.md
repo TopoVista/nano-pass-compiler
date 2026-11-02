@@ -15,7 +15,8 @@ Source → Lex → Parse → Resolve → TypeCheck
        → LLVM IR → Host object / ORC JIT            (SSA backend optional)
 ```
 
-Items in `[brackets]` are planned and under active development.
+The pipeline is implemented incrementally; optional LLVM/JIT and local web
+service capabilities are explicitly build-gated rather than simulated.
 
 The CFG/SSA pipeline powers verified middle-end analysis and inspection. The
 AST LLVM backend remains the compatibility default, while the explicit
@@ -81,6 +82,31 @@ cmake -S . -B build -G Ninja -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
 ```
 
 The produced binary is `build/compiler/nano`.
+
+---
+
+## Interactive Compiler Lab
+
+The local web lab uses the same C++ compiler pipeline through a versioned JSON
+service. Start the optional service with a healthy LLVM package:
+
+```sh
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
+  -DNANO_BUILD_JIT=ON -DNANO_BUILD_WEB_SERVER=ON
+cmake --build build --target nano-server
+./build/compiler/nano-server --port=8080
+
+cd web
+npm ci
+npm run dev
+```
+
+Open the Vite URL printed by the client. The lab provides real compiler
+snapshots, pass telemetry, CFG/dominator/loop/call graphs, SSA value
+provenance, verifier-backed optimization remarks, and bounded execution
+profiles. See [the API](docs/compiler-api.md), [lab guide](docs/web-lab.md),
+and [local execution boundary](docs/web-security.md).
 
 ---
 

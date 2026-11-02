@@ -138,15 +138,17 @@ deterministic Phase 9 foundation; they are not represented as implemented.
 - [ ] "Why didn't this optimize?" structured rejection reasons
 - [ ] JSON API server (`nano-server`) for web frontend
 
-## Phase 10 — Web compiler lab
-- [ ] `nano-server` HTTP API: `/compile`, `/explain`, `/verify`, `/optimize`
-- [ ] Next.js + TypeScript + Tailwind frontend
-- [ ] Monaco editor with Nano language support
-- [ ] Pass timeline visualization
-- [ ] CFG / dominator tree / SSA explorer
-- [ ] Optimization inspector (toggle passes, see before/after)
-- [ ] Diagnostics panel
-- [ ] Benchmark dashboard (real measured numbers only)
+## Phase 10 — Web compiler lab ✅
+- [x] Schema-v1 `nano-server`: health, compile, analyze, optimize, run, and
+  profile endpoints; source-only inputs and allowlisted custom SSA pipelines
+- [x] TypeScript React/Vite local lab with Monaco Nano syntax support
+- [x] Compiler-generated stage snapshots, pass timeline, telemetry, and
+  optimizer before/after inspection
+- [x] CFG, dominator-tree, loop, and call-graph explorer plus SSA provenance
+- [x] Structured diagnostics, actual remarks, runtime profiles, adaptive events,
+  O0–O3/custom-pass controls, and shareable local session fragments
+- [x] C++ service/JIT smoke tests and web type/unit/build CI coverage
+- [ ] Remote multi-tenant execution hardening and benchmark dashboard (future)
 
 ## Phase 11 — Advanced research
 - [ ] Profile-guided optimization (branch layout, inlining decisions)

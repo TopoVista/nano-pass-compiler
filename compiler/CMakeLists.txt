@@ -68,6 +68,38 @@ if(UNIX AND NANO_BUILD_JIT)
   target_link_options(nano PRIVATE -rdynamic)
 endif()
 
+# Phase 10 keeps HTTP transport separate from compiler semantics.  The server
+# consumes the reusable header-only service facade directly; it never shells
+# out to `nano` or accepts filesystem paths from a request body.
+if(NANO_BUILD_WEB_SERVER)
+  add_executable(nano-server
+      server/nano_server.cpp)
+  target_sources(nano-server PRIVATE
+      backend/llvm/ssa_llvm_lowering.cpp
+      backend/llvm/llvm_runtime.cpp)
+  target_compile_definitions(nano-server PRIVATE NANO_SERVICE_HAS_LLVM=1)
+  if(NANO_BUILD_JIT)
+    target_sources(nano-server PRIVATE
+        backend/llvm/ssa_llvm_jit.cpp)
+    target_compile_definitions(nano-server PRIVATE NANO_SERVICE_HAS_JIT=1)
+  endif()
+  target_compile_features(nano-server PRIVATE cxx_std_20)
+  target_include_directories(nano-server PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+  target_compile_options(nano-server PRIVATE ${LLVM_DEFINITIONS_LIST})
+  target_link_libraries(nano-server PRIVATE ${LLVM_LIBS})
+  if(UNIX AND NANO_BUILD_JIT)
+    target_link_options(nano-server PRIVATE -rdynamic)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano-server PRIVATE -Wall -Wextra -Wno-unused-parameter)
+  endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano-server PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano-server PRIVATE -fsanitize=address,undefined)
+  endif()
+endif()
+
 # Install the command-line driver and exactly the compact C-ABI archive it
 # needs for host AOT linking. The full compiler headers remain internal; the
 # small runtime header is installed for embedders that need its ABI.
@@ -76,6 +108,9 @@ install(TARGETS nano nano_runtime
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES backend/llvm/llvm_runtime.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/nanopass/backend/llvm)
+if(NANO_BUILD_WEB_SERVER)
+  install(TARGETS nano-server RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 # Reproducible native differential campaign.  It is intentionally a separate
 # executable: Core/SSA correctness remains available without LLVM, while this
@@ -191,7 +226,42 @@ endif()
     endif()
   endif()
 
+  add_executable(nano_service_tests
+      ${CMAKE_SOURCE_DIR}/tests/compiler_service_tests.cpp)
+  target_compile_features(nano_service_tests PRIVATE cxx_std_20)
+  target_include_directories(nano_service_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR})
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_service_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+  endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_service_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano_service_tests PRIVATE -fsanitize=address,undefined)
+  endif()
+
   if(NANO_BUILD_JIT)
+  add_executable(nano_service_jit_tests
+      ${CMAKE_SOURCE_DIR}/tests/compiler_service_jit_tests.cpp
+      backend/llvm/ssa_llvm_lowering.cpp
+      backend/llvm/ssa_llvm_jit.cpp
+      backend/llvm/llvm_runtime.cpp)
+  target_compile_features(nano_service_jit_tests PRIVATE cxx_std_20)
+  target_include_directories(nano_service_jit_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR} ${LLVM_INCLUDE_DIRS})
+  target_compile_options(nano_service_jit_tests PRIVATE ${LLVM_DEFINITIONS_LIST})
+  target_compile_definitions(nano_service_jit_tests PRIVATE
+      NANO_SERVICE_HAS_LLVM=1 NANO_SERVICE_HAS_JIT=1)
+  target_link_libraries(nano_service_jit_tests PRIVATE ${LLVM_LIBS})
+  if(UNIX)
+    target_link_options(nano_service_jit_tests PRIVATE -rdynamic)
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_service_jit_tests PRIVATE -Wall -Wextra -Wno-unused-parameter)
+  endif()
+  if(NANO_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(nano_service_jit_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(nano_service_jit_tests PRIVATE -fsanitize=address,undefined)
+  endif()
   add_executable(nano_llvm_backend_tests
       ${CMAKE_SOURCE_DIR}/tests/llvm_backend_tests.cpp
       backend/llvm/ssa_llvm_lowering.cpp
@@ -253,7 +323,18 @@ endif()
       COMMAND nano_ir_tests
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
+  add_test(
+      NAME nano_service_unit
+      COMMAND nano_service_tests
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+  if(NANO_BUILD_WEB_SERVER)
+    add_test(NAME nano_server_help COMMAND nano-server --help
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endif()
   if(NANO_BUILD_JIT)
+    add_test(NAME nano_service_jit_unit COMMAND nano_service_jit_tests
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME nano_llvm_backend_unit COMMAND nano_llvm_backend_tests
              WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
     add_test(NAME nano_ssa_backend_jit
