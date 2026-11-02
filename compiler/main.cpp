@@ -692,6 +692,38 @@ std::string policyConfigurationJson() {
     return out.str();
 }
 
+// Inline-decision records are compiler-generated JSON with identifier-only
+// function names.  This small extractor keeps the dataset writer independent
+// of a second JSON dependency while attaching the caller's measured
+// before/after structural outcome to every candidate row.
+std::optional<std::string> inlinePolicyRecordCaller(std::string_view record) {
+    constexpr std::string_view marker = "\"caller\":\"";
+    const size_t begin = record.find(marker);
+    if (begin == std::string_view::npos) return std::nullopt;
+    const size_t valueBegin = begin + marker.size();
+    const size_t end = record.find('"', valueBegin);
+    if (end == std::string_view::npos) return std::nullopt;
+    return std::string(record.substr(valueBegin, end - valueBegin));
+}
+
+std::string appendInlineStructuralResult(
+    std::string record, const std::map<std::string, PolicyDecisionObservation> &observations) {
+    if (record.empty() || record.back() != '}') return record;
+    PolicyDecisionObservation observation;
+    if (const auto caller = inlinePolicyRecordCaller(record)) {
+        if (const auto found = observations.find(*caller); found != observations.end())
+            observation = found->second;
+    }
+    record.pop_back();
+    record += ",\"structural_result\":{\"instructions_before\":" +
+        std::to_string(observation.instructionsBefore) +
+        ",\"instructions_after\":" + std::to_string(observation.instructionsAfter) +
+        ",\"blocks_before\":" + std::to_string(observation.blocksBefore) +
+        ",\"blocks_after\":" + std::to_string(observation.blocksAfter) +
+        ",\"changed\":" + (observation.changed ? "true" : "false") + "}}";
+    return record;
+}
+
 bool writePolicyDecisionLog(
     const std::string &path, const nanopass::SSAProgram &program,
     const nanopass::profile::ProgramRuntimeProfile *profile,
@@ -1204,7 +1236,8 @@ int main(int argc, char **argv) {
                 const auto fingerprint = nanopass::profile::stableProgramFingerprint(*policyDecisionInput);
                 for (const auto &record : inlinePolicyRecords)
                     out << "{\"schema_version\":1,\"program_fingerprint\":\"" << fingerprint
-                        << "\",\"record\":" << record << "}\n";
+                        << "\",\"record\":"
+                        << appendInlineStructuralResult(record, policyObservations) << "}\n";
             }
         }
 
