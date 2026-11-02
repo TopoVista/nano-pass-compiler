@@ -1,0 +1,5 @@
+import type { InlinePolicyRecord } from '../lib/api';
+
+export function PolicyDecisions({ records }: { records?: InlinePolicyRecord[] }) {
+  return <section className="policy-panel" aria-label="Inline policy decisions"><header><strong>Inline policy decisions</strong><span>legality before profitability</span></header>{!records?.length ? <p className="quiet">Choose Heuristic or Learned at O2/O3 to inspect compiler-recorded inline candidates.</p> : records.map((record, index) => <article key={`${record.caller}:${record.callee}:${index}`}><b>@{record.caller} → @{record.callee} · {record.model_action ?? record.heuristic_action}</b><small>{record.policy_type === 'learned' ? `${record.model_version} · confidence ${(record.confidence ?? 0).toFixed(3)}` : 'deterministic heuristic'} · legality {record.legality.toUpperCase()}</small><small>{record.features.instruction_count} callee inst · {record.features.block_count} blocks · cost {record.estimated_inline_cost} · caller {record.caller_instruction_count} inst</small><small>heuristic action: {record.heuristic_action}; verification is performed after an applied clone.</small></article>)}</section>;
+}

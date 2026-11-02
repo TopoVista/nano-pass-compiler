@@ -27,5 +27,5 @@
 .comparison-panel table { width:100%; border-collapse:collapse; font-size:11px; }
 .comparison-panel th,.comparison-panel td { padding:6px; text-align:right; border-top:1px solid #233550; }
 .comparison-panel th:first-child,.comparison-panel td:first-child { text-align:left; color:#a8c6ff; }
-.policy-wrap { grid-column:1 / 4; grid-row:8; }.policy-panel { padding:12px; }.policy-panel header { display:flex; justify-content:space-between; margin-bottom:8px; }.policy-panel header span { color:#89a8d1; font-size:11px; }.policy-panel article { display:grid; gap:3px; padding:7px 0; border-top:1px solid #233550; font-size:11px; }.policy-panel article b { color:#a8c6ff; }.policy-panel article small { color:#9caec7; }
+.policy-wrap { grid-column:1 / 4; grid-row:auto; }.policy-panel { padding:12px; }.policy-panel header { display:flex; justify-content:space-between; margin-bottom:8px; }.policy-panel header span { color:#89a8d1; font-size:11px; }.policy-panel article { display:grid; gap:3px; padding:7px 0; border-top:1px solid #233550; font-size:11px; }.policy-panel article b { color:#a8c6ff; }.policy-panel article small { color:#9caec7; }
 .diagnostic { width:100%; text-align:left; border-left:0; border-right:0; border-bottom:0; border-radius:0; background:transparent; }

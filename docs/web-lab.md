@@ -39,6 +39,11 @@ The lab is intentionally an inspector rather than a mock dashboard:
   carry a text marker, so hotness is not conveyed only by color. The policy
   pane renders compiler-extracted static/dynamic feature vectors and the
   corresponding hotness reason.
+- The inline-policy selector offers only Default, Heuristic, and the reviewed
+  Learned model. Its decision pane renders compiler-recorded candidate facts
+  (model version, confidence, structural features, legality, and post-clone
+  verifier gate); it never accepts a browser model upload or synthesizes an
+  explanation.
 
 The client debounces live compile requests, caches identical successful
 compile inputs, preserves explicit custom-pass order, and embeds source,

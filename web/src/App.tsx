@@ -4,7 +4,9 @@ import { GraphPane } from './components/GraphPane';
 import { Diagnostics, Profile, Remarks, Timeline, ValueInspector } from './components/Panels';
 import { Correctness } from './components/Correctness';
 import { OptimizationComparison } from './components/Comparison';
+import { BenchmarkPanel, type BenchmarkMeasurement } from './components/BenchmarkPanel';
 import { PolicyFeatures } from './components/PolicyFeatures';
+import { PolicyDecisions } from './components/PolicyDecisions';
 import { SourceEditor } from './components/SourceEditor';
 import { allowedPasses, checkCorrectness, compile, run, type Compilation, type CorrectnessResult, type RunResult } from './lib/api';
 import './styles.css';
@@ -22,7 +24,7 @@ const examples: Record<string, string> = {
 };
 const allArtifacts = { includeSource: true, includeAst: true, includeDesugaredAst: true, includeCore: true, includeAnf: true, includeCfg: true, includeSsa: true, includeOptimizedSsa: true, includeLLVM: true, includeGraphs: true, includeRemarks: true, includeTelemetry: true, includeProvenance: true };
 type RunMode = 'core' | 'ssa' | 'jit' | 'adaptive-jit';
-type SharedSession = { source?: string; level?: number; stage?: string; passes?: string[]; graph?: string };
+type SharedSession = { source?: string; level?: number; policy?: 'default' | 'heuristic' | 'learned'; stage?: string; passes?: string[]; graph?: string };
 const sessionFromHash = (): SharedSession => { try { const raw = window.location.hash.replace(/^#session=/, ''); return raw ? JSON.parse(decodeURIComponent(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))) as SharedSession : {}; } catch { return {}; } };
 export default function App() {
   const session = sessionFromHash();
@@ -31,6 +33,7 @@ export default function App() {
   const [source, setSource] = useState(session.source ?? examples['SCCP branch']);
   const [exampleName, setExampleName] = useState(session.source ? '' : 'SCCP branch');
   const [level, setLevel] = useState(session.level ?? 2);
+  const [policy, setPolicy] = useState<'default' | 'heuristic' | 'learned'>(session.policy ?? 'default');
   const [selectedStage, setSelectedStage] = useState(session.stage ?? 'optimized-ssa');
   const [selectedPass, setSelectedPass] = useState<string>();
   const [graphKind, setGraphKind] = useState(session.graph ?? 'cfg');
@@ -42,14 +45,16 @@ export default function App() {
   const [runResult, setRunResult] = useState<RunResult>();
   const [correctness, setCorrectness] = useState<CorrectnessResult>();
   const [comparison, setComparison] = useState<Compilation[]>();
+  const [benchmark, setBenchmark] = useState<BenchmarkMeasurement>();
   const [busy, setBusy] = useState(false);
-  const options = useMemo(() => ({ source, optimizationLevel: level, ...(custom.length ? { passes: custom } : {}), ...allArtifacts }), [source, level, custom]);
+  const options = useMemo(() => ({ source, optimizationLevel: level, policy, ...(custom.length ? { passes: custom } : {}), ...allArtifacts }), [source, level, policy, custom]);
   const doCompile = async () => { setBusy(true); setRunResult(undefined); setCorrectness(undefined); const response = await compile(options); setResult(response); if (response.snapshots.length && !response.snapshots.some((snapshot) => snapshot.stageId === selectedStage)) setSelectedStage(response.snapshots.at(-1)!.stageId); setBusy(false); };
-  useEffect(() => { const handle = window.setTimeout(() => { void doCompile(); }, 450); return () => window.clearTimeout(handle); }, [source, level, custom.join(',')]);
+  useEffect(() => { const handle = window.setTimeout(() => { void doCompile(); }, 450); return () => window.clearTimeout(handle); }, [source, level, policy, custom.join(',')]);
   const doRun = async (mode: RunMode) => { setBusy(true); setRunResult(await run(options, mode)); setBusy(false); };
   const doCorrectness = async () => { setBusy(true); setCorrectness(await checkCorrectness(options)); setBusy(false); };
   const doCompare = async () => { setBusy(true); setComparison(await Promise.all([0, 1, 2, 3].map((optimizationLevel) => compile({ ...options, optimizationLevel })))); setBusy(false); };
-  const share = async () => { const encoded = btoa(encodeURIComponent(JSON.stringify({ source, level, stage: selectedStage, passes: custom, graph: graphKind }))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); window.location.hash = `session=${encoded}`; await navigator.clipboard?.writeText(window.location.href); };
+  const doBenchmark = async () => { setBusy(true); setBenchmark(undefined); const compilation = await compile(options); await run(options, 'ssa'); const samples: number[] = []; for (let index = 0; index < 5; ++index) { const measured = await run(options, 'ssa'); if (!measured.success || measured.executionDurationUs === undefined) { setBusy(false); return; } samples.push(measured.executionDurationUs); } const ordered = [...samples].sort((left, right) => left - right); const percentile = (fraction: number) => ordered[Math.round((ordered.length - 1) * fraction)]; setBenchmark({ compileUs: compilation.telemetry.totalCompileUs, samplesUs: samples, medianUs: percentile(.5), p25Us: percentile(.25), p75Us: percentile(.75) }); setBusy(false); };
+  const share = async () => { const encoded = btoa(encodeURIComponent(JSON.stringify({ source, level, policy, stage: selectedStage, passes: custom, graph: graphKind }))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); window.location.hash = `session=${encoded}`; await navigator.clipboard?.writeText(window.location.href); };
   const movePass = (index: number, direction: -1 | 1) => setCustom((current) => {
     const target = index + direction; if (target < 0 || target >= current.length) return current;
     const next = [...current]; [next[index], next[target]] = [next[target], next[index]]; return next;
@@ -62,7 +67,7 @@ export default function App() {
   const transform = transformKey ? result?.transformations.find((item) => item.passId === transformKey) : undefined;
   return <main className="lab-shell">
     <header className="topbar"><div className="brand"><span className="brand-mark">⊞</span><strong>NanoPass</strong><span>Compiler Lab</span></div><nav aria-label="Lab views"><button className="active">Lab</button><button onClick={() => setGraphKind('cfg')}>Graphs</button><button onClick={() => setSelectedStage('optimized-ssa')}>Optimizations</button></nav><div className="top-actions"><label>O-level <select aria-label="Optimization level" value={level} onChange={(event) => setLevel(Number(event.target.value))}>{[0,1,2,3].map((item) => <option key={item} value={item}>O{item}</option>)}</select></label><button onClick={share}>Share session</button><button className="run" disabled={busy} onClick={() => void doRun('ssa')}>{busy ? 'Compiling…' : 'Run SSA'}</button></div></header>
-    <section className="toolbar"><label>Example <select aria-label="Example program" value={exampleName} onChange={(event) => { if (event.target.value) { setExampleName(event.target.value); setSource(examples[event.target.value]); } }}>{exampleName === '' && <option value="">Custom source</option>}{Object.keys(examples).map((name) => <option key={name} value={name}>{name}</option>)}</select></label><div className="pipeline-picker"><span>Custom pipeline</span>{allowedPasses.map((pass) => <label key={pass}><input type="checkbox" checked={custom.includes(pass)} onChange={() => setCustom((current) => current.includes(pass) ? current.filter((item) => item !== pass) : [...current, pass])} />{pass}</label>)}{custom.length > 1 && <div className="pipeline-order" aria-label="Custom pipeline order">{custom.map((pass, index) => <span key={pass}>{pass}<button aria-label={`Move ${pass} earlier`} disabled={index === 0} onClick={() => movePass(index, -1)}>↑</button><button aria-label={`Move ${pass} later`} disabled={index === custom.length - 1} onClick={() => movePass(index, 1)}>↓</button></span>)}</div>}</div><button disabled={busy} onClick={() => void doCompare()}>Compare O0–O3</button><span className={result?.success ? 'compile-status good' : 'compile-status'}>{result ? result.success ? `verified · ${result.telemetry.totalCompileUs} μs` : 'diagnostics reported' : 'waiting'}</span></section>
+    <section className="toolbar"><label>Example <select aria-label="Example program" value={exampleName} onChange={(event) => { if (event.target.value) { setExampleName(event.target.value); setSource(examples[event.target.value]); } }}>{exampleName === '' && <option value="">Custom source</option>}{Object.keys(examples).map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label>Inline policy <select aria-label="Inline policy" value={policy} disabled={custom.length > 0} onChange={(event) => setPolicy(event.target.value as typeof policy)}><option value="default">Default pipeline</option><option value="heuristic">Heuristic</option><option value="learned">Learned (reviewed model)</option></select></label><div className="pipeline-picker"><span>Custom pipeline</span>{allowedPasses.map((pass) => <label key={pass}><input type="checkbox" checked={custom.includes(pass)} onChange={() => setCustom((current) => current.includes(pass) ? current.filter((item) => item !== pass) : [...current, pass])} />{pass}</label>)}{custom.length > 1 && <div className="pipeline-order" aria-label="Custom pipeline order">{custom.map((pass, index) => <span key={pass}>{pass}<button aria-label={`Move ${pass} earlier`} disabled={index === 0} onClick={() => movePass(index, -1)}>↑</button><button aria-label={`Move ${pass} later`} disabled={index === custom.length - 1} onClick={() => movePass(index, 1)}>↓</button></span>)}</div>}</div><button disabled={busy} onClick={() => void doCompare()}>Compare O0–O3</button><button disabled={busy} onClick={() => void doBenchmark()}>Measure source</button><span className={result?.success ? 'compile-status good' : 'compile-status'}>{result ? result.success ? `verified · ${result.telemetry.totalCompileUs} μs` : 'diagnostics reported' : 'waiting'}</span></section>
     <section className="workspace">
       <div className="panel source-panel"><header><strong>Source</strong><span>Nano</span></header><div className="editor"><SourceEditor value={source} focusLine={focusLine} onCursorLine={(line) => { const related = result?.values.find((candidate) => candidate.line === line); if (related) setSelectedValue(related.value); }} onChange={(next) => { setSource(next); setExampleName(''); }} /></div></div>
       <div className="panel ir-panel"><header><div><strong>Representation</strong><span>{snapshot?.displayName ?? 'waiting'}</span></div><select aria-label="IR stage" value={snapshot?.stageId ?? ''} onChange={(event) => setSelectedStage(event.target.value)}>{result?.snapshots.map((item) => <option key={item.stageId} value={item.stageId}>{item.displayName}</option>)}</select></header><CodeView snapshot={snapshot} selectedBlock={selectedBlock} selectedValue={value} onValue={setSelectedValue} onBlock={setSelectedBlock} /></div>
@@ -73,7 +78,9 @@ export default function App() {
       <div className="panel runtime-panel"><div className="run-controls"><strong>Execution</strong>{(['core','ssa','jit','adaptive-jit'] as RunMode[]).map((mode) => <button key={mode} disabled={busy} onClick={() => void doRun(mode)}>{mode}</button>)}<button disabled={busy} onClick={() => void doCorrectness()}>check correctness</button></div><Profile profile={runResult?.runtimeProfile} stdout={runResult?.stdout} mode={runResult ? runResult.status : 'not run'} status={runResult?.errorKind} events={runResult?.adaptiveEvents} /></div>
       <div className="panel correctness-wrap"><Correctness result={correctness} /></div>
       <div className="panel comparison-wrap"><OptimizationComparison results={comparison} /></div>
+      <div className="panel comparison-wrap"><BenchmarkPanel result={benchmark} /></div>
       <div className="panel policy-wrap"><PolicyFeatures features={runResult?.policyFeatures ?? result?.policyFeatures} /></div>
+      <div className="panel policy-wrap"><PolicyDecisions records={result?.policyRecords} /></div>
       {transform && selectedPass && <div className="panel diff-panel"><header><strong>Before / after</strong><span>{selectedPass}</span></header><div className="diff"><pre>{transform.before}</pre><pre>{transform.after}</pre></div></div>}
     </section>
   </main>;
