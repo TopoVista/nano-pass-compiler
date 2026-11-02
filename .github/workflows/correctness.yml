@@ -19,6 +19,8 @@ jobs:
         run: ./nano-correctness fuzz --seed=42 --cases=32
       - name: Run verifier-gated learned-policy differential smoke
         run: ./nano-correctness learned-fuzz --seed=20261103 --cases=64
+      - name: Run deterministic heuristic-inline differential smoke
+        run: ./nano-correctness heuristic-fuzz --seed=20261103 --cases=64
       - name: Run malformed-input smoke fuzz
         run: ./nano-correctness malformed-fuzz --seed=8128 --cases=64
 
@@ -40,7 +42,7 @@ jobs:
       - name: Run bounded profile and adaptive ORC coverage
         run: >
           ctest --test-dir build --output-on-failure -R
-          'nano_service_unit|nano_learned_policy_fuzz_smoke|nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
+          'nano_service_unit|nano_learned_policy_fuzz_smoke|nano_heuristic_policy_fuzz_smoke|nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
 
   sanitizers:
     runs-on: ubuntu-24.04

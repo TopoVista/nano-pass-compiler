@@ -29,8 +29,8 @@ struct DifferentialResult {
   ExecutionResult reference;
   std::vector<DifferentialLevelResult> levels;
   bool equivalent = false;
-  size_t learnedDecisions = 0;
-  size_t learnedApplied = 0;
+  size_t policyDecisions = 0;
+  size_t policyApplied = 0;
 };
 
 struct DifferentialCustomPipeline {
@@ -119,8 +119,8 @@ public:
       opt::SSAAnalysisManager analyses;
       const auto policy = opt::LearnedInlinePolicy::builtinInlineImitationV1();
       const auto inlineResult = opt::SSAProgramInliner{}.run(candidate, {}, &analyses, &policy);
-      result.learnedDecisions = inlineResult.statistics.get("learnedInlineDecisions");
-      result.learnedApplied = inlineResult.statistics.get("callsInlined");
+      result.policyDecisions = inlineResult.statistics.get("learnedInlineDecisions");
+      result.policyApplied = inlineResult.statistics.get("callsInlined");
       for (auto &function : candidate.functions) {
         opt::SSAOptimizationContext context;
         opt::buildPipeline(2).run(function, context);
@@ -129,6 +129,34 @@ public:
       }
       const auto execution = SSAInterpreter{}.run(candidate, "main", limits);
       result.levels.push_back({2, "O2+learned-inline", execution,
+                               sameObservableResult(result.reference, execution)});
+      result.equivalent = result.levels.front().equivalent;
+    } catch (const std::exception &error) { result.diagnostic = error.what(); }
+    return result;
+  }
+
+  // The deterministic inliner is the policy baseline: every candidate first
+  // passes the same legality, budget, and SSA-verification gates as the
+  // learned variant, but profitability comes from InlineCostModel alone.
+  DifferentialResult runHeuristicInline(const std::string &source,
+                                        ExecutionLimits limits={}) const {
+    DifferentialResult result;
+    try {
+      auto ir = buildIRForDifferential(source); result.compiled = true;
+      result.reference = CoreInterpreter{}.run(ir.core, "main", limits);
+      SSAProgram candidate = ir.ssa;
+      opt::SSAAnalysisManager analyses;
+      const auto inlineResult = opt::SSAProgramInliner{}.run(candidate, {}, &analyses);
+      result.policyDecisions = inlineResult.statistics.get("callsConsidered");
+      result.policyApplied = inlineResult.statistics.get("callsInlined");
+      for (auto &function : candidate.functions) {
+        opt::SSAOptimizationContext context;
+        opt::buildPipeline(2).run(function, context);
+        const auto verified = verifySSA(function);
+        if (!verified.ok) throw std::runtime_error("heuristic policy produced invalid SSA");
+      }
+      const auto execution = SSAInterpreter{}.run(candidate, "main", limits);
+      result.levels.push_back({2, "O2+heuristic-inline", execution,
                                sameObservableResult(result.reference, execution)});
       result.equivalent = result.levels.front().equivalent;
     } catch (const std::exception &error) { result.diagnostic = error.what(); }
