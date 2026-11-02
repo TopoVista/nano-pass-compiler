@@ -53,17 +53,22 @@ cheap.
 | `POST` | `/api/v1/optimize` | compile plus optimized SSA, telemetry, and optimization remarks |
 | `POST` | `/api/v1/run` | compile and execute with `core`, `ssa`, `jit`, or `adaptive-jit` mode |
 | `POST` | `/api/v1/profile` | compile and execute the SSA interpreter with runtime counters |
+| `POST` | `/api/v1/correctness` | bounded CoreIR-vs-SSA O0–O3 and, when built, JIT/adaptive equivalence checks |
 
 A successful compile response includes structured diagnostics, named IR
+snapshots (including source when requested), transformation before/after
 snapshots, pass events, optimization remarks, graph nodes/edges, SSA value
-provenance, and aggregate telemetry. A run response additionally reports
-stdout, stderr, return value, resource/runtime status, optional runtime
-profile, and adaptive-JIT events.
+provenance, policy feature vectors, and aggregate telemetry. A run response
+additionally reports stdout, stderr, return value, resource/runtime status,
+optional runtime profile, structured adaptive-JIT events, and dynamic policy
+features.
 
 Graph IDs are stable strings such as `main:bb3`; they are not memory
-addresses. SSA value records include definition function/block, type, source
-location when retained by the compiler, and are emitted in deterministic
-function/value order.
+addresses. SSA value records include definition function/block, type, all
+uses, source location when retained by the compiler, and are emitted in
+deterministic function/value order. Remarks retain their optional value/block
+candidate and source coordinates so the UI can distinguish a compiler fact
+from a frontend explanation.
 
 ## Capability boundary
 

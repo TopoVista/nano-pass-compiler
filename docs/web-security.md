@@ -9,7 +9,7 @@ is deliberately narrow:
 - The HTTP decoder rejects duplicate fields, malformed JSON, unsupported JSON
   escapes, non-boolean artifact flags, and non-string custom-pass values.
 - The request reader caps HTTP input at 512 KiB and the compiler service caps
-  source at 256 KiB.
+  source at 256 KiB and lexical tokens at 50,000 before parsing.
 - Reference execution has explicit step, recursion-depth, output-size, and
   array-size limits. Resource exhaustion is reported as such.
 - Custom optimization pipelines go through the C++ pass allowlist.

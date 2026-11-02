@@ -1,7 +1,13 @@
-import Editor from '@monaco-editor/react';
-type Props = { value: string; onChange: (value: string) => void };
-export function SourceEditor({ value, onChange }: Props) {
-  return <Editor height="100%" language="nano" theme="vs-dark" value={value} onChange={(next) => onChange(next ?? '')} options={{ minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, padding: { top: 12 }, automaticLayout: true, scrollBeyondLastLine: false, ariaLabel: 'Nano source editor' }} beforeMount={(monaco) => {
+import Editor, { type OnMount } from '@monaco-editor/react';
+import { useEffect, useRef } from 'react';
+import type { editor } from 'monaco-editor';
+
+type Props = { value: string; onChange: (value: string) => void; focusLine?: number };
+export function SourceEditor({ value, onChange, focusLine }: Props) {
+  const editorRef = useRef<editor.IStandaloneCodeEditor>();
+  useEffect(() => { if (focusLine && editorRef.current) { editorRef.current.revealLineInCenter(focusLine); editorRef.current.setPosition({ lineNumber: focusLine, column: 1 }); editorRef.current.focus(); } }, [focusLine]);
+  const onMount: OnMount = (editor) => { editorRef.current = editor; };
+  return <Editor height="100%" language="nano" theme="vs-dark" value={value} onMount={onMount} onChange={(next) => onChange(next ?? '')} options={{ minimap: { enabled: false }, fontSize: 13, lineNumbersMinChars: 3, padding: { top: 12 }, automaticLayout: true, scrollBeyondLastLine: false, ariaLabel: 'Nano source editor' }} beforeMount={(monaco) => {
     monaco.languages.register({ id: 'nano' });
     monaco.languages.setMonarchTokensProvider('nano', { tokenizer: { root: [
       [/\/\/.*$/, 'comment'], [/\/\*/, 'comment', '@comment'], [/[{}()\[\]]/, '@brackets'],

@@ -104,8 +104,9 @@ npm run dev
 
 Open the Vite URL printed by the client. The lab provides real compiler
 snapshots, pass telemetry, CFG/dominator/loop/call graphs, SSA value
-provenance, verifier-backed optimization remarks, and bounded execution
-profiles. See [the API](docs/compiler-api.md), [lab guide](docs/web-lab.md),
+provenance, verifier-backed optimization remarks, before/after SSA,
+profile heat overlays, adaptive events, bounded differential correctness, and
+compiler policy features. See [the API](docs/compiler-api.md), [lab guide](docs/web-lab.md),
 and [local execution boundary](docs/web-security.md).
 
 ---

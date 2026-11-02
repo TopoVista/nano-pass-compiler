@@ -26,9 +26,19 @@ The lab is intentionally an inspector rather than a mock dashboard:
   inspector. Source locations are shown only when retained by the IR.
 - The remarks pane reports compiler-recorded applied/missed optimization
   reasons. It does not synthesize an explanation.
+- Clicking an optimizer timeline entry displays the compiler-captured SSA
+  before/after snapshot. The O0–O3 comparison uses four actual service
+  compilations and reports only measured structural/compiler-time fields.
 - CoreIR, SSA interpreter, JIT, and adaptive-JIT controls show actual output,
   bounded runtime profile data, and adaptive events where the build supports
   them.
+- The correctness pane calls the bounded `/api/v1/correctness` service route;
+  it reports CoreIR versus SSA O0–O3 and includes native/adaptive checks only
+  in a JIT-capable service build.
+- Runtime counts overlay CFG nodes/edges numerically; hot nodes additionally
+  carry a text marker, so hotness is not conveyed only by color. The policy
+  pane renders compiler-extracted static/dynamic feature vectors and the
+  corresponding hotness reason.
 
 The client debounces live compile requests, caches identical successful
 compile inputs, and embeds source/options/stage in the share URL fragment.
@@ -39,3 +49,8 @@ The design reference used for this implementation is
 `web/design/compiler-lab-concept.png`. The shipped UI intentionally keeps its
 graphite, compact developer-tooling hierarchy while using the real local API
 instead of placeholder cards.
+
+`npm run test:e2e` is a bounded Playwright journey that starts the real local
+`nano-server` plus Vite, loads a source example, switches IR/graphs, opens a
+transformation, runs/profile the program, and inspects adaptive events. Install
+Chromium once with `npm run test:e2e:install`.

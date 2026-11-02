@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <string>
 
@@ -45,5 +46,9 @@ int main() { int i = 0; int total = 0; while (i < 12) { total = step(total); i =
   ASSERT(tiered.success); ASSERT(tiered.stdoutText == "12\n"); ASSERT(!tiered.runtimeProfileJson.empty()); ASSERT(!tiered.adaptiveEvents.empty());
   const auto json = runResponseJson(tiered);
   ASSERT(json.find("adaptiveEvents") != std::string::npos); ASSERT(json.find("runtimeProfile") != std::string::npos);
+  const auto correctness = service.checkCorrectness(request(source));
+  ASSERT(correctness.success); ASSERT(correctness.equivalent); ASSERT(correctness.checks.size() == 7);
+  ASSERT(std::all_of(correctness.checks.begin(), correctness.checks.end(), [](const auto &check) { return check.passed; }));
+  ASSERT(correctnessResponseJson(correctness).find("Adaptive JIT") != std::string::npos);
   std::cout << "compiler service JIT: " << assertions << "/" << assertions << " assertions passed\n";
 }

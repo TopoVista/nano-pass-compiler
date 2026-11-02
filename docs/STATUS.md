@@ -91,6 +91,10 @@ explicit local evidence rather than CI claims.
   inspector, runtime/adaptive profile pane, diagnostics, remarks, and
   fragment-based sharing. See `docs/compiler-api.md`, `docs/web-lab.md`, and
   `docs/web-security.md`.
+- **Correctness and policy inspection** — browser-visible facts include bounded
+  CoreIR/SSA/JIT differential checks, structured adaptive tier events,
+  profile heat overlays, and compiler-extracted Phase 9 static/dynamic policy
+  features. Browser regression uses a real local `nano-server` in CI.
 
 ### Correctness testing (Phase 7)
 - **CoreIR reference interpreter** — scalar expressions, fixed-size arrays,
