@@ -356,6 +356,17 @@ public:
         event.counters = std::move(counters);
         response.passes.push_back(std::move(event));
       };
+      const auto recordMeasuredStage = [&](std::string id, std::string displayName,
+                                           std::string category, uint64_t durationUs,
+                                           std::map<std::string, size_t> counters = {}) {
+        PassEvent event;
+        event.id = std::move(id);
+        event.displayName = std::move(displayName);
+        event.category = std::move(category);
+        event.durationUs = durationUs;
+        event.counters = std::move(counters);
+        response.passes.push_back(std::move(event));
+      };
       if (request.include.source) response.snapshots.push_back({"source", "Source", request.source});
       auto phaseStarted = std::chrono::steady_clock::now();
       Lexer lexer(request.source); auto tokens = lexer.scanTokens();
@@ -388,6 +399,11 @@ public:
       auto pipeline = IRPipeline::runAll(program);
       recordStage("ir-lowering", "Core → ANF → CFG → SSA", "lowering", phaseStarted,
                   {{"functions", pipeline.ssa.functions.size()}, {"blocks", programBlocks(pipeline.ssa)}, {"values", programValues(pipeline.ssa)}});
+      recordMeasuredStage("ssa-construction", "CFG → SSA + verify", "lowering",
+                          pipeline.ssaConstructionUs,
+                          {{"functions", pipeline.ssa.functions.size()},
+                           {"blocks", programBlocks(pipeline.ssa)},
+                           {"values", programValues(pipeline.ssa)}});
       if (pipeline.ssa.functions.size() > limits_.maxFunctions)
         return fail(response, ErrorKind::ResourceLimit, "FUNCTION_LIMIT_EXCEEDED", "IR exceeds compiler function limit", 0, 0, started);
       if (programBlocks(pipeline.ssa) > limits_.maxIRBlocks)
@@ -496,6 +512,21 @@ public:
       response.stderrText = std::string("execution mode is disabled by server policy ") + executionPolicyName(executionPolicy_);
       return response;
     }
+    const auto attachRuntimeProfile = [&](const profile::ProgramRuntimeProfile &profile) {
+      std::ostringstream json;
+      profile::writeRuntimeProfileJson(profile, json);
+      const std::string serialized = json.str();
+      if (serialized.size() > limits_.maxProfileBytes) {
+        response.success = false;
+        response.errorKind = ErrorKind::ResourceLimit;
+        response.status = "profile_limit_exceeded";
+        response.stderrText = "runtime profile exceeds server profile byte limit";
+        response.runtimeProfileJson.clear();
+        return false;
+      }
+      response.runtimeProfileJson = serialized;
+      return true;
+    };
     try {
       Lexer lexer(request.compile.source); Parser parser(lexer.scanTokens()); auto ast=parser.parseProgram(); ResolveScopesPass resolver; resolver.resolve(ast); TypeCheckPass{}.check(ast); PipelineBuilder::initialise(); AnalysisManager analyses; PipelineBuilder::registerAnalysesWithManager(analyses); CompilerPassOptions options; std::ostringstream diagnostics; PassContext context(analyses,options,diagnostics); auto desugar=PipelineBuilder::buildDesugarPipeline(); desugar.run(ast,context); auto pipeline=IRPipeline::runAll(ast); SSAProgram ssa=pipeline.ssa;
       if (!request.compile.passes && request.compile.optimizationLevel >= 2 && request.compile.optimizationPolicy != "default") {
@@ -526,7 +557,7 @@ public:
         response.success=adaptive.execution.error.empty(); response.errorKind=response.success?ErrorKind::None:ErrorKind::Runtime;
         response.status=response.success?"success":"runtime_error"; response.stderrText=adaptive.execution.error;
         response.executionDurationUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-executionStarted).count();
-        profile=adaptive.runtimeProfile; std::ostringstream json; profile::writeRuntimeProfileJson(profile,json); response.runtimeProfileJson=json.str();
+        profile=adaptive.runtimeProfile; if (!attachRuntimeProfile(profile)) return response;
         for(const auto &event:adaptive.events) response.adaptiveEvents.push_back({adaptiveEventKindName(event.kind), event.function, event.calls, event.detail});
         response.policyFeatures=policyFeatureInformation(pipeline.ssa, &profile);
         return response;
@@ -534,7 +565,7 @@ public:
 #else
       else { response.errorKind=ErrorKind::Runtime; response.status="capability_unavailable"; response.stderrText="JIT execution is unavailable in this service build; configure nano-server with NANO_BUILD_JIT=ON."; return response; }
 #endif
-      response.stdoutText=execution.stdoutText; response.stderrText=execution.stderrText; response.stepsExecuted=execution.stepsExecuted; response.executionDurationUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-executionStarted).count(); response.status=execution.status==ExecutionStatus::Success?"success":"runtime_error"; response.success=execution.status==ExecutionStatus::Success; response.errorKind=execution.status==ExecutionStatus::Success?ErrorKind::None:(execution.status==ExecutionStatus::StepLimitExceeded||execution.status==ExecutionStatus::TimeLimitExceeded||execution.status==ExecutionStatus::OutputLimitExceeded||execution.status==ExecutionStatus::RecursionLimitExceeded?ErrorKind::ResourceLimit:ErrorKind::Runtime); if(execution.returnValue)response.returnValue=runtimeValueText(*execution.returnValue); if(execution.error)response.stderrText=execution.error->message; if(request.mode==ExecutionMode::SSAInterpreter){profile.executionMode="ssa-interpreter";std::ostringstream json;profile::writeRuntimeProfileJson(profile,json);response.runtimeProfileJson=json.str();response.policyFeatures=policyFeatureInformation(ssa,&profile);}
+      response.stdoutText=execution.stdoutText; response.stderrText=execution.stderrText; response.stepsExecuted=execution.stepsExecuted; response.executionDurationUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-executionStarted).count(); response.status=execution.status==ExecutionStatus::Success?"success":"runtime_error"; response.success=execution.status==ExecutionStatus::Success; response.errorKind=execution.status==ExecutionStatus::Success?ErrorKind::None:(execution.status==ExecutionStatus::StepLimitExceeded||execution.status==ExecutionStatus::TimeLimitExceeded||execution.status==ExecutionStatus::OutputLimitExceeded||execution.status==ExecutionStatus::RecursionLimitExceeded?ErrorKind::ResourceLimit:ErrorKind::Runtime); if(execution.returnValue)response.returnValue=runtimeValueText(*execution.returnValue); if(execution.error)response.stderrText=execution.error->message; if(request.mode==ExecutionMode::SSAInterpreter){profile.executionMode="ssa-interpreter";if (!attachRuntimeProfile(profile)) return response;response.policyFeatures=policyFeatureInformation(ssa,&profile);}
     } catch(const std::exception &error) { response.errorKind=ErrorKind::Internal; response.status="internal_error"; response.stderrText=error.what(); }
     return response;
   }

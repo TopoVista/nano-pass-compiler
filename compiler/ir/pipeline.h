@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -43,6 +45,10 @@ struct IRPipelineResult {
   SSAProgram ssa;
   SSAStatistics ssaStats;
   SSAVerifierResult ssaVerResult;
+  // The service exposes this measured boundary independently from the
+  // aggregate Core→ANF→CFG→SSA lowering event.  It includes construction and
+  // mandatory SSA verification, which are inseparable correctness work.
+  uint64_t ssaConstructionUs = 0;
 };
 
 class IRPipeline {
@@ -85,6 +91,7 @@ public:
 
     // 4. CFG Stats
     res.cfgStats = CFGStatsAnalysis::run(res.cfg);
+    const auto ssaStarted = std::chrono::steady_clock::now();
     SSABuilder ssaBuilder;
     res.ssa = ssaBuilder.build(res.cfg, &res.ssaStats);
     for (const auto &function : res.ssa.functions) {
@@ -97,6 +104,9 @@ public:
       }
     }
     res.ssaVerResult.ok = true;
+    res.ssaConstructionUs = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - ssaStarted).count());
 
     return res;
   }

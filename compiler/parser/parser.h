@@ -69,7 +69,7 @@ private:
       LangType type = parseType();
 
       if (check(TokenType::IDENTIFIER)) {
-        if (current + 1 < tokens.size() &&
+        if (static_cast<size_t>(current + 1) < tokens.size() &&
             tokens[current + 1].type == TokenType::LPAREN) {
           current = save;
           return functionStatement();
