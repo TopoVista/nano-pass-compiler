@@ -90,6 +90,8 @@ web/node_modules/
 web/.next/
 web/dist/
 web/out/
+web/test-results/
+web/playwright-report/
 web/.env
 web/.env.*
 web/*.log

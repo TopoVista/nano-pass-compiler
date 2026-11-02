@@ -15,7 +15,7 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await page.getByText('bb1.then', { exact: true }).click();
 
   await page.getByRole('button', { name: 'ssa', exact: true }).click();
-  await expect(page.getByText(/calls/)).toBeVisible();
+  await expect(page.getByText(/^\d+ calls$/)).toBeVisible();
 
   await page.getByLabel('Example program').selectOption('Adaptive JIT');
   await expect(page.getByText(/verified ·/)).toBeVisible();
