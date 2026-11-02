@@ -1,0 +1,3 @@
+int small(int x) { return x * 2 + 1; }
+int medium(int x) { int a = small(x); int b = small(a); return small(b); }
+int main() { int value = medium(5); print(value); return value; }

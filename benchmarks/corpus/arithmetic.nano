@@ -1,0 +1,9 @@
+int main() {
+  int a = 7;
+  int b = 11;
+  int total = 0;
+  int i = 0;
+  while (i < 100) { total = total + a * b - i; i = i + 1; }
+  print(total);
+  return total;
+}

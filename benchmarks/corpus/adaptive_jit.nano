@@ -1,0 +1,6 @@
+int step(int x) { return x + 1; }
+int main() {
+  int i = 0; int total = 0;
+  while (i < 100) { total = step(total); i = i + 1; }
+  print(total); return total;
+}

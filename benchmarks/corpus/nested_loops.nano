@@ -1,0 +1,9 @@
+int main() {
+  int i = 0; int total = 0;
+  while (i < 20) {
+    int j = 0;
+    while (j < 10) { total = total + i + j; j = j + 1; }
+    i = i + 1;
+  }
+  print(total); return total;
+}

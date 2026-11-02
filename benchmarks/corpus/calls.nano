@@ -1,0 +1,8 @@
+int add3(int x) { return x + 3; }
+int twice(int x) { return x + x; }
+int work(int x) { return twice(add3(x)); }
+int main() {
+  int i = 0; int total = 0;
+  while (i < 50) { total = work(total); i = i + 1; }
+  print(total); return total;
+}

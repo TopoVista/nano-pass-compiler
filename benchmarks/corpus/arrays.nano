@@ -1,0 +1,7 @@
+int main() {
+  int[32] values; int i = 0; int total = 0;
+  while (i < 32) { values[i] = i * 2; i = i + 1; }
+  i = 0;
+  while (i < 32) { total = total + values[i]; i = i + 1; }
+  print(total); return total;
+}

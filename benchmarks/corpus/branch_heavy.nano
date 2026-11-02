@@ -1,0 +1,11 @@
+int classify(int x) {
+  if (x % 5 == 0) { return 5; }
+  if (x % 3 == 0) { return 3; }
+  if (x % 2 == 0) { return 2; }
+  return 1;
+}
+int main() {
+  int i = 0; int total = 0;
+  while (i < 80) { total = total + classify(i); i = i + 1; }
+  print(total); return total;
+}

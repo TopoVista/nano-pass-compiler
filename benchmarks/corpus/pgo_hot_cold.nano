@@ -1,0 +1,7 @@
+int hot(int x) { return x + 1; }
+int cold(int x) { return x * x + x - 1; }
+int main() {
+  int i = 0; int total = 0;
+  while (i < 100) { total = hot(total); i = i + 1; }
+  total = cold(total); print(total); return total;
+}

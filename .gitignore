@@ -75,6 +75,7 @@ minimized-*
 # Profile data
 *.nprof
 benchmark-results.json
+benchmarks/results/
 fuzz-run-summary.json
 optimization-report.json
 telemetry.json

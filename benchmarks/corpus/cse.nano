@@ -1,0 +1,5 @@
+int main() {
+  int a = 7; int b = 11;
+  int x = a * b; int y = a * b; int z = a * b;
+  int total = x + y + z; print(total); return total;
+}
