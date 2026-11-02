@@ -151,9 +151,18 @@ deterministic Phase 9 foundation; they are not represented as implemented.
   Playwright journey in the LLVM 18 CI job
 - [ ] Remote multi-tenant execution hardening and benchmark dashboard (future)
 
-## Phase 11 — Advanced research
-- [ ] Profile-guided optimization (branch layout, inlining decisions)
-- [ ] Learned optimization policy (`HeuristicPolicy` + optional `LearnedPolicy`)
+## Phase 11 — Production hardening and portfolio release (in progress)
+- [x] Central service resource budgets, structured limit errors, execution
+      policies, and explicit local-trusted JIT boundary
+- [x] Reproducible 13-program benchmark corpus and JSON median/quartile harness
+- [x] Schema-v1 C++ logistic-regression inline imitation model, offline trainer,
+      program-level split metadata, verifier-gated decision records, and web view
+- [x] Learned-policy differential fuzz command and CI smoke coverage
+- [x] Pinned LLVM 18/Node 22 container definitions, compose hardening, readiness,
+      container CI, and release workflow definitions
+- [ ] Run Docker image smoke in an environment with an active Docker engine
+- [ ] Final release tag only after all CI/container gates pass
+- [ ] Profile-guided branch layout decisions
 - [ ] Verifier-gated GenAI advisor (LLM suggests known passes; compiler validates)
 - [ ] Optional Alive2 translation validation (`NANO_ENABLE_ALIVE2`)
 - [ ] Optional e-graph optimizer for pure arithmetic

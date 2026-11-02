@@ -1,7 +1,8 @@
 # Project Status
 
-Last updated: Phase 10 — a local versioned compiler service and browser
-Compiler Lab are implemented on top of the existing deterministic pipeline.
+Last updated: Phase 11 in progress — production hardening, a bounded learned
+inline-policy experiment, and reproducible benchmark/deployment artifacts are
+implemented on top of the Phase 10 local Compiler Lab.
 The lab receives structured compiler facts rather than parsed terminal text;
 LLVM emission and JIT execution remain explicit build capabilities.
 
@@ -14,6 +15,22 @@ explicit local evidence rather than CI claims.
 ---
 
 ## Stable
+
+### Phase 11 foundations
+- **Resource-aware local service** — centralized source/token/AST/function/
+  CFG/SSA/optimization/execution/profile budgets, structured resource errors,
+  cooperative compile deadlines, interpreter wall-clock limits, and a bounded
+  HTTP receive timeout.
+- **Execution policy** — `disabled`, `interpreter-only`, and `local-trusted`
+  modes; the public-style container defaults to interpreter-only. Native JIT
+  is explicitly not represented as sandboxed execution.
+- **Learned inline experiment** — schema-v1 C++ logistic-regression inference
+  uses a reviewed built-in heuristic-imitation model. It can choose only
+  inline/do-not-inline after deterministic legality and hard-budget checks;
+  successful clones remain SSA-verifier gated.
+- **Benchmark tooling** — 13 readable corpus programs and a reproducible JSON
+  harness with warmups, repeated execution, median/p25/p75, compiler-stage
+  telemetry, and structural metrics. Timing files are ignored by Git.
 
 ### SSA middle end
 - **Dominator analysis** — deterministic reachable-block RPO plus iterative
@@ -199,8 +216,9 @@ explicit local evidence rather than CI claims.
 | IR/SSA/optimizer/correctness assertions | 5,454 |
 | LLVM backend/JIT assertions | 503 |
 | Compiler service assertions | 53 |
+| Compiler service assertions (Phase 11 local) | 75 |
 | Compiler service LLVM/JIT assertions | 22 |
-| LLVM 18.1.3 WSL CTest | 99 / 99 passed |
+| LLVM 18.1.3 WSL CTest (Phase 11 local) | 100 / 100 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |

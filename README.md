@@ -27,6 +27,13 @@ The inspected SSA optimizer includes deterministic CFG-cloning direct-call
 inlining: multi-block, loop, phi, multi-return, and void callees are expanded
 only after cost, growth, recursion, and verifier checks succeed.
 
+The project also includes a compact, portable learned **heuristic-imitation**
+inline policy. It selects only `inline` or `do-not-inline` after the compiler
+has established legality and budget compliance; deterministic compiler code
+performs the clone and the SSA verifier still gates the result. It is neither
+an LLM nor a runtime-performance claim. See [the learned-policy design](docs/learned-policy.md),
+[benchmark methodology](docs/benchmarks.md), and [the threat model](docs/threat-model.md).
+
 NanoPass also differentially tests supported programs: CoreIR execution is
 compared with independently executed SSA O0–O3 programs. This is empirical
 semantic testing, not formal proof. LLVM execution is optional and requires a
@@ -109,6 +116,15 @@ profile heat overlays, adaptive events, bounded differential correctness, and
 compiler policy features. See [the API](docs/compiler-api.md), [lab guide](docs/web-lab.md),
 and [local execution boundary](docs/web-security.md).
 
+For an interpreter-only local container demonstration:
+
+```sh
+docker compose up --build
+```
+
+This is deliberately not presented as hostile multi-tenant sandboxing; see
+[deployment](docs/deployment.md).
+
 ---
 
 ## 30-second example
@@ -182,6 +198,8 @@ $HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o facto
 ./build/compiler/nano features examples/loops.nano --profile=loops.nprof
 ./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
   --policy=heuristic --remarks
+./build/compiler/nano optimize examples/functions.nano -O2 \
+  --policy=learned --policy-model=models/inline-imitation-v1.json --remarks
 ./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
   --policy=heuristic --decision-log=policy-decisions.jsonl
 
