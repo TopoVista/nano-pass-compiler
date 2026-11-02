@@ -28,6 +28,9 @@ describe('compiler lab', () => {
     await waitFor(() => expect(screen.getByLabelText('Optimization level')).toBeInTheDocument());
     fireEvent.click(screen.getByLabelText('sccp'));
     expect(screen.getByLabelText('sccp')).toBeChecked();
+    fireEvent.click(screen.getByLabelText('dce'));
+    fireEvent.click(screen.getByLabelText('Move dce earlier'));
+    expect(screen.getByLabelText('Move dce earlier')).toBeDisabled();
   });
   it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
     render(<App />);

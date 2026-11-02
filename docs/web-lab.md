@@ -41,7 +41,9 @@ The lab is intentionally an inspector rather than a mock dashboard:
   corresponding hotness reason.
 
 The client debounces live compile requests, caches identical successful
-compile inputs, and embeds source/options/stage in the share URL fragment.
+compile inputs, preserves explicit custom-pass order, and embeds source,
+optimization level, selected pass sequence, selected IR stage, and graph view
+in the share URL fragment.
 The fragment remains client-side; source is only sent to the configured local
 service for compilation.
 

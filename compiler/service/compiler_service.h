@@ -301,16 +301,42 @@ public:
     if (request.source.size() > limits_.maxSourceBytes) return fail(response, ErrorKind::ResourceLimit, "SOURCE_LIMIT_EXCEEDED", "source exceeds server byte limit", 0, 0, started);
     if (request.optimizationLevel < 0 || request.optimizationLevel > 3) return fail(response, ErrorKind::User, "INVALID_OPTIMIZATION_LEVEL", "optimization level must be O0 through O3", 0, 0, started);
     try {
+      const auto recordStage = [&](std::string id, std::string displayName,
+                                   std::string category,
+                                   std::chrono::steady_clock::time_point began,
+                                   std::map<std::string, size_t> counters = {}) {
+        PassEvent event;
+        event.id = std::move(id);
+        event.displayName = std::move(displayName);
+        event.category = std::move(category);
+        event.durationUs = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - began).count());
+        event.counters = std::move(counters);
+        response.passes.push_back(std::move(event));
+      };
       if (request.include.source) response.snapshots.push_back({"source", "Source", request.source});
+      auto phaseStarted = std::chrono::steady_clock::now();
       Lexer lexer(request.source); auto tokens = lexer.scanTokens();
       if (tokens.size() > limits_.maxTokens) return fail(response, ErrorKind::ResourceLimit, "TOKEN_LIMIT_EXCEEDED", "source exceeds compiler token limit", 0, 0, started);
+      recordStage("lex", "Lex", "frontend", phaseStarted, {{"tokens", tokens.size()}});
+      phaseStarted = std::chrono::steady_clock::now();
       Parser parser(std::move(tokens)); auto program = parser.parseProgram();
+      recordStage("parse", "Parse", "frontend", phaseStarted);
       if (request.include.ast) response.snapshots.push_back({"ast", "AST", astText(program)});
-      ResolveScopesPass resolver; resolver.resolve(program); TypeCheckPass checker; checker.check(program);
+      phaseStarted = std::chrono::steady_clock::now();
+      ResolveScopesPass resolver; resolver.resolve(program);
+      recordStage("resolve", "Resolve", "frontend", phaseStarted);
+      phaseStarted = std::chrono::steady_clock::now();
+      TypeCheckPass checker; checker.check(program);
+      recordStage("type-check", "Type check", "frontend", phaseStarted);
       PipelineBuilder::initialise(); AnalysisManager analyses; PipelineBuilder::registerAnalysesWithManager(analyses); CompilerPassOptions options; std::ostringstream diagnostics; PassContext context(analyses, options, diagnostics); auto desugar = PipelineBuilder::buildDesugarPipeline();
       desugar.instrumentation().onPassEnd = [&](const PassTelemetry &event) { PassEvent pass; pass.id=event.passId; pass.displayName=event.passName; pass.category="desugar"; pass.changed=event.changed; pass.durationUs=static_cast<uint64_t>(event.durationUs()); pass.verified=true; for (const auto &[key,value] : event.stats.all()) if (const auto *integer=std::get_if<int64_t>(&value)) pass.counters[key]=static_cast<size_t>(*integer); response.passes.push_back(std::move(pass)); };
       desugar.run(program, context); if (request.include.desugaredAst) response.snapshots.push_back({"desugared-ast", "Desugared AST", astText(program)});
+      phaseStarted = std::chrono::steady_clock::now();
       auto pipeline = IRPipeline::runAll(program);
+      recordStage("ir-lowering", "Core → ANF → CFG → SSA", "lowering", phaseStarted,
+                  {{"functions", pipeline.ssa.functions.size()}, {"blocks", programBlocks(pipeline.ssa)}, {"values", programValues(pipeline.ssa)}});
       if (request.include.core) response.snapshots.push_back({"core", "CoreIR", toText(pipeline.core)});
       if (request.include.anf) response.snapshots.push_back({"anf", "ANF", toText(pipeline.anf)});
       if (request.include.cfg) response.snapshots.push_back({"cfg", "CFG", toText(pipeline.cfg)});

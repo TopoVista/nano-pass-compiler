@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -27,6 +28,9 @@ int main() {
   const auto compiled = service.compile(valid);
   ASSERT(compiled.success); ASSERT(compiled.schemaVersion == kCompilerServiceSchemaVersion);
   ASSERT(!compiled.snapshots.empty()); ASSERT(!compiled.passes.empty()); ASSERT(!compiled.graphs.empty()); ASSERT(!compiled.values.empty());
+  ASSERT(std::any_of(compiled.passes.begin(), compiled.passes.end(), [](const auto &event) { return event.id == "lex" && event.counters.contains("tokens"); }));
+  ASSERT(std::any_of(compiled.passes.begin(), compiled.passes.end(), [](const auto &event) { return event.id == "type-check" && event.category == "frontend"; }));
+  ASSERT(std::any_of(compiled.passes.begin(), compiled.passes.end(), [](const auto &event) { return event.id == "ir-lowering" && event.category == "lowering"; }));
   ASSERT(compiled.snapshots.front().stageId == "source");
   ASSERT(compiled.totalCompileUs >= 0); ASSERT(compiled.functions == 2); ASSERT(compiled.blocks > 0); ASSERT(compiled.valuesCount > 0);
   bool cfg=false,dom=false,loops=false,calls=false; for(const auto &graph:compiled.graphs){cfg|=graph.kind=="cfg";dom|=graph.kind=="dominator-tree";loops|=graph.kind=="loops";calls|=graph.kind=="call-graph";} ASSERT(cfg); ASSERT(dom); ASSERT(loops); ASSERT(calls);

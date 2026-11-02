@@ -325,7 +325,7 @@ Each pass runs **once** — not once per top-level statement.
 | Optimizer | ✅ stable | `nano optimize`, `-O0`–`-O3` |
 | ORC JIT | 🧪 optional | `nano jit`, `nano run` with `NANO_BUILD_JIT=ON` |
 | Host AOT emission | 🧪 optional | `nano compile --backend=ssa -o file` |
-| Web lab | 🗓 planned | Phase 9 |
+| Web compiler lab | ✅ local service | `nano-server` + `web/` |
 
 ---
 

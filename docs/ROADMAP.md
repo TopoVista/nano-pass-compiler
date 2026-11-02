@@ -147,7 +147,8 @@ deterministic Phase 9 foundation; they are not represented as implemented.
 - [x] CFG, dominator-tree, loop, and call-graph explorer plus SSA provenance
 - [x] Structured diagnostics, actual remarks, runtime profiles, adaptive events,
   O0–O3/custom-pass controls, and shareable local session fragments
-- [x] C++ service/JIT smoke tests and web type/unit/build CI coverage
+- [x] C++ service/JIT smoke tests, web type/unit/build checks, and a real-server
+  Playwright journey in the LLVM 18 CI job
 - [ ] Remote multi-tenant execution hardening and benchmark dashboard (future)
 
 ## Phase 11 — Advanced research

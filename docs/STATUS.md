@@ -84,8 +84,9 @@ explicit local evidence rather than CI claims.
   compile/run responses with diagnostics, requested AST→LLVM snapshots, pass
   telemetry, remarks, CFG/dominator/loop/call graph JSON, and SSA provenance.
 - **Local server** — optional `nano-server` exposes health, compile, analyze,
-  optimize, run, and profile routes on loopback. It accepts source text and
-  allowlisted compiler options only; it has bounded request/execution limits.
+  optimize, run, profile, and bounded correctness routes on loopback. It
+  accepts source text and allowlisted compiler options only; it has bounded
+  request, token, and execution limits.
 - **React lab** — `web/` supplies Monaco Nano highlighting, real source
   examples, stages, pass timeline, React Flow graphs, SSA use/definition
   inspector, runtime/adaptive profile pane, diagnostics, remarks, and
@@ -197,8 +198,8 @@ explicit local evidence rather than CI claims.
 | Pass manager assertions | 90 |
 | IR/SSA/optimizer/correctness assertions | 5,454 |
 | LLVM backend/JIT assertions | 503 |
-| Compiler service assertions | 41 |
-| Compiler service LLVM/JIT assertions | 17 |
+| Compiler service assertions | 53 |
+| Compiler service LLVM/JIT assertions | 22 |
 | LLVM 18.1.3 WSL CTest | 99 / 99 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
@@ -208,7 +209,7 @@ explicit local evidence rather than CI claims.
 | Errors.nano rejection | 1 |
 
 Local WSL validation with LLVM 18.1.3: **99/99 CTest** passed; ASan+UBSan also
-passed the 41-assertion service suite and 17-assertion service LLVM/JIT suite
+passed the 53-assertion service suite and 22-assertion service LLVM/JIT suite
 alongside the existing current 5,454-assertion IR suite and 503-assertion
 LLVM backend suite. The Windows LLVM package remains invalid because its imported targets
 reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
@@ -287,6 +288,7 @@ Separate malformed seed `8128` rejected 256/256 inputs with 0 crashes.
 - [x] TypeScript React lab with Monaco, pipeline timeline, graph explorer,
   SSA provenance inspector, runtime profiles, and factual remarks
 - [x] Local-service unit/JIT smoke coverage and web type/unit/build coverage
+- [x] Real-server Playwright journey configured for the LLVM 18 CI job
 
 ---
 

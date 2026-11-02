@@ -63,6 +63,12 @@ additionally reports stdout, stderr, return value, resource/runtime status,
 optional runtime profile, structured adaptive-JIT events, and dynamic policy
 features.
 
+The pass timeline begins with measured `lex`, `parse`, `resolve`, and
+`type-check` frontend events, followed by the measured Core→ANF→CFG→SSA
+lowering event and the actual desugaring/optimization events. The service does
+not synthesize a per-pass result when the compiler only exposes a pipeline-wide
+measurement.
+
 Graph IDs are stable strings such as `main:bb3`; they are not memory
 addresses. SSA value records include definition function/block, type, all
 uses, source location when retained by the compiler, and are emitted in
