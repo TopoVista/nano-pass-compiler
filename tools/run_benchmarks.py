@@ -11,12 +11,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import statistics
-import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -51,12 +48,14 @@ def percentile(values: list[int], fraction: float) -> int:
 
 
 def stage_totals(compilation: dict[str, Any]) -> dict[str, int]:
-    totals = {"frontend_us": 0, "lowering_us": 0, "optimization_us": 0,
+    totals = {"frontend_us": 0, "lowering_us": 0, "ssa_construction_us": 0, "optimization_us": 0,
               "llvm_lowering_us": 0, "llvm_verify_us": 0}
     for event in compilation.get("passes", []):
         category = event.get("category")
         if category == "frontend" or category == "desugar":
             totals["frontend_us"] += int(event.get("durationUs", 0))
+        elif event.get("id") == "ssa-construction":
+            totals["ssa_construction_us"] += int(event.get("durationUs", 0))
         elif category == "lowering":
             totals["lowering_us"] += int(event.get("durationUs", 0))
         elif category in {"optimization", "optimization-policy"}:

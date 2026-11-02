@@ -29,8 +29,24 @@ explicit local evidence rather than CI claims.
   inline/do-not-inline after deterministic legality and hard-budget checks;
   successful clones remain SSA-verifier gated.
 - **Benchmark tooling** — 13 readable corpus programs and a reproducible JSON
-  harness with warmups, repeated execution, median/p25/p75, compiler-stage
-  telemetry, and structural metrics. Timing files are ignored by Git.
+  harness with warmups, repeated execution, median/p25/p75, separately
+  measured CFG→SSA construction/verification time, compiler-stage telemetry,
+  and structural metrics. Timing files are ignored by Git.
+
+### Final local audit (2026-11-03)
+- **Correctness** — WSL LLVM 18.1.3 CTest: 101/101; ASan+UBSan: 5,538 IR,
+  79 service, and 22 service/JIT assertions passed.
+- **Policy fuzzing** — seed `20261103`, 1,000 generated/valid/comparable
+  programs per policy: heuristic had 6,000 decisions and 3,000 inlines;
+  learned had 3,000 decisions and 3,000 inlines; both had zero mismatches,
+  crashes, and timeouts.
+- **Native adaptive fuzzing** — seed `918273`, 1,000/1,000 comparisons,
+  1,589 Tier-1 promotions across 857 cases, and zero mismatches, crashes, and
+  timeouts.
+- **Browser journey** — the real-service Playwright flow passed locally (1/1).
+- **Container gate** — Docker definitions and CI smoke are committed, but the
+  local Docker Desktop Linux engine was unavailable; no image-build or CI-pass
+  result is claimed.
 
 ### SSA middle end
 - **Dominator analysis** — deterministic reachable-block RPO plus iterative
@@ -213,12 +229,11 @@ explicit local evidence rather than CI claims.
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,454 |
+| IR/SSA/optimizer/correctness assertions | 5,538 |
 | LLVM backend/JIT assertions | 503 |
-| Compiler service assertions | 53 |
-| Compiler service assertions (Phase 11 local) | 75 |
+| Compiler service assertions | 79 |
 | Compiler service LLVM/JIT assertions | 22 |
-| LLVM 18.1.3 WSL CTest (Phase 11 local) | 100 / 100 passed |
+| LLVM 18.1.3 WSL CTest (Phase 11 local) | 101 / 101 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
 | Phase 3 core/anf/cfg/graph/explain (4 examples × 5) | 20 |
 | Short-circuit format tests (3 formats) | 3 |
@@ -226,11 +241,12 @@ explicit local evidence rather than CI claims.
 | Pass-manager CLI smoke tests | 5 |
 | Errors.nano rejection | 1 |
 
-Local WSL validation with LLVM 18.1.3: **99/99 CTest** passed; ASan+UBSan also
-passed the 53-assertion service suite and 22-assertion service LLVM/JIT suite
-alongside the existing current 5,454-assertion IR suite and 503-assertion
-LLVM backend suite. The Windows LLVM package remains invalid because its imported targets
-reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
+Final local WSL validation with LLVM 18.1.3: **101/101 CTest** passed;
+ASan+UBSan also passed the 5,538-assertion IR suite, 79-assertion service
+suite, and 22-assertion service LLVM/JIT suite. The actual real-service
+Playwright journey passed locally (1/1). The Windows LLVM package remains
+invalid because its imported targets reference a missing
+`C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
 
 ---
 
@@ -274,7 +290,7 @@ reference a missing `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypass
 - [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
-- [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,454 IR assertions and
+- [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,538 IR assertions and
   503 backend/JIT assertions passed. The Windows package remains independently
   broken (`C:\llvm\bin\llvm-tblgen.exe` missing).
 

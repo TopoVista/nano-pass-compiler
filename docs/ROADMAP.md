@@ -155,9 +155,14 @@ deterministic Phase 9 foundation; they are not represented as implemented.
 - [x] Central service resource budgets, structured limit errors, execution
       policies, and explicit local-trusted JIT boundary
 - [x] Reproducible 13-program benchmark corpus and JSON median/quartile harness
+- [x] Final local paired benchmark run: 13 programs × O0–O3 × SSA/JIT/adaptive
+      modes × heuristic/learned policies; machine-specific JSON remains ignored
 - [x] Schema-v1 C++ logistic-regression inline imitation model, offline trainer,
       program-level split metadata, verifier-gated decision records, and web view
-- [x] Learned-policy differential fuzz command and CI smoke coverage
+- [x] Learned and heuristic inline differential fuzz commands, CI smoke coverage,
+      and final 1,000-program campaigns for each policy
+- [x] Actual local real-service Playwright journey (compiler, graphs, runtime,
+      adaptive events) in addition to the CI browser job definition
 - [x] Pinned LLVM 18/Node 22 container definitions, compose hardening, readiness,
       container CI, and release workflow definitions
 - [ ] Run Docker image smoke in an environment with an active Docker engine
