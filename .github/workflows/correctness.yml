@@ -17,6 +17,8 @@ jobs:
         run: g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
       - name: Run bounded deterministic fuzz smoke
         run: ./nano-correctness fuzz --seed=42 --cases=32
+      - name: Run verifier-gated learned-policy differential smoke
+        run: ./nano-correctness learned-fuzz --seed=20261103 --cases=64
       - name: Run malformed-input smoke fuzz
         run: ./nano-correctness malformed-fuzz --seed=8128 --cases=64
 
@@ -38,7 +40,31 @@ jobs:
       - name: Run bounded profile and adaptive ORC coverage
         run: >
           ctest --test-dir build --output-on-failure -R
-          'nano_service_unit|nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
+          'nano_service_unit|nano_learned_policy_fuzz_smoke|nano_llvm_backend_unit|nano_ssa_backend_jit|nano_adaptive_jit_promotion|nano_adaptive_profile_consume|nano_adaptive_jit_fuzz_smoke|nano_profile_loops|nano_profile_show|nano_pgo_hot_profile|nano_pgo_hot_optimize|nano_policy_decision_log'
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install supported LLVM and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build llvm-18-dev clang-18
+      - name: Configure sanitizer service build
+        run: >
+          cmake -S . -B build-sanitize -G Ninja
+          -DCMAKE_CXX_COMPILER=clang++-18
+          -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+          -DNANO_BUILD_JIT=ON
+          -DNANO_BUILD_WEB_SERVER=ON
+          -DNANO_ENABLE_SANITIZERS=ON
+      - name: Build sanitizer regression targets
+        run: cmake --build build-sanitize --target nano_ir_tests nano_service_tests nano_service_jit_tests --parallel 2
+      - name: Run sanitizer regressions
+        run: |
+          ASAN_OPTIONS=detect_leaks=0 ./build-sanitize/compiler/nano_ir_tests
+          ASAN_OPTIONS=detect_leaks=0 ./build-sanitize/compiler/nano_service_tests
+          ASAN_OPTIONS=detect_leaks=0 ./build-sanitize/compiler/nano_service_jit_tests
 
   web-lab:
     runs-on: ubuntu-latest
@@ -90,3 +116,18 @@ jobs:
       - name: Run bounded browser regression
         working-directory: web
         run: npm run test:e2e
+
+  container-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned server image
+        run: docker build -f docker/server.Dockerfile -t nanopass-server:ci .
+      - name: Exercise server readiness in interpreter-only mode
+        run: |
+          docker run -d --rm --name nanopass-server-ci -p 127.0.0.1:18080:8080 nanopass-server:ci
+          for attempt in $(seq 1 20); do curl -fsS http://127.0.0.1:18080/api/v1/readiness && break; sleep 1; done
+          curl -fsS -X POST http://127.0.0.1:18080/api/v1/compile -H 'content-type: application/json' --data '{"schemaVersion":1,"source":"int main(){return 0;}","optimizationLevel":2,"policy":"learned"}'
+          docker stop nanopass-server-ci
+      - name: Build pinned web image
+        run: docker build -f docker/web.Dockerfile -t nanopass-web:ci .

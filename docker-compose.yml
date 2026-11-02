@@ -1,0 +1,30 @@
+services:
+  compiler:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: ["--bind=all", "--port=8080", "--execution-policy=interpreter-only"]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    mem_limit: 768m
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        VITE_NANO_SERVER_URL: http://localhost:8080
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      compiler:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=16m
+      - /var/run:size=4m

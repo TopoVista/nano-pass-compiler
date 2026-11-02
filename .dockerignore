@@ -1,0 +1,16 @@
+.git
+build
+compiler/build
+web/node_modules
+web/dist
+fuzz-artifacts
+tests/regressions
+benchmarks/results
+*.nprof
+*.ll
+*.bc
+*.o
+*.obj
+*.exe
+day*/
+days/

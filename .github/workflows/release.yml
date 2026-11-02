@@ -1,0 +1,36 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux-source-and-binary:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM 18 build requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build llvm-18-dev clang-18
+      - name: Configure and test release candidate
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
+          -DNANO_BUILD_JIT=ON -DNANO_BUILD_WEB_SERVER=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - name: Package installed compiler and checksums
+        run: |
+          cmake --install build --prefix package/nanopass
+          tar -C package -czf nanopass-linux-x86_64.tar.gz nanopass
+          sha256sum nanopass-linux-x86_64.tar.gz > nanopass-linux-x86_64.tar.gz.sha256
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nanopass-linux-x86_64.tar.gz
+            nanopass-linux-x86_64.tar.gz.sha256
