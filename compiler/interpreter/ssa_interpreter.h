@@ -17,6 +17,7 @@ class SSAInterpreter {
   ExecutionResult result_;
   size_t callDepth_ = 0;
   profile::ProgramRuntimeProfile *profile_ = nullptr;
+  std::chrono::steady_clock::time_point started_;
   using Registers = std::map<int, RuntimeValue>;
   using Locals = std::map<LocalId, RuntimeValue>;
 
@@ -27,6 +28,9 @@ class SSAInterpreter {
     throw std::runtime_error("runtime stop");
   }
   void step() {
+    if (limits_.maxWallTimeMs != 0 &&
+        std::chrono::steady_clock::now() - started_ >= std::chrono::milliseconds(limits_.maxWallTimeMs))
+      fail(ExecutionStatus::TimeLimitExceeded, "time-limit", "execution wall-clock limit exceeded");
     if (++result_.stepsExecuted > limits_.maxSteps)
       fail(ExecutionStatus::StepLimitExceeded, "step-limit", "execution step limit exceeded");
   }
@@ -202,7 +206,7 @@ class SSAInterpreter {
   }
 public:
   ExecutionResult run(const SSAProgram &program, std::string entry = "main", ExecutionLimits limits = {}, profile::ProgramRuntimeProfile *profile = nullptr) {
-    program_ = &program; limits_ = limits; result_ = {}; callDepth_ = 0; profile_ = profile;
+    program_ = &program; limits_ = limits; result_ = {}; callDepth_ = 0; profile_ = profile; started_ = std::chrono::steady_clock::now();
     if (profile_) {
       *profile_ = {};
       profile_->programFingerprint = profile::stableProgramFingerprint(program);

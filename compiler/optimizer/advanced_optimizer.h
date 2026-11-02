@@ -8,6 +8,7 @@
 
 #include "ir/ssa/call_graph.h"
 #include "ir/ssa/loop_analysis.h"
+#include "optimizer/learned_policy.h"
 #include "optimizer/ssa_optimizer.h"
 #include "passes/AnalysisManager.h"
 
@@ -153,7 +154,8 @@ class SSAProgramInliner {
 public:
   SSAOptimizationResult run(SSAProgram &program,
                             const OptimizationBudget &budget = {},
-                            SSAAnalysisManager *analyses = nullptr) const {
+                            SSAAnalysisManager *analyses = nullptr,
+                            const InlineProfitabilityPolicy *profitabilityPolicy = nullptr) const {
     SSAOptimizationResult result;
     const CallGraph graphSnapshot = analyses
         ? analyses->get<CachedCallGraphAnalysis>(program)
@@ -227,6 +229,16 @@ public:
                 callee, graphSnapshot.recursive(callee.name), decisionBudget,
                 callerGrowth[caller.name], totalGrowth, 1);
             if (!decision.inlineCall) {
+              const auto rejectedFeatures = extractOptimizationFeatures(program, callee);
+              std::ostringstream rejectedRecord;
+              rejectedRecord << "{\"schema_version\":1,\"record_kind\":\"inline-imitation\""
+                  << ",\"caller\":\"" << caller.name << "\",\"callee\":\"" << callee.name << "\""
+                  << ",\"features\":" << optimizationFeaturesJson(rejectedFeatures)
+                  << ",\"estimated_inline_cost\":" << decision.estimatedCost
+                  << ",\"caller_instruction_count\":" << instructionCount(caller)
+                  << ",\"heuristic_action\":\"do-not-inline\",\"legality\":\""
+                  << reasonCodeName(decision.reason) << "\",\"policy_type\":\"heuristic\"}";
+              result.policyRecords.push_back(rejectedRecord.str());
               addMissed(result, decision.reason, decision.explanation,
                         caller.blocks[blockIndex].id, call.result, call.origin);
               if (decision.reason == OptimizationReasonCode::RecursiveCallee) result.statistics.add("callsRejectedRecursive");
@@ -280,6 +292,54 @@ public:
               result.statistics.add("callsRejectedUnsupported");
               continue;
             }
+            auto features = extractOptimizationFeatures(program, callee);
+            if (observedCalls != budget.observedFunctionCalls.end())
+              features.dynamicCallCount = observedCalls->second;
+            std::ostringstream candidateRecord;
+            candidateRecord << "{\"schema_version\":1,\"record_kind\":\"inline-imitation\""
+                << ",\"caller\":\"" << caller.name << "\",\"callee\":\"" << callee.name << "\""
+                << ",\"features\":" << optimizationFeaturesJson(features)
+                << ",\"estimated_inline_cost\":" << decision.estimatedCost
+                << ",\"caller_instruction_count\":" << instructionCount(caller)
+                << ",\"heuristic_action\":\"inline\",\"legality\":\"pass\"";
+            // The optional learned policy observes only a candidate that has
+            // already passed deterministic recursion, cost, budget, ABI, and
+            // CFG-entry legality checks.  A model can decline the candidate;
+            // it cannot make an illegal one legal or alter the clone itself.
+            if (profitabilityPolicy) {
+              const InlinePolicyContextV1 context{
+                  decision.estimatedCost, instructionCount(caller)};
+              const auto learned = profitabilityPolicy->decide(features, context);
+              std::ostringstream message;
+              message << "LEARNED_INLINE_DECISION: model=" << learned.modelVersion
+                      << " feature_schema=" << OptimizationFeaturesV1::kSchemaVersion
+                      << " decision=" << (learned.inlineCall ? "INLINE" : "DO_NOT_INLINE")
+                      << " confidence=" << std::fixed << std::setprecision(6)
+                      << learned.confidence << " legality=PASS";
+              result.remarks.push_back({OptimizationRemarkKind::Analysis, "learned-inline-policy",
+                                        message.str(), caller.blocks[blockIndex].id,
+                                        call.result, call.origin});
+              candidateRecord << ",\"policy_type\":\"learned\",\"model_version\":\""
+                  << policyJsonEscape(learned.modelVersion) << "\",\"model_action\":\""
+                  << (learned.inlineCall ? "inline" : "do-not-inline")
+                  << "\",\"confidence\":" << std::fixed << std::setprecision(6)
+                  << learned.confidence;
+              result.statistics.add("learnedInlineDecisions");
+              if (!learned.inlineCall) {
+                result.statistics.add("learnedInlineDeclined");
+                result.remarks.push_back({OptimizationRemarkKind::Missed, "learned-inline-policy",
+                    "LEARNED_POLICY_DECLINED: " + learned.detail,
+                    caller.blocks[blockIndex].id, call.result, call.origin});
+                candidateRecord << "}";
+                result.policyRecords.push_back(candidateRecord.str());
+                continue;
+              }
+              result.statistics.add("learnedInlineApproved");
+            } else {
+              candidateRecord << ",\"policy_type\":\"heuristic\"";
+            }
+            candidateRecord << "}";
+            result.policyRecords.push_back(candidateRecord.str());
 
             int nextBlock = 0;
             int nextValue = 0;

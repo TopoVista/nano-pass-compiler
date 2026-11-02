@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -18,6 +19,7 @@ enum class ExecutionStatus {
   Success,
   RuntimeError,
   StepLimitExceeded,
+  TimeLimitExceeded,
   RecursionLimitExceeded,
   OutputLimitExceeded,
   UnsupportedFeature,
@@ -30,6 +32,9 @@ struct ExecutionLimits {
   size_t maxCallDepth = 128;
   size_t maxOutputBytes = 1 << 20;
   size_t maxArrayElements = 1 << 20;
+  // Zero leaves the wall-clock watchdog disabled for command-line tools.
+  // Services set a finite value; both interpreters check it on every step.
+  uint64_t maxWallTimeMs = 0;
 };
 struct ExecutionResult {
   ExecutionStatus status = ExecutionStatus::Success;

@@ -19,6 +19,7 @@ class CoreInterpreter {
   ExecutionProfileSink *profile_ = nullptr;
   std::string currentFunction_;
   std::map<const CoreStmt *, std::string> profileSites_;
+  std::chrono::steady_clock::time_point started_;
 
   void indexProfileSites(const std::vector<std::unique_ptr<CoreStmt>> &statements,
                          const std::string &function, size_t &ordinal) {
@@ -48,7 +49,13 @@ class CoreInterpreter {
     result_.error = RuntimeError{std::move(category), std::move(message)};
     throw std::runtime_error("runtime stop");
   }
-  void step() { if (++result_.stepsExecuted > limits_.maxSteps) fail(ExecutionStatus::StepLimitExceeded, "step-limit", "execution step limit exceeded"); }
+  void step() {
+    if (limits_.maxWallTimeMs != 0 &&
+        std::chrono::steady_clock::now() - started_ >= std::chrono::milliseconds(limits_.maxWallTimeMs))
+      fail(ExecutionStatus::TimeLimitExceeded, "time-limit", "execution wall-clock limit exceeded");
+    if (++result_.stepsExecuted > limits_.maxSteps)
+      fail(ExecutionStatus::StepLimitExceeded, "step-limit", "execution step limit exceeded");
+  }
   bool truth(const RuntimeValue &v) {
     if (auto b=std::get_if<bool>(&v)) return *b;
     if (auto i=std::get_if<int64_t>(&v)) return *i != 0;
@@ -122,7 +129,7 @@ class CoreInterpreter {
     currentFunction_=previousFunction;--callDepth_;if(flow!=Flow::Return&&fn->returnType.kind!=LangTypeKind::Void)fail(ExecutionStatus::RuntimeError,"missing-return","non-void function returned no value");return returned.value_or(RuntimeValue{int64_t(0)});
   }
 public:
-  ExecutionResult run(const CoreProgram &program, std::string entry="main", ExecutionLimits limits={}, ExecutionProfileSink *profile=nullptr) { program_=&program;limits_=limits;result_={};callDepth_=0;profile_=profile;currentFunction_.clear();profileSites_.clear();if(profile_)for(const auto&function:program.functions){size_t ordinal=0;indexProfileSites(function.body,function.name,ordinal);}try { std::vector<RuntimeValue> none;auto value=call(entry,none);const CoreFunction*fn=nullptr;for(const auto&f:program.functions)if(f.name==entry)fn=&f;if(fn&&fn->returnType.kind!=LangTypeKind::Void)result_.returnValue=value; } catch(const std::runtime_error&) { if(result_.status==ExecutionStatus::Success) {result_.status=ExecutionStatus::InternalError;result_.error=RuntimeError{"internal","interpreter failure"};} } profile_=nullptr;currentFunction_.clear();profileSites_.clear(); return result_; }
+  ExecutionResult run(const CoreProgram &program, std::string entry="main", ExecutionLimits limits={}, ExecutionProfileSink *profile=nullptr) { program_=&program;limits_=limits;result_={};callDepth_=0;profile_=profile;currentFunction_.clear();profileSites_.clear();started_=std::chrono::steady_clock::now();if(profile_)for(const auto&function:program.functions){size_t ordinal=0;indexProfileSites(function.body,function.name,ordinal);}try { std::vector<RuntimeValue> none;auto value=call(entry,none);const CoreFunction*fn=nullptr;for(const auto&f:program.functions)if(f.name==entry)fn=&f;if(fn&&fn->returnType.kind!=LangTypeKind::Void)result_.returnValue=value; } catch(const std::runtime_error&) { if(result_.status==ExecutionStatus::Success) {result_.status=ExecutionStatus::InternalError;result_.error=RuntimeError{"internal","interpreter failure"};} } profile_=nullptr;currentFunction_.clear();profileSites_.clear(); return result_; }
 };
 
 } // namespace nanopass

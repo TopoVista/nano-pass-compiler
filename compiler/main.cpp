@@ -64,6 +64,7 @@
 #include "ir/pipeline.h"              // CoreIR, ANF, CFG pipeline
 #include "optimizer/ssa_optimizer.h"
 #include "optimizer/advanced_optimizer.h"
+#include "optimizer/learned_policy.h"
 #include "optimizer/optimization_policy.h"
 
 // ============================================================
@@ -103,6 +104,7 @@ struct Options {
     std::string telemetryOutput;
     std::string runtimeProfileOutput;
     std::string policyDecisionLog;
+    std::string learnedPolicyModel;
     std::string optimizationPolicy = "default";
     std::string diagnosticsFormat = "text";
     std::string stopAfter;    // --stop-after=<id>
@@ -173,7 +175,8 @@ void printHelp(std::ostream &out) {
         << "  -O0|-O1|-O2|-O3          Select Nano SSA optimization pipeline.\n"
         << "  --passes=<list>          Select a custom SSA pipeline for optimize.\n"
         << "  --profile=<file>         Use a versioned Nano profile for hot inline decisions.\n"
-        << "  --policy=heuristic       Select an allowlisted per-function pipeline from profile facts.\n"
+        << "  --policy=heuristic|learned  Select a bounded compiler policy.\n"
+        << "  --policy-model=<file>     JSON logistic-regression model for --policy=learned.\n"
         << "  --adaptive               Use ORC dispatch stubs and Tier-0 → Tier-1 promotion.\n"
         << "  --hot-threshold=<count> Promote a non-recursive function after this many calls.\n"
         << "  --force-tier0|--force-tier1  Deterministic adaptive-JIT test modes.\n"
@@ -262,6 +265,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
             o.policyDecisionLog = std::string(arg.substr(15));
         } else if (arg.starts_with("--policy=")) {
             o.optimizationPolicy = std::string(arg.substr(9));
+        } else if (arg.starts_with("--policy-model=")) {
+            o.learnedPolicyModel = std::string(arg.substr(15));
         } else if (arg.starts_with("--hot-threshold=")) {
             try { o.hotThreshold = std::stoull(std::string(arg.substr(16))); }
             catch (...) { err << "error: --hot-threshold requires a positive integer\n"; return false; }
@@ -346,8 +351,8 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
         err << "error: --backend must be 'ast' or 'ssa'\n";
         return false;
     }
-    if (o.optimizationPolicy != "default" && o.optimizationPolicy != "heuristic") {
-        err << "error: --policy must be 'default' or 'heuristic'\n";
+    if (o.optimizationPolicy != "default" && o.optimizationPolicy != "heuristic" && o.optimizationPolicy != "learned") {
+        err << "error: --policy must be 'default', 'heuristic', or 'learned'\n";
         return false;
     }
     if (o.optimizationPolicy != "default" && o.command != Command::Optimize) {
@@ -356,6 +361,14 @@ bool parseOptions(int argc, char **argv, Options &o, std::ostream &err) {
     }
     if (o.optimizationPolicy != "default" && !o.passes.empty()) {
         err << "error: --policy and --passes select different pipelines; choose one\n";
+        return false;
+    }
+    if (o.optimizationPolicy == "learned" && o.learnedPolicyModel.empty()) {
+        err << "error: --policy=learned requires --policy-model=<file>\n";
+        return false;
+    }
+    if (o.optimizationPolicy != "learned" && !o.learnedPolicyModel.empty()) {
+        err << "error: --policy-model requires --policy=learned\n";
         return false;
     }
     if (o.diagnosticsFormat != "text" && o.diagnosticsFormat != "json") {
@@ -964,6 +977,17 @@ int main(int argc, char **argv) {
             }
         }
 
+        std::optional<nanopass::opt::LearnedInlinePolicy> learnedInlinePolicy;
+        if (options.optimizationPolicy == "learned") {
+            std::string modelError;
+            learnedInlinePolicy = nanopass::opt::LearnedInlinePolicy::loadFile(
+                options.learnedPolicyModel, modelError);
+            if (!learnedInlinePolicy) {
+                std::cerr << "error[LEARNED_POLICY_MODEL_INVALID]: " << modelError << '\n';
+                return 1;
+            }
+        }
+
         // Preserve the subject used to make a policy decision.  The emitted
         // record may be written after optimization so its structural outcome
         // is observable, while its features always describe the original SSA.
@@ -1020,6 +1044,7 @@ int main(int argc, char **argv) {
         nanopass::SSAProgram ssaBefore;
         nanopass::opt::SSAOptimizationContext optimizationContext;
         nanopass::opt::SSAOptimizationResult optimizationResult;
+        std::vector<std::string> inlinePolicyRecords;
         std::map<std::string, PolicyDecisionObservation> policyObservations;
         std::map<std::string, bool> policyPassChanges;
         if (optimizeSSA) {
@@ -1029,7 +1054,8 @@ int main(int argc, char **argv) {
                     policyObservations.emplace(function.name, policyObservation(function));
             const bool adaptiveTier0 = options.command == Command::Jit && options.adaptiveJit;
             const bool policyDriven = options.optimizationPolicy == "heuristic";
-            const bool requestInline = !adaptiveTier0 && !policyDriven && (options.passes.empty()
+            const bool learnedPolicyDriven = options.optimizationPolicy == "learned";
+            const bool requestInline = !adaptiveTier0 && (learnedPolicyDriven || !policyDriven) && (options.passes.empty()
                 ? options.optimizationLevel >= 2
                 : options.passes.find("inline") != std::string::npos);
             if (requestInline) {
@@ -1038,10 +1064,13 @@ int main(int argc, char **argv) {
                 if (optimizationProfile)
                     for (const auto &[name, function] : optimizationProfile->functions)
                         inlineBudget.observedFunctionCalls[name] = function.calls;
-                const auto inlineResult = inliner.run(irRes.ssa, inlineBudget);
+                const auto inlineResult = inliner.run(irRes.ssa, inlineBudget, nullptr,
+                    learnedInlinePolicy ? &*learnedInlinePolicy : nullptr);
                 optimizationResult.changed |= inlineResult.changed;
                 for (const auto &[key, value] : inlineResult.statistics.counters)
                     optimizationResult.statistics.add(key, value);
+                inlinePolicyRecords.insert(inlinePolicyRecords.end(),
+                                           inlineResult.policyRecords.begin(), inlineResult.policyRecords.end());
                 optimizationContext.remarks.insert(optimizationContext.remarks.end(),
                                                   inlineResult.remarks.begin(), inlineResult.remarks.end());
                 for (const auto &function : irRes.ssa.functions) {
@@ -1169,6 +1198,14 @@ int main(int argc, char **argv) {
                                         optimizationProfile ? &*optimizationProfile : nullptr,
                                         policyObservations, std::cerr))
                 return 1;
+            if (!inlinePolicyRecords.empty()) {
+                std::ofstream out(options.policyDecisionLog, std::ios::app);
+                if (!out) { std::cerr << "error: could not append inline policy dataset\n"; return 1; }
+                const auto fingerprint = nanopass::profile::stableProgramFingerprint(*policyDecisionInput);
+                for (const auto &record : inlinePolicyRecords)
+                    out << "{\"schema_version\":1,\"program_fingerprint\":\"" << fingerprint
+                        << "\",\"record\":" << record << "}\n";
+            }
         }
 
         if (options.command == Command::Optimize ||

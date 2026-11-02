@@ -1,0 +1,65 @@
+{
+  "coefficients": [
+    -1.1874353499147114,
+    -1.4034442296632523,
+    0.0,
+    0.34822259348750323,
+    -0.2514083521080062
+  ],
+  "feature_schema_version": 1,
+  "feature_transform": "log1p",
+  "features": [
+    "instruction_count",
+    "block_count",
+    "dynamic_call_count",
+    "callee_count",
+    "estimated_inline_cost"
+  ],
+  "intercept": 3.7265650812435824,
+  "model_kind": "logistic-regression",
+  "model_version": "inline-imitation-v1",
+  "threshold": 0.5,
+  "training": {
+    "dataset_rows": 41,
+    "dataset_schema_version": 1,
+    "epochs": 400,
+    "evaluation": {
+      "test": {
+        "accuracy": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "true_negative": 7,
+        "true_positive": 2
+      },
+      "train": {
+        "accuracy": 0.8928571428571429,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.7692307692307693,
+        "true_negative": 15,
+        "true_positive": 10
+      },
+      "validation": {
+        "accuracy": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "true_negative": 3,
+        "true_positive": 1
+      }
+    },
+    "l2": 0.001,
+    "label": "heuristic-imitation",
+    "learning_rate": 0.15,
+    "split_rows": {
+      "test": 9,
+      "train": 28,
+      "validation": 4
+    },
+    "split_seed": 20261103
+  }
+}

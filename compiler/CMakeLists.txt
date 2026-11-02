@@ -323,6 +323,9 @@ endif()
       COMMAND nano_ir_tests
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
+  add_test(NAME nano_learned_policy_fuzz_smoke
+           COMMAND nano_correctness learned-fuzz --seed=20261103 --cases=32
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
   add_test(
       NAME nano_service_unit
       COMMAND nano_service_tests

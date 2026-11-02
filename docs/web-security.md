@@ -8,15 +8,26 @@ is deliberately narrow:
   field is a path, executable name, or shell fragment.
 - The HTTP decoder rejects duplicate fields, malformed JSON, unsupported JSON
   escapes, non-boolean artifact flags, and non-string custom-pass values.
-- The request reader caps HTTP input at 512 KiB and the compiler service caps
-  source at 256 KiB and lexical tokens at 50,000 before parsing.
-- Reference execution has explicit step, recursion-depth, output-size, and
-  array-size limits. Resource exhaustion is reported as such.
+- The request reader caps HTTP input at 512 KiB, applies a five-second receive
+  timeout, and the compiler service centrally caps source (256 KiB), tokens,
+  AST depth, functions, CFG blocks, SSA values, and optimization iterations.
+- Compiler timeout checks occur at safe phase boundaries. Reference execution
+  has explicit wall-clock, step, recursion-depth, output-size, and array-size
+  limits. Resource exhaustion is reported as such.
 - Custom optimization pipelines go through the C++ pass allowlist.
+- API policy selection is a closed `default|heuristic|learned` set. The service
+  never accepts a model file/path; learned inference uses a reviewed built-in,
+  schema-compatible coefficient table and may only decide an already legal
+  inline candidate.
+- Native JIT/adaptive execution is controlled by `--execution-policy`:
+  `disabled`, `interpreter-only`, or `local-trusted`. The default server binds
+  loopback; `--bind=all` is an explicit container/deployment choice.
 
-This is not yet a hardened remote execution service. Compilation is in-process
-and therefore has no independent wall-clock timeout or OS memory cgroup. A
-deployed multi-user service must place the compiler in a dedicated worker with
-process isolation, OS-level time/memory limits, authentication, origin policy,
-and rate limiting. The local browser's permissive CORS response is intentional
-for development and must be tightened before any non-loopback deployment.
+This is not a hardened remote execution service. Compilation remains in-process
+and its timeout is cooperative rather than preemptive; local-trusted JIT has
+no process sandbox. The container compose demo defaults to interpreter-only,
+non-root, read-only operation, but a deployed multi-user service must still
+place compilation in a dedicated worker with OS-level CPU/memory limits,
+authentication, origin policy, and rate limiting. The local browser's
+permissive CORS response is intentional for development and must be tightened
+before any non-loopback deployment. See [the threat model](threat-model.md).

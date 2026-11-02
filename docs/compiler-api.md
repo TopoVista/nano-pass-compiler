@@ -12,7 +12,7 @@ cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
   -DNANO_BUILD_JIT=ON -DNANO_BUILD_WEB_SERVER=ON
 cmake --build build --target nano-server
-./build/compiler/nano-server --port=8080
+./build/compiler/nano-server --port=8080 --execution-policy=local-trusted
 ```
 
 The service binds only to `127.0.0.1`. It is intended for the local Compiler
@@ -27,6 +27,7 @@ Every request and response has `schemaVersion`. Version 1 requests use:
   "schemaVersion": 1,
   "source": "int main() { print(7); return 7; }",
   "optimizationLevel": 2,
+  "policy": "learned",
   "passes": ["sccp", "dce"],
   "includeSsa": true,
   "includeOptimizedSsa": true,
@@ -38,7 +39,9 @@ Every request and response has `schemaVersion`. Version 1 requests use:
 }
 ```
 
-`optimizationLevel` is `0` through `3`. A custom `passes` array is validated
+`optimizationLevel` is `0` through `3`. `policy` is the closed set `default`,
+`heuristic`, or `learned`; the latter uses a reviewed built-in model and never
+accepts a client file path. A custom `passes` array is validated
 against the compiler's finite SSA-pass allowlist; it is never interpreted as a
 command. Requested artifacts are opt-in to keep small live-edit requests
 cheap.
@@ -48,6 +51,7 @@ cheap.
 | Method | Route | Result |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | local service and schema status |
+| `GET` | `/api/v1/readiness` | initialized compiler runtime, LLVM version, and execution policy |
 | `POST` | `/api/v1/compile` | checked pipeline and requested artifacts |
 | `POST` | `/api/v1/analyze` | compile plus CFG, dominator, loop, call-graph, and provenance artifacts |
 | `POST` | `/api/v1/optimize` | compile plus optimized SSA, telemetry, and optimization remarks |
@@ -62,6 +66,11 @@ provenance, policy feature vectors, and aggregate telemetry. A run response
 additionally reports stdout, stderr, return value, resource/runtime status,
 optional runtime profile, structured adaptive-JIT events, and dynamic policy
 features.
+
+Learned/heuristic inline requests additionally expose `policyRecords`: factual
+candidate features, heuristic action, policy type/model version, confidence
+when applicable, and legality. A confidence value is a profitability estimate,
+not a correctness assertion.
 
 The pass timeline begins with measured `lex`, `parse`, `resolve`, and
 `type-check` frontend events, followed by the measured Core→ANF→CFG→SSA

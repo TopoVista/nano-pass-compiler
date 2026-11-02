@@ -50,6 +50,7 @@
 #include "ir/ssa/ssa_verifier.h"
 #include "optimizer/ssa_optimizer.h"
 #include "optimizer/advanced_optimizer.h"
+#include "optimizer/learned_policy.h"
 #include "optimizer/optimization_policy.h"
 #include "interpreter/core_interpreter.h"
 #include "interpreter/ssa_interpreter.h"
@@ -1435,6 +1436,18 @@ static void test_policy_features_and_hotness_are_stable() {
     const auto decisionJson=optimizationPolicyDecisionJson(record);ASSERT(decisionJson.find("\"decision_type\":\"pipeline\"")!=std::string::npos);ASSERT(decisionJson.find("\"reason\":\"HOT_FUNCTION_CALL_COUNT\"")!=std::string::npos);
 }
 
+static void test_learned_inline_policy_is_schema_checked_and_verifier_gated() {
+    const std::string modelJson=R"({"model_kind":"logistic-regression","model_version":"inline-imitation-v1","feature_schema_version":1,"feature_transform":"log1p","features":["instruction_count","block_count","dynamic_call_count","callee_count","estimated_inline_cost"],"intercept":3.0,"coefficients":[-0.3,-0.2,0.0001,0.0,-1.2],"threshold":0.5})";
+    std::string error;std::istringstream input(modelJson);auto model=LearnedInlinePolicy::loadJson(input,error);ASSERT(model.has_value());if(!model)return;
+    OptimizationFeaturesV1 features;features.instructionCount=2;features.blockCount=1;features.dynamicCallCount=100;
+    const auto approved=model->decide(features,{4,8});ASSERT(approved.inlineCall);ASSERT(approved.confidence>0.5);ASSERT_EQ(approved.modelVersion,"inline-imitation-v1");
+    const auto declined=model->decide(features,{32,8});ASSERT(!declined.inlineCall);ASSERT(declined.confidence<0.5);
+    std::istringstream incompatible(R"({"model_kind":"logistic-regression","model_version":"bad","feature_schema_version":99,"features":[],"intercept":0,"coefficients":[],"threshold":0.5})");ASSERT(!LearnedInlinePolicy::loadJson(incompatible,error).has_value());
+    auto result=compileToIR(R"(int helper(int x){return x+1;}int main(){return helper(4);})");SSAProgram program=result.ssa;
+    auto outcome=SSAProgramInliner{}.run(program,{},nullptr,&*model);ASSERT(outcome.changed);ASSERT(outcome.statistics.get("learnedInlineApproved")>0u);ASSERT(std::any_of(outcome.remarks.begin(),outcome.remarks.end(),[](const auto&remark){return remark.passId=="learned-inline-policy"&&remark.message.find("legality=PASS")!=std::string::npos;}));for(const auto&function:program.functions)ASSERT(verifySSA(function).ok);ASSERT(sameObservableResult(CoreInterpreter{}.run(result.core),SSAInterpreter{}.run(program)));
+    auto large=compileToIR(R"(int helper(int x){return x+1;}int main(){return helper(4);})");OptimizationBudget relaxed;relaxed.maxInlineCalleeInstructions=100;relaxed.maxCallerGrowth=100;relaxed.maxTotalInlineGrowth=100;const std::string declineJson=R"({"model_kind":"logistic-regression","model_version":"decline-v1","feature_schema_version":1,"feature_transform":"log1p","features":["instruction_count","block_count","dynamic_call_count","callee_count","estimated_inline_cost"],"intercept":-10.0,"coefficients":[0,0,0,0,0],"threshold":0.5})";std::istringstream declineInput(declineJson);auto declineModel=LearnedInlinePolicy::loadJson(declineInput,error);ASSERT(declineModel.has_value());auto rejected=SSAProgramInliner{}.run(large.ssa,relaxed,nullptr,&*declineModel);ASSERT(!rejected.changed);ASSERT(rejected.statistics.get("learnedInlineDeclined")>0u);for(const auto&function:large.ssa.functions)ASSERT(verifySSA(function).ok);
+}
+
 static void test_ssa_retains_inner_scalar_memory_metadata() {
     auto result=compileToIR(R"(int f(int n){int i=0;while(i<n){int j=0;while(j<n){j=j+1;}i=i+1;}return i;}int main(){return f(2);})");
     const auto function=std::find_if(result.ssa.functions.begin(),result.ssa.functions.end(),[](const SSAFunction&candidate){return candidate.name=="f";});
@@ -1583,6 +1596,7 @@ int main() {
     RUN_TEST(test_ssa_runtime_profile_is_deterministic_serializable_and_compatible);
     RUN_TEST(test_profile_guided_inline_remains_verifier_gated);
     RUN_TEST(test_policy_features_and_hotness_are_stable);
+    RUN_TEST(test_learned_inline_policy_is_schema_checked_and_verifier_gated);
     RUN_TEST(test_ssa_retains_inner_scalar_memory_metadata);
     RUN_TEST(test_differential_execution_regression_corpus);
     RUN_TEST(test_differential_runner_and_deterministic_generator);

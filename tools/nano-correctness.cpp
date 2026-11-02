@@ -1,3 +1,4 @@
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -69,11 +70,20 @@ static MalformedCommandOptions parseMalformedOptions(int argc, char **argv, int 
   return parsed;
 }
 int main(int argc,char **argv) {
-  if(argc<2){std::cerr<<"usage: nano-correctness interpret|differential <file> | differential-custom <file> <pass,...> | fuzz [--seed=N] [--cases=N] [--max-depth=N] [--max-statements=N] [--max-functions=N] [--max-call-depth=N] [--max-loop-nesting=N] [--max-source-bytes=N] [--save-failures=dir] | malformed-fuzz [--seed=N] [--cases=N] | generate [seed] [case]\n";return 2;}
+  if(argc<2){std::cerr<<"usage: nano-correctness interpret|differential <file> | differential-custom <file> <pass,...> | fuzz|learned-fuzz [--seed=N] [--cases=N] [--max-depth=N] [--max-statements=N] [--max-functions=N] [--max-call-depth=N] [--max-loop-nesting=N] [--max-source-bytes=N] [--save-failures=dir] | malformed-fuzz [--seed=N] [--cases=N] | generate [seed] [case]\n";return 2;}
   try {
     const std::string command=argv[1];
     if(command=="generate"){GeneratorOptions options;options.seed=argc>2?std::stoull(argv[2]):42;options.maxDepth=3;std::cout<<NanoProgramGenerator(options).generate(argc>3?std::stoull(argv[3]):0).source;return 0;}
     if(command=="fuzz"){const auto options=parseFuzzOptions(argc,argv,2);auto summary=DifferentialFuzzRunner{}.run(options.generator,options.cases,options.failures);std::cout<<fuzzSummaryJson(summary)<<"\n";return summary.mismatches||summary.crashes?1:0;}
+    if(command=="learned-fuzz"){
+      const auto options=parseFuzzOptions(argc,argv,2); const auto started=std::chrono::steady_clock::now();
+      NanoProgramGenerator generator(options.generator); DifferentialRunner differential;
+      size_t generated=0,valid=0,rejected=0,compared=0,mismatches=0,crashes=0,timeouts=0,decisions=0,applied=0;
+      for(size_t index=0;index<options.cases;++index){const auto program=generator.generate(index);++generated;const auto result=differential.runLearnedInline(program.source);if(!result.compiled){if(result.diagnostic.starts_with("internal compiler error")||result.diagnostic.starts_with("learned policy produced"))++crashes;else ++rejected;continue;}++valid;decisions+=result.learnedDecisions;applied+=result.learnedApplied;const auto timed=[](ExecutionStatus status){return status==ExecutionStatus::StepLimitExceeded||status==ExecutionStatus::TimeLimitExceeded||status==ExecutionStatus::RecursionLimitExceeded;};if(timed(result.reference.status)||(!result.levels.empty()&&timed(result.levels.front().execution.status))){++timeouts;continue;}++compared;if(!result.equivalent)++mismatches;}
+      const auto duration=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-started).count();
+      std::cout<<"{\"schema_version\":1,\"policy\":\"learned-inline-imitation-v1\",\"seed\":"<<options.generator.seed<<",\"generated\":"<<generated<<",\"valid\":"<<valid<<",\"rejected\":"<<rejected<<",\"compared\":"<<compared<<",\"learned_decisions\":"<<decisions<<",\"inlines_applied\":"<<applied<<",\"mismatches\":"<<mismatches<<",\"crashes\":"<<crashes<<",\"timeouts\":"<<timeouts<<",\"duration_us\":"<<duration<<"}\n";
+      return mismatches||crashes?1:0;
+    }
     if(command=="malformed-fuzz"){const auto options=parseMalformedOptions(argc,argv,2);auto summary=MalformedInputFuzzRunner{}.run(options.seed,options.cases);std::cout<<"{\"seed\":"<<summary.seed<<",\"generated\":"<<summary.generated<<",\"rejected\":"<<summary.rejected<<",\"accepted\":"<<summary.accepted<<",\"crashes\":"<<summary.crashes<<"}\n";return summary.crashes?1:0;}
     if(argc<3){std::cerr<<"missing source file\n";return 2;}auto source=readFile(argv[2]);
     if(command=="interpret"){auto ir=buildIRForDifferential(source);auto executed=CoreInterpreter{}.run(ir.core);std::cout<<executed.stdoutText;if(executed.returnValue)std::cout<<"return "<<runtimeValueText(*executed.returnValue)<<"\n";return executed.status==ExecutionStatus::Success?0:1;}

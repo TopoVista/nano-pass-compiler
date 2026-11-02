@@ -34,7 +34,7 @@ public:
     return summary;
   }
 private:
-  static bool isLimit(ExecutionStatus status) { return status==ExecutionStatus::StepLimitExceeded||status==ExecutionStatus::OutputLimitExceeded; }
+  static bool isLimit(ExecutionStatus status) { return status==ExecutionStatus::StepLimitExceeded||status==ExecutionStatus::TimeLimitExceeded||status==ExecutionStatus::OutputLimitExceeded||status==ExecutionStatus::RecursionLimitExceeded; }
   static bool unsupported(const DifferentialResult &result) { if(result.reference.status==ExecutionStatus::UnsupportedFeature)return true;return std::any_of(result.levels.begin(),result.levels.end(),[](const auto &level){return level.execution.status==ExecutionStatus::UnsupportedFeature;}); }
   static bool limited(const DifferentialResult &result) { if(isLimit(result.reference.status))return true;return std::any_of(result.levels.begin(),result.levels.end(),[](const auto &level){return isLimit(level.execution.status);}); }
   static void countFeatures(FuzzSummary &summary,const GeneratedFeatures &features) { summary.arithmetic+=features.arithmetic;summary.comparisons+=features.comparisons;summary.conditionals+=features.conditionals;summary.loops+=features.loops;summary.functions+=features.functions;summary.nestedCalls+=features.nestedCalls;summary.mutableLocals+=features.mutableLocals;summary.returns+=features.returns; }

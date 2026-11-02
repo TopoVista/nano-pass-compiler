@@ -53,7 +53,7 @@ struct SSAOptimizationPassTelemetry {
   long long durationUs = 0;
   SSAOptimizationStatistics statistics;
 };
-struct SSAOptimizationResult { bool changed=false; bool cfgChanged=false; SSAOptimizationStatistics statistics; std::vector<OptimizationRemark> remarks; std::vector<SSAOptimizationPassTelemetry> telemetry; };
+struct SSAOptimizationResult { bool changed=false; bool cfgChanged=false; SSAOptimizationStatistics statistics; std::vector<OptimizationRemark> remarks; std::vector<SSAOptimizationPassTelemetry> telemetry; std::vector<std::string> policyRecords; };
 struct SSAOptimizationOptions { bool verifyAfterPass=true; bool verboseRemarks=false; };
 struct SSAOptimizationContext { SSAOptimizationOptions options; std::vector<OptimizationRemark> remarks; };
 
@@ -430,5 +430,5 @@ inline const std::array<SSAOptimizationPassInfo, 8> &availablePasses() {
   }};
   return passes;
 }
-inline SSAOptimizationPipeline buildPipeline(int level){SSAOptimizationPipeline p;if(level<=0)return p;auto add=[&](std::initializer_list<const char*> ids){for(auto id:ids)p.add(makePass(id));};if(level==1)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});else{add({"sccp","simplify-cfg","constant-fold","algebraic-simplify","copy-prop","trivial-phi","cse","dce","simplify-cfg","trivial-phi","dce"});if(level>=3)p.repeatUntilStable(4);}return p;}
+inline SSAOptimizationPipeline buildPipeline(int level, size_t maxIterations = 4){SSAOptimizationPipeline p;if(level<=0)return p;auto add=[&](std::initializer_list<const char*> ids){for(auto id:ids)p.add(makePass(id));};if(level==1)add({"constant-fold","algebraic-simplify","copy-prop","trivial-phi","dce"});else{add({"sccp","simplify-cfg","constant-fold","algebraic-simplify","copy-prop","trivial-phi","cse","dce","simplify-cfg","trivial-phi","dce"});if(level>=3)p.repeatUntilStable(std::max<size_t>(1, maxIterations));}return p;}
 } // namespace nanopass::opt

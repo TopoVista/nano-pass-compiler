@@ -7,6 +7,7 @@
 #include "ir/pipeline.h"
 #include "lexer/lexer.h"
 #include "optimizer/ssa_optimizer.h"
+#include "optimizer/advanced_optimizer.h"
 #include "parser/parser.h"
 #include "passes/PassContext.h"
 #include "passes/PassManager.h"
@@ -28,6 +29,8 @@ struct DifferentialResult {
   ExecutionResult reference;
   std::vector<DifferentialLevelResult> levels;
   bool equivalent = false;
+  size_t learnedDecisions = 0;
+  size_t learnedApplied = 0;
 };
 
 struct DifferentialCustomPipeline {
@@ -101,6 +104,34 @@ public:
       result.levels.push_back({-1,pipeline.name+":"+pipelineName(pipeline.passIds),execution,sameObservableResult(result.reference,execution)});
       result.equivalent=result.levels.front().equivalent;
     } catch(const std::exception &error) { result.diagnostic=error.what(); }
+    return result;
+  }
+  // The learned policy changes only profitability.  It is deliberately run
+  // before the normal O2 cleanup pipeline so a fuzz campaign covers both the
+  // policy gate and all deterministic transformations it may expose.
+  DifferentialResult runLearnedInline(const std::string &source,
+                                      ExecutionLimits limits={}) const {
+    DifferentialResult result;
+    try {
+      auto ir = buildIRForDifferential(source); result.compiled = true;
+      result.reference = CoreInterpreter{}.run(ir.core, "main", limits);
+      SSAProgram candidate = ir.ssa;
+      opt::SSAAnalysisManager analyses;
+      const auto policy = opt::LearnedInlinePolicy::builtinInlineImitationV1();
+      const auto inlineResult = opt::SSAProgramInliner{}.run(candidate, {}, &analyses, &policy);
+      result.learnedDecisions = inlineResult.statistics.get("learnedInlineDecisions");
+      result.learnedApplied = inlineResult.statistics.get("callsInlined");
+      for (auto &function : candidate.functions) {
+        opt::SSAOptimizationContext context;
+        opt::buildPipeline(2).run(function, context);
+        const auto verified = verifySSA(function);
+        if (!verified.ok) throw std::runtime_error("learned policy produced invalid SSA");
+      }
+      const auto execution = SSAInterpreter{}.run(candidate, "main", limits);
+      result.levels.push_back({2, "O2+learned-inline", execution,
+                               sameObservableResult(result.reference, execution)});
+      result.equivalent = result.levels.front().equivalent;
+    } catch (const std::exception &error) { result.diagnostic = error.what(); }
     return result;
   }
 };
