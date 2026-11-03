@@ -27,6 +27,8 @@
 |---|---|---|---|---|
 | Select/Listbox | Native selects in `App.tsx` | browser control + accessible label | stage, graph, policy, example | unit + E2E |
 | Source input | Monaco `SourceEditor` | component props/API | code editing | unit + browser |
+| Source tools | Workbench source header | deterministic local formatter / Nano generator | format source, generate program | unit + browser |
+| Compiler terminal | `TerminalPane` | compile/run response | verifier, diagnostics, program output | unit + browser |
 | Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph | unit + E2E |
 | Diagnostics/remarks | `Panels.tsx` | compiler response | applied/missed/analysis | unit |
 | Scrollbar | `web/src/styles.css` | runtime CSS tokens | geometry only | browser |
@@ -38,11 +40,13 @@
 | Live compile | Debounced source/options change | status text and disabled run controls | verified compiler duration when available | structured diagnostics remain visible |
 | Run mode | Named native button | busy controls | runtime/profile output | API result shows explicit unavailable/error status |
 | IR/graph inspection | Labeled select or graph node | none | selected IR/block is highlighted | retain last valid compilation |
+| Explain representation | Plain-language guide beneath IR | selected compiler snapshot and SSA value | explanation updates with stage/value | state remains useful with no selection |
+| Generate program | Generate program button | none | a deterministic language-valid program is inserted | user can edit/regenerate it |
 | Share session | Share session button | none | URL fragment + clipboard when available | URL fragment remains the durable fallback |
 
 ## Navigation and responsive behavior
 
-The desktop shell keeps source, representation, and inspector visible. At narrow widths it stacks the same panels in compiler-flow order. Every visible action is a semantic button or labeled native select, with a keyboard focus ring.
+Workbench (`/lab`), Guide (`/guide`), Graphs (`/graphs`), and Optimizations (`/optimizations`) are route-level views. The desktop workbench keeps source, representation, and inspector visible. At narrow widths it stacks the same panels in compiler-flow order. Every visible action is a semantic button or labeled native select, with a keyboard focus ring.
 
 ## Async and resilience
 

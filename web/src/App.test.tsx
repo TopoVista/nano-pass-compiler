@@ -33,15 +33,22 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByLabelText('Move dce earlier'));
     expect(screen.getByLabelText('Move dce earlier')).toBeDisabled();
   });
-  it('formats source and opens a real field-guide example', async () => {
+  it('formats source and can generate a valid-looking NanoPass C program', async () => {
     render(<App />);
     const editor = screen.getByLabelText('Nano source editor');
     fireEvent.change(editor, { target: { value: 'int main(){return 0;}' } });
     fireEvent.click(screen.getByRole('button', { name: 'Format source' }));
     expect(editor).toHaveValue('int main() {\n  return 0;\n}');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate program' }));
+    expect((editor as HTMLTextAreaElement).value).toContain('i32 main()');
+  });
+  it('serves the field guide from its own route', async () => {
+    window.history.pushState({}, '', '/guide');
+    render(<App />);
+    expect(screen.getByText(/A compiler lab, not a black box/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: /control flow/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open CFG' }));
-    expect(screen.getByLabelText('Example program')).toHaveValue('Nested loops');
+    expect(screen.getByRole('button', { name: 'Open CFG' })).toBeInTheDocument();
+    window.history.pushState({}, '', '/lab');
   });
   it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
     render(<App />);
@@ -50,9 +57,9 @@ describe('compiler lab', () => {
     await waitFor(() => expect(screen.getByText('tier1_installed')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'check correctness' }));
     await waitFor(() => expect(screen.getByText(/PASS · CoreIR/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Compare O0–O3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Compare O-levels' }));
     await waitFor(() => expect(screen.getByText('compiler measurements')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Measure source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Benchmark' }));
     await waitFor(() => expect(screen.getByText('execution median')).toBeInTheDocument());
   });
 });

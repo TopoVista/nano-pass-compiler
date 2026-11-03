@@ -20,7 +20,8 @@ export function FeatureTour({ onExample, onStage, onGraph }: Props) {
     onExample(selected.example);
     if (selected.stage) onStage(selected.stage);
     if (selected.graph) onGraph(selected.graph);
-    document.getElementById('compiler-workspace')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    // Guide is intentionally a separate endpoint; open the live workbench next.
+    window.location.assign('/lab');
   };
   return <section className="feature-tour" id="feature-tour" aria-labelledby="feature-tour-title">
     <div className="feature-intro">

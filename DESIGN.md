@@ -3,11 +3,12 @@ version: alpha
 name: "NanoPass Compiler Lab"
 description: "A dense, inspectable compiler workbench whose visual hierarchy follows program flow and compiler facts."
 colors:
-  primary: "#4F8DFF"
-  canvas: "#070A0D"
-  surface: "#0F151B"
-  surfaceRaised: "#151D25"
-  border: "#26323D"
+  primary: "#5AA7FF"
+  secondary: "#47DFAD"
+  canvas: "#07111E"
+  surface: "#0C1826"
+  surfaceRaised: "#101F31"
+  border: "#1E3348"
   text: "#EDF2F4"
   muted: "#8E9DAA"
   wire: "#4F8DFF"
@@ -16,7 +17,7 @@ colors:
   danger: "#FF7784"
 typography:
   sans:
-    fontFamily: "Segoe UI Variable, Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Helvetica Neue, Arial, sans-serif"
   mono:
     fontFamily: "Cascadia Mono, SFMono-Regular, Consolas, monospace"
 rounded:
@@ -37,7 +38,7 @@ components:
 
 ### Creative North Star
 
-The lab is a **compiler signal plane**: a dark workstation inspired by visual code/workflow builders, where real compiler stages read as connected technical instruments rather than generic analytics cards. The central graph and IR panels carry the visual energy; the rest of the interface remains deliberately quiet.
+The lab is a **compiler signal plane**: a calm, Apple-system UI around deliberately high-contrast technical instruments. Real compiler stages read as an observable sequence rather than generic dashboard cards. The IR and graph canvases carry the visual energy; the rest of the interface remains deliberately quiet.
 
 ### Product context and register
 
@@ -46,18 +47,18 @@ The lab is a **compiler signal plane**: a dark workstation inspired by visual co
 - **Locale(s) and language policy:** English only at present. No Japan-market or Japanese-locale behavior is inferred.
 - **Usage scene:** A desktop-first, sustained technical workbench. A narrower layout stacks panels without losing controls.
 - **Register:** Product. Task clarity, signal density, keyboard access, and observable compiler truth outweigh decorative branding.
-- **Memorable signature:** Electric-blue graph wires and block outlines act as a visual trace through the compiler; green is reserved for successful verifier/runtime facts. The Field Guide uses one editorial headline to introduce a real interactive compiler journey.
+- **Memorable signature:** Primary blue represents structural relationships and selection, a cooler blue secondary supports machine surfaces, and mint is reserved for verified/successful facts. The Guide is a separate route that introduces a real interactive compiler journey.
 - **Restraint:** No simulated metrics, ornamental hero, fake data, or strong shadows around every surface.
 - **Anti-references:** Neon cyberpunk dashboards, generic SaaS metric-card grids, and terminal parody interfaces.
 - **Token ownership/runtime mapping:** Existing runtime CSS is canonical. This file mirrors the exact variables in `web/src/styles.css`; panels, graph nodes, actions, and scrollbar surfaces consume those variables directly.
 
 ## Colors
 
-`canvas` and `surface` establish a near-black instrument panel. `wire` is exclusively for IR selection, graph structure, and focus. `signal` only signifies verified/successful execution facts. Warning and danger retain textual labels and icons; color is never their sole meaning.
+`canvas` and `surface` establish a deep blue-black instrument panel. Primary blue is exclusively for IR selection, graph structure, and focus; mint signifies verified/successful execution facts. Warning and danger retain textual labels and icons; color is never their sole meaning.
 
 ## Typography
 
-The local system UI font carries labels, navigation, and readable technical summaries without a third-party font request. Cascadia Mono (with system fallbacks) is restricted to identifiers, IR, timings, revision metadata, and graph-adjacent facts. Uppercase micro-labels describe source/type/status. A large headline is reserved for the Field Guide only, where it introduces an actual interactive task rather than decorative marketing copy.
+The Apple system font stack carries labels, navigation, and readable technical summaries without a third-party font request. SF Mono/Cascadia Mono (with system fallbacks) is restricted to identifiers, IR, timings, revision metadata, and graph-adjacent facts. Uppercase micro-labels describe source/type/status. A large headline is reserved for the Guide route only, where it introduces an actual interactive task rather than decorative marketing copy.
 
 ## Layout
 
@@ -83,7 +84,7 @@ The green Run SSA action is the only dominant action. Neutral controls remain gr
 
 ### Navigation and data display
 
-The top bar establishes the workbench identity. The inspector owns SSA provenance and optimization explanations. The pass rail reflects compiler order rather than repeating card chrome. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR. The Field Guide buttons open real examples and stage/graph views.
+The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal owns factual compile/run feedback; the inspector owns SSA provenance and plain-language representation explanations. The pass rail reflects compiler order with proportional duration marks. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
 
 ### Motion
 

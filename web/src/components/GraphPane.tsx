@@ -35,10 +35,14 @@ function arrange(graph: Graph): Map<string, { x: number; y: number }> {
 
 export function GraphPane({ graph, profile, selectedBlock, onSelect }: Props) {
   if (!graph) return <section className="empty graph-empty">Compile an example to inspect its structured compiler graphs.</section>;
+  if (graph.nodes.length === 0) return <section className="empty graph-empty"><strong>No nodes in this view yet.</strong><p>This program has no emitted {graph.kind.replace('-', ' ')} nodes for the selected function. Choose CFG, or compile an example with branching or a loop.</p></section>;
   const functionProfile = profile?.functions?.[graph.function];
   const hottestBlock = Math.max(0, ...Object.values(functionProfile?.block_counts ?? {}));
   const position = arrange(graph);
   const nodes: Node[] = graph.nodes.map((node) => { const match = /:bb(\d+)$/.exec(node.id); const count = match ? functionProfile?.block_counts?.[match[1]] ?? 0 : 0; const hot = hottestBlock > 0 && count * 2 >= hottestBlock; const suffix = count ? `${count} executions` : node.metadata?.instructions ? `${node.metadata.instructions} instructions` : node.metadata?.depth ? `depth ${node.metadata.depth}` : graph.kind; return { id: node.id, position: position.get(node.id)!, data: { label: <div><strong>{node.label}</strong><small>{suffix}</small></div> }, className: `${selectedBlock !== undefined && node.id.endsWith(`bb${selectedBlock}`) ? 'selected ' : ''}${hot ? 'hot ' : ''}flow-node` }; });
   const edges: Edge[] = graph.edges.map((edge, index) => { const from = /:bb(\d+)$/.exec(edge.from)?.[1]; const to = /:bb(\d+)$/.exec(edge.to)?.[1]; const count = from && to ? functionProfile?.edge_counts.find((item) => item.from === Number(from) && item.to === Number(to))?.count : undefined; return { id: `${edge.from}-${edge.to}-${index}`, source: edge.from, target: edge.to, label: count ? `${count}` : edge.kind === 'cfg' ? undefined : edge.kind, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, animated: false }; });
-  return <section className="graph-canvas" aria-label={`${graph.kind} graph`}><ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{ padding: .22 }} onNodeClick={(_, node) => onSelect(node.id)} nodesDraggable={false} nodesConnectable={false} elementsSelectable><Background gap={20} size={1} /><Controls showInteractive={false} /></ReactFlow></section>;
+  return <section className="graph-canvas" aria-label={`${graph.kind} graph`}>
+    <div className="graph-facts"><span><b>{graph.nodes.length}</b> blocks</span><span><b>{graph.edges.length}</b> edges</span><span className="graph-legend"><i /> selected <i className="hot" /> hot path</span></div>
+    <ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{ padding: .22 }} onNodeClick={(_, node) => onSelect(node.id)} nodesDraggable={false} nodesConnectable={false} elementsSelectable><Background gap={20} size={1} /><Controls showInteractive={false} /></ReactFlow>
+  </section>;
 }

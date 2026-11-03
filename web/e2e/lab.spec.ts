@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('inspects compiler stages, graphs, execution profile, and adaptive events', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText(/verified ·/)).toBeVisible();
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await expect(page.getByLabel('Compiler revision')).toHaveText('0.3.0+phase11-dev');
 
   await page.getByLabel('IR stage').selectOption('ssa');
@@ -19,7 +19,7 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await expect(page.getByText(/^\d+ calls$/)).toBeVisible();
 
   await page.getByLabel('Example program').selectOption('Adaptive JIT');
-  await expect(page.getByText(/verified ·/)).toBeVisible();
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByRole('button', { name: 'adaptive-jit', exact: true }).click();
   await expect(page.getByText('Adaptive JIT events')).toBeVisible();
 });
