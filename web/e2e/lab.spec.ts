@@ -5,6 +5,11 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await expect(page.locator('.compile-status')).toContainText('verified');
   await expect(page.getByLabel('Compiler revision')).toHaveText('0.3.0+phase11-dev');
 
+  const terminalCommand = page.getByRole('textbox', { name: 'Terminal command' });
+  await terminalCommand.fill('verify');
+  await terminalCommand.press('Enter');
+  await expect(page.getByText(/PASS · 1 function/)).toBeVisible();
+
   await page.getByLabel('IR stage').selectOption('ssa');
   await expect(page.getByLabel('IR viewer')).toContainText('func @main');
   await page.getByRole('button', { name: /Nano SSA Optimization @main/ }).click();

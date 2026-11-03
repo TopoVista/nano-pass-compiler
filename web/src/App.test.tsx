@@ -53,6 +53,15 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate program' }));
     expect((editor as HTMLTextAreaElement).value).toContain('i32 main()');
   });
+  it('offers a distraction-free source and terminal focus mode', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Focus' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Focus' }));
+    expect(document.getElementById('compiler-workspace')).toHaveClass('editor-focus');
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
+    expect(document.getElementById('compiler-workspace')).not.toHaveClass('editor-focus');
+  });
   it('serves the field guide from its own route', async () => {
     window.history.pushState({}, '', '/guide');
     render(<App />);

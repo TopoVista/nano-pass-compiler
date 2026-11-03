@@ -62,7 +62,7 @@ The Apple system font stack carries labels, navigation, and readable technical s
 
 ## Layout
 
-Desktop layout uses a source column, a dominant representation/graph canvas, and an inspector column. The pass timeline bridges those regions as a real compiler sequence. At 1080px the two main columns remain intact; at 800px the panels stack in compiler-flow order. Every scrollable region keeps a visible, tokenized scrollbar.
+Desktop layout uses a source column, a dominant representation/graph canvas, and an inspector column. The pass timeline bridges those regions as a real compiler sequence. The source header exposes a Focus mode for sustained editing: it expands the source editor and its compiler terminal into the full workbench without changing source or compiler state. At 1080px the two main columns remain intact; at 800px the panels stack in compiler-flow order. Every scrollable region keeps a visible, tokenized scrollbar.
 
 ## Elevation & Depth
 
@@ -84,7 +84,7 @@ The green Run SSA action is the only dominant action. Neutral controls remain gr
 
 ### Navigation and data display
 
-The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal uses a VS Code-like command-reference strip and only renders command output assembled from compiler responses. The inspector owns SSA provenance and a compact plain-language representation explanation. The pass rail reflects compiler order with proportional duration marks. Proof, benchmark, and policy panels use visible paths, samples, and gates derived from actual state; they never substitute decorative charts for missing data. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
+The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal uses a VS Code-like command prompt, a command reference strip, and only renders command output assembled from compiler responses; it is deliberately not an operating-system shell. The inspector owns SSA provenance and a compact plain-language representation explanation. The pass rail reflects compiler order with proportional duration marks. Proof, benchmark, and policy panels use visible paths, samples, and gates derived from actual state; they never substitute decorative charts for missing data. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
 
 ### Motion
 

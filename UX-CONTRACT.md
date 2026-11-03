@@ -28,6 +28,7 @@
 | Select/Listbox | Native selects in `App.tsx` | browser control + accessible label | stage, graph, policy, example | unit + E2E |
 | Source input | Monaco `SourceEditor` | component props/API | code editing | unit + browser |
 | Source tools | Workbench source header | deterministic local formatter / Nano generator | format source, generate program | unit + browser |
+| Focus mode | Workbench source header | local workbench state | expand/restore source + terminal | unit + browser |
 | Compiler terminal | `TerminalPane` | compile/run response | verifier, diagnostics, program output | unit + browser |
 | Terminal command reference | `TerminalPane` tabs | documented CLI surface + compile response | verify, emit SSA, explain, optimize, learned policy | unit + browser |
 | Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph | unit + E2E |
@@ -43,6 +44,8 @@
 | IR/graph inspection | Labeled select or graph node | none | selected IR/block is highlighted | retain last valid compilation |
 | Explain representation | Plain-language guide beneath IR | selected compiler snapshot and SSA value | explanation updates with stage/value | state remains useful with no selection |
 | Generate program | Generate program button | none | a deterministic language-valid program is inserted | user can edit/regenerate it |
+| Focus editor | Focus / Restore button | none | source editor and terminal occupy the workbench | restores the prior artifact layout without losing source |
+| Terminal command | command prompt or suggestion | command is evaluated against a strict compiler-command allowlist | compiler response is appended to terminal history | unknown commands are rejected; no shell is available |
 | Visual evidence | correctness, benchmark, and policy panels | checked results / local measurements / compiler records | run or measure CTA when data is absent | never display invented metrics |
 | Share session | Share session button | none | URL fragment + clipboard when available | URL fragment remains the durable fallback |
 

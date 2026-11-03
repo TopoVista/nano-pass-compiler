@@ -37,7 +37,16 @@ const examples: Record<string, string> = {
   Factorial:
     "int fact(int n) { if (n <= 1) { return 1; } return n * fact(n - 1); }\nint main() { int n = 5; print(fact(n)); return 0; }",
   "SCCP branch":
-    "int main() { int x = 4; if (true) { x = x + 3; } else { x = 99; } print(x); return x; }",
+    `int main() {
+  int x = 4;
+  if (true) {
+    x = x + 3;
+  } else {
+    x = 99;
+  }
+  print(x);
+  return x;
+}`,
   LICM: "int main() { int i = 0; int total = 0; while (i < 4) { total = total + 2 * 3; i = i + 1; } print(total); return total; }",
   Inlining:
     "int choose(int x) { if (x > 0) { return 7; } return 3; }\nint main() { int y = choose(1); print(y); return y; }",
@@ -163,6 +172,7 @@ export default function App() {
   const [benchmark, setBenchmark] = useState<BenchmarkMeasurement>();
   const [busy, setBusy] = useState(false);
   const [executionStep, setExecutionStep] = useState(0);
+  const [editorExpanded, setEditorExpanded] = useState(false);
   const options = useMemo(
     () => ({
       source,
@@ -490,7 +500,7 @@ export default function App() {
     </section>
   );
   const workspace = (
-    <section className="workspace" id="compiler-workspace">
+    <section className={`workspace${editorExpanded ? " editor-focus" : ""}`} id="compiler-workspace">
       <div className="panel source-panel">
         <header>
           <div>
@@ -498,6 +508,9 @@ export default function App() {
             <span>NanoPass C</span>
           </div>
           <div className="source-actions">
+            <button className="focus-editor" onClick={() => setEditorExpanded((current) => !current)}>
+              {editorExpanded ? "Restore" : "Focus"}
+            </button>
             <button
               onClick={() => {
                 setSource(generateNanoProgram());
