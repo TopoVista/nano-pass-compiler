@@ -18,7 +18,7 @@ import { PolicyFeatures } from "./components/PolicyFeatures";
 import { PolicyDecisions } from "./components/PolicyDecisions";
 import { SourceEditor } from "./components/SourceEditor";
 import { FeatureTour } from "./components/FeatureTour";
-import { TerminalPane } from "./components/TerminalPane";
+import { TerminalPane, type TerminalReply } from "./components/TerminalPane";
 import { IRExplainer } from "./components/IRExplainer";
 import {
   allowedPasses,
@@ -244,6 +244,96 @@ export default function App() {
     });
     setBusy(false);
   };
+  const runTerminalCommand = async (rawCommand: string): Promise<TerminalReply> => {
+    const [verb = "", ...arguments_] = rawCommand.trim().toLowerCase().split(/\s+/);
+    const argument = arguments_.join(" ");
+    const help: TerminalReply = { tone: "info", lines: [
+      "Available in-app CLI commands (no shell access):",
+      "  verify                         verify the compiled pipeline",
+      "  run [core|ssa|jit|adaptive-jit] execute with a supported engine",
+      "  emit [ast|core|anf|cfg|ssa|llvm] print an emitted representation",
+      "  explain                        show factual pass timing",
+      "  optimize                       show recorded optimizer remarks",
+      "  graph [cfg|dominator-tree|loops|call-graph] switch graph view",
+      "  correctness                    run differential checks",
+      "  benchmark                      collect five local SSA samples",
+      "  policy [default|heuristic|learned] select a reviewed policy",
+      "  clear                          clear terminal history",
+    ] };
+    if (verb === "help") return help;
+    if (verb === "clear") return { lines: [], clear: true };
+    if (verb === "policy") {
+      if (argument === "default" || argument === "heuristic" || argument === "learned") {
+        setPolicy(argument);
+        return { tone: "success", lines: [`Selected ${argument} policy. The compiler will re-evaluate the current source.`, argument === "learned" ? "Scope is bounded to reviewed inline profitability decisions; the verifier remains mandatory." : ""] .filter(Boolean) };
+      }
+      return { tone: "error", lines: ["policy expects: default, heuristic, or learned"] };
+    }
+    if (verb === "graph") {
+      if (["cfg", "dominator-tree", "loops", "call-graph"].includes(argument)) {
+        setGraphKind(argument);
+        return { tone: "success", lines: [`Selected ${argument} graph. Open Graphs to inspect its compiler-generated nodes and edges.`] };
+      }
+      return { tone: "error", lines: ["graph expects: cfg, dominator-tree, loops, or call-graph"] };
+    }
+    setBusy(true);
+    try {
+      if (verb === "verify") {
+        const response = await compile(options);
+        setResult(response);
+        return response.success ? { tone: "success", lines: [`PASS · ${response.telemetry.functions} function(s), ${response.telemetry.blocks} blocks, ${response.telemetry.values} values`, "Compiler snapshots and verifier results are available in the workbench."] } : { tone: "error", lines: response.diagnostics.map((diagnostic) => `${diagnostic.severity}[${diagnostic.code}] ${diagnostic.message}`) };
+      }
+      if (verb === "run") {
+        const mode = (argument || "ssa") as RunMode;
+        if (!(["core", "ssa", "jit", "adaptive-jit"] as string[]).includes(mode)) return { tone: "error", lines: ["run expects: core, ssa, jit, or adaptive-jit"] };
+        setExecutionStep(1);
+        const response = await run(options, mode);
+        setRunResult(response);
+        [2, 3, 4].forEach((step, index) => window.setTimeout(() => setExecutionStep(step), 260 * (index + 1)));
+        return response.success ? { tone: "success", lines: [...(response.stdout ? response.stdout.trimEnd().split("\n").map((line) => `› ${line}`) : ["(program produced no output)"]), response.returnValue ? `return ${response.returnValue}` : ""] .filter(Boolean) } : { tone: "error", lines: [response.stderr || response.errorKind] };
+      }
+      if (verb === "emit") {
+        const stageMap: Record<string, string> = { source: "source", ast: "ast", core: "core", anf: "anf", cfg: "cfg", ssa: "ssa", llvm: "llvm" };
+        const stage = stageMap[argument];
+        if (!stage) return { tone: "error", lines: ["emit expects: ast, core, anf, cfg, ssa, or llvm"] };
+        const response = await compile(options);
+        setResult(response);
+        const emitted = response.snapshots.find((snapshot) => snapshot.stageId === stage);
+        if (!emitted) return { tone: "error", lines: [`${stage} is unavailable for this source.`] };
+        setSelectedStage(stage);
+        return { tone: "success", lines: emitted.text.split("\n").slice(0, 14) };
+      }
+      if (verb === "explain") {
+        const response = await compile(options);
+        setResult(response);
+        return { tone: "success", lines: response.passes.map((pass) => `${pass.verified ? "✓" : "!"} ${pass.displayName} · ${pass.durationUs} μs${pass.changed ? " · rewrote IR" : ""}`).slice(0, 14) };
+      }
+      if (verb === "optimize") {
+        const response = await compile(options);
+        setResult(response);
+        return { tone: "success", lines: response.remarks.length ? response.remarks.slice(0, 12).map((remark) => `${remark.kind.toUpperCase()} ${remark.passId}: ${remark.message}`) : ["No optimizer remarks were recorded for this source."] };
+      }
+      if (verb === "correctness") {
+        const response = await checkCorrectness(options);
+        setCorrectness(response);
+        return { tone: response.equivalent ? "success" : "error", lines: response.checks.map((check) => `${check.passed ? "✓" : "×"} ${check.stage}: ${check.detail}`) };
+      }
+      if (verb === "benchmark") {
+        const compilation = await compile(options);
+        const samples: number[] = [];
+        for (let index = 0; index < 5; ++index) {
+          const measured = await run(options, "ssa");
+          if (!measured.success || measured.executionDurationUs === undefined) return { tone: "error", lines: [measured.stderr || measured.errorKind || "benchmark run failed"] };
+          samples.push(measured.executionDurationUs);
+        }
+        const ordered = [...samples].sort((left, right) => left - right);
+        const measurement = { compileUs: compilation.telemetry.totalCompileUs, samplesUs: samples, medianUs: ordered[Math.round((ordered.length - 1) * .5)], p25Us: ordered[Math.round((ordered.length - 1) * .25)], p75Us: ordered[Math.round((ordered.length - 1) * .75)] };
+        setBenchmark(measurement);
+        return { tone: "success", lines: [`compile ${measurement.compileUs} μs`, `samples ${samples.join(", ")} μs`, `median ${measurement.medianUs} μs · p25/p75 ${measurement.p25Us}/${measurement.p75Us} μs`] };
+      }
+      return { tone: "error", lines: [`Unknown command: ${verb}`, "Type help to list safe in-app commands."] };
+    } finally { setBusy(false); }
+  };
   const share = async () => {
     const encoded = btoa(
       encodeURIComponent(
@@ -441,7 +531,7 @@ export default function App() {
               }}
             />
           </div>
-          <TerminalPane compilation={result} run={runResult} />
+          <TerminalPane compilation={result} run={runResult} onCommand={runTerminalCommand} />
         </div>
       </div>
       <div className="panel ir-panel">

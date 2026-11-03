@@ -33,6 +33,17 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByLabelText('Move dce earlier'));
     expect(screen.getByLabelText('Move dce earlier')).toBeDisabled();
   });
+  it('runs only allowlisted compiler commands in the in-app terminal', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByLabelText('Terminal command')).toBeEnabled());
+    const command = screen.getByLabelText('Terminal command');
+    fireEvent.change(command, { target: { value: 'verify' } });
+    fireEvent.submit(command.closest('form')!);
+    await waitFor(() => expect(screen.getByText(/PASS · 1 function/)).toBeInTheDocument());
+    fireEvent.change(command, { target: { value: 'rm -rf anything' } });
+    fireEvent.submit(command.closest('form')!);
+    await waitFor(() => expect(screen.getByText(/Unknown command: rm/)).toBeInTheDocument());
+  });
   it('formats source and can generate a valid-looking NanoPass C program', async () => {
     render(<App />);
     const editor = screen.getByLabelText('Nano source editor');
