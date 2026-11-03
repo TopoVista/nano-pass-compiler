@@ -392,6 +392,7 @@ export default function App() {
     { href: "/graphs", label: "Graphs" },
     { href: "/optimizations", label: "Optimizations" },
   ];
+  const routeLabel = navigation.find((item) => item.href === route)?.label ?? "Workbench";
   const toolbar = (
     <section className="toolbar" aria-label="Compiler controls">
       <div className="control-step">
@@ -512,18 +513,20 @@ export default function App() {
               {editorExpanded ? "Restore" : "Focus"}
             </button>
             <button
+              aria-label="Generate program"
               onClick={() => {
                 setSource(generateNanoProgram());
                 setExampleName("");
               }}
             >
-              Generate program
+              Generate
             </button>
             <button
               className="format-source"
+              aria-label="Format source"
               onClick={() => setSource(formatNano(source))}
             >
-              Format source
+              Format
             </button>
           </div>
         </header>
@@ -758,28 +761,40 @@ export default function App() {
   if (route === "/") return <LandingPage />;
 
   return (
-    <main className="lab-shell">
-      <header className="topbar">
-        <a className="brand" href="/lab">
+    <main className="lab-shell dashboard-shell">
+      <aside className="app-rail">
+        <a className="brand rail-brand" href="/">
           <span className="brand-mark" aria-hidden="true">
             <i />
             <i />
             <i />
           </span>
-          <strong>NanoPass</strong>
-          <span>Compiler Lab</span>
+          <span><strong>NanoPass</strong><small>Compiler Lab</small></span>
         </a>
-        <nav aria-label="Lab views">
+        <nav className="rail-nav" aria-label="Lab views">
           {navigation.map((item) => (
             <a
               key={item.href}
               className={route === item.href ? "active" : ""}
               href={item.href}
             >
+              <i aria-hidden="true" />
               {item.label}
             </a>
           ))}
         </nav>
+        <div className="rail-status">
+          <span>LOCAL COMPILER</span>
+          <b><i /> Verifier ready</b>
+          <small>Deterministic pipeline</small>
+        </div>
+      </aside>
+      <section className="app-main">
+      <header className="topbar dashboard-topbar">
+        <div className="dashboard-context">
+          <span>Nanopass / compiler workspace</span>
+          <strong>{routeLabel}</strong>
+        </div>
         <div className="top-actions">
           <label>
             O-level{" "}
@@ -824,6 +839,7 @@ export default function App() {
           {workspace}
         </>
       )}
+      </section>
     </main>
   );
 }

@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test';
 
+test('uses the public landing page to enter the dashboard workbench', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /watch a program become machine code/i })).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/lab$/),
+    page.getByRole('link', { name: /open compiler lab/i }).click(),
+  ]);
+  await expect(page.getByRole('navigation', { name: 'Lab views' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Workbench' })).toBeVisible();
+});
+
 test('inspects compiler stages, graphs, execution profile, and adaptive events', async ({ page }) => {
   await page.goto('/lab');
   await expect(page.locator('.compile-status')).toContainText('verified');
