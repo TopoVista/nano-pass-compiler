@@ -56,10 +56,10 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'adaptive-jit' }));
     await waitFor(() => expect(screen.getByText('tier1_installed')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'check correctness' }));
-    await waitFor(() => expect(screen.getByText(/PASS · CoreIR/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('CoreIR')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Compare O-levels' }));
     await waitFor(() => expect(screen.getByText('compiler measurements')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Benchmark' }));
-    await waitFor(() => expect(screen.getByText('execution median')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/μs median/)).toBeInTheDocument());
   });
 });

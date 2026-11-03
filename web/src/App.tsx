@@ -294,7 +294,8 @@ export default function App() {
   ];
   const toolbar = (
     <section className="toolbar" aria-label="Compiler controls">
-      <label>
+      <div className="control-step">
+      <small>1 · Program</small><label>
         Example{" "}
         <select
           aria-label="Example program"
@@ -313,8 +314,9 @@ export default function App() {
             </option>
           ))}
         </select>
-      </label>
-      <label>
+      </label></div>
+      <div className="control-step">
+      <small>2 · Strategy</small><label>
         Pipeline{" "}
         <select
           aria-label="Inline policy"
@@ -376,12 +378,13 @@ export default function App() {
           </div>
         )}
       </details>
-      <button disabled={busy} onClick={() => void doCompare()}>
+      </div>
+      <div className="toolbar-actions"><small>3 · Measure</small><button disabled={busy} onClick={() => void doCompare()}>
         Compare O-levels
       </button>
       <button disabled={busy} onClick={() => void doBenchmark()}>
         Benchmark
-      </button>
+      </button></div>
       <span
         className={result?.success ? "compile-status good" : "compile-status"}
       >
@@ -555,13 +558,13 @@ export default function App() {
         </div>
       </div>
       <div className="panel correctness-wrap">
-        <Correctness result={correctness} />
+        <Correctness result={correctness} onRun={() => void doCorrectness()} />
       </div>
       <div className="panel comparison-wrap">
         <OptimizationComparison results={comparison} />
       </div>
       <div className="panel comparison-wrap">
-        <BenchmarkPanel result={benchmark} />
+        <BenchmarkPanel result={benchmark} onMeasure={() => void doBenchmark()} />
       </div>
       <div className="panel policy-wrap">
         <PolicyFeatures

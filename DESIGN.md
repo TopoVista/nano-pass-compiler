@@ -84,7 +84,7 @@ The green Run SSA action is the only dominant action. Neutral controls remain gr
 
 ### Navigation and data display
 
-The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal owns factual compile/run feedback; the inspector owns SSA provenance and plain-language representation explanations. The pass rail reflects compiler order with proportional duration marks. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
+The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal uses a VS Code-like command-reference strip and only renders command output assembled from compiler responses. The inspector owns SSA provenance and a compact plain-language representation explanation. The pass rail reflects compiler order with proportional duration marks. Proof, benchmark, and policy panels use visible paths, samples, and gates derived from actual state; they never substitute decorative charts for missing data. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
 
 ### Motion
 

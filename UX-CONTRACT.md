@@ -29,6 +29,7 @@
 | Source input | Monaco `SourceEditor` | component props/API | code editing | unit + browser |
 | Source tools | Workbench source header | deterministic local formatter / Nano generator | format source, generate program | unit + browser |
 | Compiler terminal | `TerminalPane` | compile/run response | verifier, diagnostics, program output | unit + browser |
+| Terminal command reference | `TerminalPane` tabs | documented CLI surface + compile response | verify, emit SSA, explain, optimize, learned policy | unit + browser |
 | Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph | unit + E2E |
 | Diagnostics/remarks | `Panels.tsx` | compiler response | applied/missed/analysis | unit |
 | Scrollbar | `web/src/styles.css` | runtime CSS tokens | geometry only | browser |
@@ -42,6 +43,7 @@
 | IR/graph inspection | Labeled select or graph node | none | selected IR/block is highlighted | retain last valid compilation |
 | Explain representation | Plain-language guide beneath IR | selected compiler snapshot and SSA value | explanation updates with stage/value | state remains useful with no selection |
 | Generate program | Generate program button | none | a deterministic language-valid program is inserted | user can edit/regenerate it |
+| Visual evidence | correctness, benchmark, and policy panels | checked results / local measurements / compiler records | run or measure CTA when data is absent | never display invented metrics |
 | Share session | Share session button | none | URL fragment + clipboard when available | URL fragment remains the durable fallback |
 
 ## Navigation and responsive behavior
