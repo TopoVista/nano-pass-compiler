@@ -13,8 +13,7 @@ vi.mock('./lib/api', async (original) => { const actual = await original<typeof 
 describe('compiler lab', () => {
   it('renders compiler facts, graph selection, value inspection, and execution', async () => {
     render(<App />);
-    await waitFor(() => expect(screen.getAllByText('Optimized SSA').length).toBeGreaterThan(0));
-    expect(screen.getByLabelText('Compiler revision')).toHaveTextContent('test');
+    await waitFor(() => expect(screen.getByLabelText('Compiler revision')).toHaveTextContent('test'));
     expect(screen.getByText('SCCP')).toBeInTheDocument();
     expect(screen.getByText(/UNSAFE_TO_SPECULATE/)).toBeInTheDocument();
     expect(screen.getByText(/inline-imitation-v1/)).toBeInTheDocument();
@@ -33,6 +32,16 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByLabelText('dce'));
     fireEvent.click(screen.getByLabelText('Move dce earlier'));
     expect(screen.getByLabelText('Move dce earlier')).toBeDisabled();
+  });
+  it('formats source and opens a real field-guide example', async () => {
+    render(<App />);
+    const editor = screen.getByLabelText('Nano source editor');
+    fireEvent.change(editor, { target: { value: 'int main(){return 0;}' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Format source' }));
+    expect(editor).toHaveValue('int main() {\n  return 0;\n}');
+    fireEvent.click(screen.getByRole('tab', { name: /control flow/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open CFG' }));
+    expect(screen.getByLabelText('Example program')).toHaveValue('Nested loops');
   });
   it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
     render(<App />);

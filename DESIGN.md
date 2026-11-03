@@ -46,7 +46,7 @@ The lab is a **compiler signal plane**: a dark workstation inspired by visual co
 - **Locale(s) and language policy:** English only at present. No Japan-market or Japanese-locale behavior is inferred.
 - **Usage scene:** A desktop-first, sustained technical workbench. A narrower layout stacks panels without losing controls.
 - **Register:** Product. Task clarity, signal density, keyboard access, and observable compiler truth outweigh decorative branding.
-- **Memorable signature:** Electric-blue graph wires and block outlines act as a visual trace through the compiler; green is reserved for successful verifier/runtime facts.
+- **Memorable signature:** Electric-blue graph wires and block outlines act as a visual trace through the compiler; green is reserved for successful verifier/runtime facts. The Field Guide uses one editorial headline to introduce a real interactive compiler journey.
 - **Restraint:** No simulated metrics, ornamental hero, fake data, or strong shadows around every surface.
 - **Anti-references:** Neon cyberpunk dashboards, generic SaaS metric-card grids, and terminal parody interfaces.
 - **Token ownership/runtime mapping:** Existing runtime CSS is canonical. This file mirrors the exact variables in `web/src/styles.css`; panels, graph nodes, actions, and scrollbar surfaces consume those variables directly.
@@ -57,7 +57,7 @@ The lab is a **compiler signal plane**: a dark workstation inspired by visual co
 
 ## Typography
 
-The local system UI font carries labels, navigation, and readable technical summaries without a third-party font request. Cascadia Mono (with system fallbacks) is restricted to identifiers, IR, timings, revision metadata, and graph-adjacent facts. Uppercase micro-labels describe source/type/status; large marketing-style typography is intentionally absent from the workbench.
+The local system UI font carries labels, navigation, and readable technical summaries without a third-party font request. Cascadia Mono (with system fallbacks) is restricted to identifiers, IR, timings, revision metadata, and graph-adjacent facts. Uppercase micro-labels describe source/type/status. A large headline is reserved for the Field Guide only, where it introduces an actual interactive task rather than decorative marketing copy.
 
 ## Layout
 
@@ -83,7 +83,7 @@ The green Run SSA action is the only dominant action. Neutral controls remain gr
 
 ### Navigation and data display
 
-The top bar establishes the workbench identity. The inspector owns SSA provenance and optimization explanations. Graph nodes render actual CFG/dominator/loop/call-graph JSON and use the same `wire` semantic token as selected IR.
+The top bar establishes the workbench identity. The inspector owns SSA provenance and optimization explanations. The pass rail reflects compiler order rather than repeating card chrome. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR. The Field Guide buttons open real examples and stage/graph views.
 
 ### Motion
 
