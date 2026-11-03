@@ -14,9 +14,9 @@ describe('formatNano', () => {
     ].join('\n'));
   });
 
-  it('formats the named NanoPass surface dialect without rewriting it', () => {
-    expect(formatNano('fn choose(x:i32)->i32{when(x>0){yield x;}otherwise{yield 0;}}')).toBe([
-      'fn choose(x: i32) -> i32 {', '  when (x > 0) {', '    yield x;', '  } otherwise {', '    yield 0;', '  }', '}'
+  it('formats the C-forward NanoPass surface without rewriting it', () => {
+    expect(formatNano('i32 choose(i32 x){if(x>0){return x;}else{return 0;}}')).toBe([
+      'i32 choose(i32 x) {', '  if (x > 0) {', '    return x;', '  } else {', '    return 0;', '  }', '}'
     ].join('\n'));
   });
 });

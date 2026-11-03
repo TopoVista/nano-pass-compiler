@@ -18,12 +18,12 @@ int main() {
     TypeCheckPass checker;
     checker.check(program);
 
-    // The branded NanoPass surface grammar is intentionally a parser-only
+    // The C-forward NanoPass surface grammar is intentionally a parser-only
     // extension: it must resolve and type-check through the normal frontend.
     Lexer styledLexer(
-        "fn choose(value: i32) -> i32 { "
-        "when (value > 0) { yield value; } otherwise { yield 0; } } "
-        "fn main() -> i32 { let result: i32 = choose(7); emit result; yield result; }");
+        "i32 choose(i32 value) { "
+        "if (value > 0) { return value; } else { return 0; } } "
+        "i32 main() { i32 result = choose(7); print(result); return result; }");
     Parser styledParser(styledLexer.scanTokens());
     auto styledProgram = styledParser.parseProgram();
     ResolveScopesPass styledResolver;
@@ -31,7 +31,8 @@ int main() {
     TypeCheckPass{}.check(styledProgram);
 
     Lexer loopLexer(
-        "fn main() -> i32 { let i: i32 = 0; loop (i < 3) { i = i + 1; } yield i; }");
+        "i32 main() { i32 values[3]; truth visited[3]; i32 i = 0; "
+        "while (i < 3) { values[i] = i; visited[i] = true; i = i + 1; } return i; }");
     Parser loopParser(loopLexer.scanTokens());
     auto loopProgram = loopParser.parseProgram();
     ResolveScopesPass loopResolver;

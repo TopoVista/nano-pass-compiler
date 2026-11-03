@@ -17,10 +17,10 @@ explicit local evidence rather than CI claims.
 ## Stable
 
 ### Phase 11 foundations
-- **NanoPass surface dialect** — backwards-compatible `fn`/`let` typed
-  declarations, `when`/`otherwise`, `loop`, `emit`, `yield`, `halt`/`next`,
-  and canonical `i32`/`truth`/`unit` spellings.  It parses into the existing
-  AST and follows the same resolver, verifier, optimizer, and backend path.
+- **NanoPass C surface** — a C-forward canonical spelling with `i32`/`truth`/
+  `unit`, conventional declarations (`i32 data[8]`), and C-shaped control
+  flow. Optional `fn`/`let` aliases remain backwards-compatible. All forms
+  parse into the existing AST and use the same verifier, optimizer, and backend.
 - **Resource-aware local service** — centralized source/token/AST/function/
   CFG/SSA/optimization/execution/profile budgets, structured resource errors,
   cooperative compile deadlines, interpreter wall-clock limits, and a bounded

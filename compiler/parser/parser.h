@@ -131,6 +131,7 @@ private:
     LangType finalType = parseTypeWithArraySuffix();
 
     Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
+    finalType = parseOptionalArraySuffix(finalType);
 
     unique_ptr<Expr> initializer = nullptr;
 
@@ -194,9 +195,20 @@ private:
   }
 
   LangType parseTypeWithArraySuffix() {
-    LangType baseType = parseType();
+    return parseOptionalArraySuffix(parseType());
+  }
+
+  // NanoPass accepts the existing `int[8] values` spelling and the familiar
+  // C-style `i32 values[8]` spelling. Both represent exactly the same fixed
+  // array type and are normalized before semantic analysis.
+  LangType parseOptionalArraySuffix(LangType baseType) {
     if (!match({TokenType::LBRACKET}))
       return baseType;
+
+    if (baseType.kind == LangTypeKind::Array) {
+      const Token &token = previous();
+      throw CompileError("Array size specified twice", token.line, token.col);
+    }
 
     Token sizeTok = consume(TokenType::NUMBER, "Expected array size");
     consume(TokenType::RBRACKET, "Expected ']' after array size");
@@ -317,6 +329,7 @@ private:
         LangType paramType = parseType();
         Token paramName =
             consume(TokenType::IDENTIFIER, "Expected parameter name");
+        paramType = parseOptionalArraySuffix(paramType);
         params.push_back({paramName.lexeme, paramType});
       } while (match({TokenType::COMMA}));
 

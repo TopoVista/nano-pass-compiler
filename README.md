@@ -372,32 +372,29 @@ Each pass runs **once** — not once per top-level statement.
 
 ## Language reference
 
-NanoPass accepts a compatibility C-like form and a named NanoPass surface
-dialect. They lower to the same typed AST and have identical semantics; the
-dialect is a deliberate language-design layer, not a macro preprocessor.
+NanoPass is deliberately **C-forward**: declarations, functions, braces, and
+control flow stay familiar, while a compact type vocabulary makes NanoPass
+programs immediately recognizable. The spelling is a parser-level design
+choice, not a macro preprocessor or a second compiler path.
 
 ```nano
-fn path_cost(origin: i32, target: i32) -> i32 {
-  let cost: i32 = origin + target;
-  when (cost > 0) { emit cost; } otherwise { emit 0; }
-  yield cost;
+i32 path_cost(i32 origin, i32 target) {
+  i32 cost = origin + target;
+  if (cost > 0) { print(cost); } else { print(0); }
+  return cost;
 }
 ```
 
-| NanoPass spelling | Compatibility spelling | Meaning |
+| NanoPass C spelling | Compatibility spelling | Meaning |
 |---|---|---|
-| `fn` | typed function prefix | Function with named parameters and `->` result type |
-| `let name: type` | `type name` | Typed local binding |
-| `when` / `otherwise` | `if` / `else` | Conditional branch |
-| `loop` | `while` | Condition-controlled loop |
-| `emit` | `print` | Observable output |
-| `yield` | `return` | Return from function |
-| `halt` / `next` | `break` / `continue` | Loop control |
-| `i32`, `truth`, `unit` | `int`, `bool`, `void` | Canonical NanoPass type names |
+| `i32`, `truth`, `unit` | `int`, `bool`, `void` | Canonical NanoPass types |
+| `i32 values[8]` | `int[8] values` | Fixed-size array, C declarator position |
+| `if`, `while`, `return` | same | Familiar structured control flow |
+| `print(expr)` | `print expr` | Parenthesized output form |
 
 See [the full language reference](docs/language.md), including exact grammar
-and current limitations. The compatibility form remains supported for existing
-programs and examples.
+and current limitations. Existing code and the optional `fn`/`let` aliases
+remain supported, but the C-forward style is used in new examples.
 
 Current supported constructs:
 
