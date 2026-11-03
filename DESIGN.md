@@ -46,8 +46,8 @@ The lab is a **compiler signal plane**: a calm, Apple-system UI around deliberat
 - **Target market(s) and evidence:** Global English-language developer tooling; the Vite lab and local compiler API document the supported product boundary in `docs/web-lab.md` and `docs/compiler-api.md`.
 - **Locale(s) and language policy:** English only at present. No Japan-market or Japanese-locale behavior is inferred.
 - **Usage scene:** A desktop-first, sustained technical workbench. A narrower layout stacks panels without losing controls.
-- **Register:** Product. Task clarity, signal density, keyboard access, and observable compiler truth outweigh decorative branding.
-- **Memorable signature:** Primary blue represents structural relationships and selection, a cooler blue secondary supports machine surfaces, and mint is reserved for verified/successful facts. The Guide is a separate route that introduces a real interactive compiler journey.
+- **Register:** Hybrid. The public landing route is an editorial product introduction; the compiler routes are dense technical instruments. Task clarity, signal density, keyboard access, and observable compiler truth outweigh decorative branding inside the lab.
+- **Memorable signature:** The public landing page uses a quiet lavender editorial frame and one large, rounded compiler-artifact hero. Within the workbench, primary blue represents structural relationships and selection, a cooler blue secondary supports machine surfaces, and mint is reserved for verified/successful facts. The Guide is a separate route that introduces a real interactive compiler journey.
 - **Restraint:** No simulated metrics, ornamental hero, fake data, or strong shadows around every surface.
 - **Anti-references:** Neon cyberpunk dashboards, generic SaaS metric-card grids, and terminal parody interfaces.
 - **Token ownership/runtime mapping:** Existing runtime CSS is canonical. This file mirrors the exact variables in `web/src/styles.css`; panels, graph nodes, actions, and scrollbar surfaces consume those variables directly.
@@ -62,11 +62,11 @@ The Apple system font stack carries labels, navigation, and readable technical s
 
 ## Layout
 
-Desktop layout uses a source column, a dominant representation/graph canvas, and an inspector column. The pass timeline bridges those regions as a real compiler sequence. The source header exposes a Focus mode for sustained editing: it expands the source editor and its compiler terminal into the full workbench without changing source or compiler state. At 1080px the two main columns remain intact; at 800px the panels stack in compiler-flow order. Every scrollable region keeps a visible, tokenized scrollbar.
+The public landing route uses generous whitespace, a centered nav, a single statement of value, and a compiler-artifact preview rather than stock imagery. Desktop lab layout uses a source column, a dominant representation/graph canvas, and an inspector column. The pass timeline bridges those regions as a real compiler sequence. The source header exposes a Focus mode for sustained editing: it expands the source editor and its compiler terminal into the full workbench without changing source or compiler state. At 1080px the two main columns remain intact; at 800px the panels stack in compiler-flow order. Every scrollable region keeps a visible, tokenized scrollbar.
 
 ## Elevation & Depth
 
-Hierarchy comes from tonal layers and thin borders first. Panels use only a recessed inset edge and a low-opacity shadow. The graph canvas is darker than its inspector shell so blue wires and selected blocks retain contrast.
+Hierarchy comes from tonal layers and thin borders first. Panels use only a recessed inset edge and a low-opacity shadow. The landing hero gets its depth from a violet tonal field and soft nested code windows; the graph canvas is darker than its inspector shell so blue wires and selected blocks retain contrast.
 
 ## Shapes
 

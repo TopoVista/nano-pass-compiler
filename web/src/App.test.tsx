@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import App from './App';
 import type { Compilation, RunResult } from './lib/api';
 
@@ -11,6 +11,8 @@ const runResponse: RunResult = { success: true, errorKind: 'none', status: 'succ
 vi.mock('./lib/api', async (original) => { const actual = await original<typeof import('./lib/api')>(); return { ...actual, compile: vi.fn(async () => response), run: vi.fn(async (_options, mode) => ({ ...runResponse, adaptiveEvents: mode === 'adaptive-jit' ? [{ kind: 'tier1_installed', function: 'main', calls: 2, detail: 'installed' }] : [] })), checkCorrectness: vi.fn(async () => ({ schemaVersion: 1, success: true, equivalent: true, checks: [{ stage: 'CoreIR', passed: true, detail: 'reference execution completed' }], compilation: response })) }; });
 
 describe('compiler lab', () => {
+  beforeEach(() => window.history.pushState({}, '', '/lab'));
+
   it('renders compiler facts, graph selection, value inspection, and execution', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText('Compiler revision')).toHaveTextContent('test'));
@@ -69,6 +71,12 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByRole('tab', { name: /control flow/i }));
     expect(screen.getByRole('button', { name: 'Open CFG' })).toBeInTheDocument();
     window.history.pushState({}, '', '/lab');
+  });
+  it('serves a dedicated public landing route', () => {
+    window.history.pushState({}, '', '/');
+    render(<App />);
+    expect(screen.getByRole('heading', { name: /watch a program become machine code/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open compiler lab/i })).toHaveAttribute('href', '/lab');
   });
   it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
     render(<App />);

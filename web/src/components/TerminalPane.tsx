@@ -27,7 +27,7 @@ export function TerminalPane({ compilation, run, onCommand }: Props) {
   return <section className="terminal-pane" aria-label="Compiler terminal" aria-live="polite">
     <header><span className="terminal-lights" aria-hidden="true"><i /><i /><i /></span><strong>TERMINAL</strong><small>{running ? 'running' : compilation?.success ? 'ready' : 'waiting'}</small></header>
     <div className="terminal-output"><pre className="terminal-startup">{startup.join('\n')}</pre>{history.map((entry, index) => <pre key={index} className={`terminal-entry ${entry.tone ?? 'info'}`}>{entry.lines.join('\n')}</pre>)}</div>
-    <form className="terminal-input" onSubmit={(event) => { event.preventDefault(); void submit(); }}><span>nano ❯</span><input aria-label="Terminal command" autoComplete="off" spellCheck={false} value={input} onChange={(event) => setInput(event.target.value)} placeholder="help, verify, run ssa, emit llvm…" /><button type="submit" disabled={running}>Run</button></form>
+    <form className="terminal-input" noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}><span>nano ❯</span><input aria-label="Terminal command" autoComplete="off" spellCheck={false} value={input} onChange={(event) => setInput(event.target.value)} placeholder="help, verify, run ssa, emit llvm…" /><button type="submit" disabled={running}>Run</button></form>
     <div className="terminal-suggestions" aria-label="Terminal command suggestions">{suggestions.map((command) => <button key={command} onClick={() => void submit(command)}>{command}</button>)}</div>
   </section>;
 }

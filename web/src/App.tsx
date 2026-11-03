@@ -20,6 +20,7 @@ import { SourceEditor } from "./components/SourceEditor";
 import { FeatureTour } from "./components/FeatureTour";
 import { TerminalPane, type TerminalReply } from "./components/TerminalPane";
 import { IRExplainer } from "./components/IRExplainer";
+import { LandingPage } from "./components/LandingPage";
 import {
   allowedPasses,
   checkCorrectness,
@@ -384,8 +385,7 @@ export default function App() {
   const transform = transformKey
     ? result?.transformations.find((item) => item.passId === transformKey)
     : undefined;
-  const route =
-    window.location.pathname === "/" ? "/lab" : window.location.pathname;
+  const route = window.location.pathname;
   const navigation = [
     { href: "/lab", label: "Workbench" },
     { href: "/guide", label: "Guide" },
@@ -755,6 +755,8 @@ export default function App() {
       </section>
     </section>
   );
+  if (route === "/") return <LandingPage />;
+
   return (
     <main className="lab-shell">
       <header className="topbar">

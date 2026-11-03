@@ -4,6 +4,10 @@ The `web/` client is a Vite + React + TypeScript application. The repository
 did not contain a prior web application, so the lab uses a small modern React
 client rather than introducing a second server-side application framework.
 
+The public `/` route introduces the compiler lab with an editorial, accessible
+pipeline preview. The interactive, compiler-backed workbench remains at
+`/lab`; focused Guide, Graphs, and Optimizations routes retain their own paths.
+
 ```sh
 cd web
 npm ci

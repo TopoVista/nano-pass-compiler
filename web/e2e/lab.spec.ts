@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('inspects compiler stages, graphs, execution profile, and adaptive events', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/lab');
   await expect(page.locator('.compile-status')).toContainText('verified');
   await expect(page.getByLabel('Compiler revision')).toHaveText('0.3.0+phase11-dev');
 

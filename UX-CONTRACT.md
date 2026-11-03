@@ -25,6 +25,7 @@
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 |---|---|---|---|---|
+| Public introduction | `LandingPage` | static, compiler-capability copy | public route `/` | unit + browser |
 | Select/Listbox | Native selects in `App.tsx` | browser control + accessible label | stage, graph, policy, example | unit + E2E |
 | Source input | Monaco `SourceEditor` | component props/API | code editing | unit + browser |
 | Source tools | Workbench source header | deterministic local formatter / Nano generator | format source, generate program | unit + browser |
@@ -51,7 +52,7 @@
 
 ## Navigation and responsive behavior
 
-Workbench (`/lab`), Guide (`/guide`), Graphs (`/graphs`), and Optimizations (`/optimizations`) are route-level views. The desktop workbench keeps source, representation, and inspector visible. At narrow widths it stacks the same panels in compiler-flow order. Every visible action is a semantic button or labeled native select, with a keyboard focus ring.
+Home (`/`) is a public introduction to the observable compiler pipeline and links directly to the workbench. Workbench (`/lab`), Guide (`/guide`), Graphs (`/graphs`), and Optimizations (`/optimizations`) are route-level views. The desktop workbench keeps source, representation, and inspector visible. At narrow widths it stacks the same panels in compiler-flow order. Every visible action is a semantic button or labeled native select, with a keyboard focus ring.
 
 ## Async and resilience
 
