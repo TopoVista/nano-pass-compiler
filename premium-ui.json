@@ -1,0 +1,19 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["web/src"],
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": ["Select/Listbox", "Scrollbar"],
+  "ownership": {
+    "Select/Listbox": "native"
+  },
+  "commands": {
+    "typecheck": "cd web && npm run typecheck",
+    "unit": "cd web && npm run test -- --run",
+    "build": "cd web && npm run build",
+    "e2e": "cd web && npm run test:e2e"
+  },
+  "evidence": {
+    "browserJourney": "web/e2e/lab.spec.ts",
+    "unitStates": "web/src/App.test.tsx"
+  }
+}
