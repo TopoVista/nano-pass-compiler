@@ -44,6 +44,7 @@ enum class TokenType {
   // Operators
   PLUS,
   MINUS,
+  ARROW,
   STAR,
   SLASH,
   MOD,

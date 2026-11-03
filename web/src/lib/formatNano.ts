@@ -1,7 +1,7 @@
-const tokenPattern = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:==|!=|<=|>=|&&|\|\||\+\+|--|\+=|-=|\*=|\/=|%=)|[A-Za-z_]\w*|\d+|[^\s]/g;
+const tokenPattern = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:->|==|!=|<=|>=|&&|\|\||\+\+|--|\+=|-=|\*=|\/=|%=)|[A-Za-z_]\w*|\d+|[^\s]/g;
 const word = /^[A-Za-z_]\w*$|^\d+$/;
-const operators = new Set(['=', '+', '-', '*', '/', '%', '==', '!=', '<', '>', '<=', '>=', '&&', '||', '+=', '-=', '*=', '/=', '%=']);
-const controlWords = new Set(['if', 'while', 'for', 'switch']);
+const operators = new Set(['=', '+', '-', '*', '/', '%', '->', '==', '!=', '<', '>', '<=', '>=', '&&', '||', '+=', '-=', '*=', '/=', '%=']);
+const controlWords = new Set(['if', 'when', 'while', 'loop', 'for', 'switch']);
 
 /**
  * Formats the supported Nano surface syntax without changing tokens. It is a
@@ -29,16 +29,17 @@ export function formatNano(source: string): string {
     if (token.startsWith('//')) { flush(); write(token); flush(); previous = token; continue; }
     if (token.startsWith('/*')) { flush(); for (const line of token.split('\n')) { write(line.trim()); flush(); } previous = token; continue; }
     if (token === '{') { write('{', Boolean(current) && !current.endsWith(' ')); flush(); ++indent; previous = token; continue; }
-    if (token === '}') { flush(); --indent; write('}'); if (next !== 'else') flush(); previous = token; continue; }
+    if (token === '}') { flush(); --indent; write('}'); if (next !== 'else' && next !== 'otherwise') flush(); previous = token; continue; }
     if (token === ';') { current = current.trimEnd(); write(';'); flush(); previous = token; continue; }
     if (token === ',') { current = current.trimEnd(); write(','); write(' '); previous = token; continue; }
     if (token === '(') { write('(', controlWords.has(previous)); previous = token; continue; }
     if (token === ')') { current = current.trimEnd(); write(')'); previous = token; continue; }
     if (token === '[') { write('['); previous = token; continue; }
     if (token === ']') { current = current.trimEnd(); write(']'); previous = token; continue; }
+    if (token === ':') { current = current.trimEnd(); write(': '); previous = token; continue; }
     if (token === '++' || token === '--' || token === '!') { write(token, false); previous = token; continue; }
     if (operators.has(token)) { current = current.trimEnd(); write(` ${token} `); previous = token; continue; }
-    const needsSpace = token === 'else' || (Boolean(current) && !current.endsWith(' ') && (word.test(token) || token.startsWith('"') || token.startsWith("'")) && (word.test(previous) || previous === ')' || previous === ']'));
+    const needsSpace = token === 'else' || token === 'otherwise' || (Boolean(current) && !current.endsWith(' ') && (word.test(token) || token.startsWith('"') || token.startsWith("'")) && (word.test(previous) || previous === ')' || previous === ']'));
     write(token, needsSpace);
     previous = token;
   }

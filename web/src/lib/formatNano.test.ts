@@ -13,4 +13,10 @@ describe('formatNano', () => {
       'int main() {', '  // add', '  int a[2];', '  a[0] = 1;', '  return a[0];', '}'
     ].join('\n'));
   });
+
+  it('formats the named NanoPass surface dialect without rewriting it', () => {
+    expect(formatNano('fn choose(x:i32)->i32{when(x>0){yield x;}otherwise{yield 0;}}')).toBe([
+      'fn choose(x: i32) -> i32 {', '  when (x > 0) {', '    yield x;', '  } otherwise {', '    yield 0;', '  }', '}'
+    ].join('\n'));
+  });
 });

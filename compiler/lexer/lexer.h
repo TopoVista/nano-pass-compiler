@@ -25,20 +25,29 @@ public:
     // language keywords
     kw["let"] = TokenType::LET;
     kw["function"] = TokenType::FUNCTION;
+    kw["fn"] = TokenType::FUNCTION;
     kw["if"] = TokenType::IF;
+    kw["when"] = TokenType::IF;
     kw["else"] = TokenType::ELSE;
+    kw["otherwise"] = TokenType::ELSE;
     kw["while"] = TokenType::WHILE;
+    kw["loop"] = TokenType::WHILE;
     kw["for"] = TokenType::FOR;
     kw["print"] = TokenType::PRINT;
+    kw["emit"] = TokenType::PRINT;
     kw["return"] = TokenType::RETURN;
+    kw["yield"] = TokenType::RETURN;
     kw["break"] = TokenType::BREAK;
+    kw["halt"] = TokenType::BREAK;
     kw["continue"] = TokenType::CONTINUE;
+    kw["next"] = TokenType::CONTINUE;
 
     kw["true"] = TokenType::TRUE;
     kw["false"] = TokenType::FALSE;
 
     // type keywords
     kw["int"] = TokenType::INT;
+    kw["i32"] = TokenType::INT;
     kw["float"] = TokenType::FLOAT;
     kw["double"] = TokenType::DOUBLE;
     kw["short"] = TokenType::SHORT;
@@ -46,7 +55,9 @@ public:
     kw["unsigned"] = TokenType::UNSIGNED;
     kw["char"] = TokenType::CHAR;
     kw["bool"] = TokenType::BOOL;
+    kw["truth"] = TokenType::BOOL;
     kw["void"] = TokenType::VOID;
+    kw["unit"] = TokenType::VOID;
   }
 
   std::vector<Token> scanTokens() {
@@ -75,7 +86,8 @@ public:
         break;
 
       case '-':
-        tokens.push_back(makeToken(TokenType::MINUS));
+        tokens.push_back(
+            makeToken(match('>') ? TokenType::ARROW : TokenType::MINUS));
         break;
 
       case '*':

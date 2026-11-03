@@ -22,7 +22,50 @@ const examples: Record<string, string> = {
   'Nested loops': 'int main() { int i = 0; int total = 0; while (i < 3) { int j = 0; while (j < 2) { total = total + i + j; j = j + 1; } i = i + 1; } print(total); return total; }',
   'Why not LICM': 'int main() { int i = 0; int total = 0; while (i < 3) { total = total + i / (i + 1); i = i + 1; } print(total); return total; }',
   'PGO hot loop': 'int work(int x) { return x * 2 + 1; } int main() { int i = 0; int total = 0; while (i < 20) { total = work(total); i = i + 1; } print(total); return total; }',
-  'Adaptive JIT': 'int step(int x) { return x + 1; }\nint main() { int i = 0; int total = 0; while (i < 12) { total = step(total); i = i + 1; } print(total); return total; }'
+  'Adaptive JIT': 'int step(int x) { return x + 1; }\nint main() { int i = 0; int total = 0; while (i < 12) { total = step(total); i = i + 1; } print(total); return total; }',
+  'NanoPass Dijkstra': `fn main() -> i32 {
+  let graph: i32[36];
+  let distance: i32[6];
+  let visited: truth[6];
+  let i: i32 = 0;
+  loop (i < 36) { graph[i] = 0; i = i + 1; }
+  graph[1] = 7; graph[6] = 7;
+  graph[2] = 9; graph[12] = 9;
+  graph[5] = 14; graph[30] = 14;
+  graph[7] = 10; graph[13] = 10;
+  graph[9] = 15; graph[19] = 15;
+  graph[15] = 11; graph[20] = 11;
+  graph[17] = 2; graph[32] = 2;
+  graph[22] = 6; graph[27] = 6;
+  graph[29] = 9; graph[34] = 9;
+  i = 0;
+  loop (i < 6) { distance[i] = 1000000; visited[i] = false; i = i + 1; }
+  distance[0] = 0;
+  let round: i32 = 0;
+  loop (round < 6) {
+    let best: i32 = 1000000;
+    let current: i32 = -1;
+    i = 0;
+    loop (i < 6) {
+      when (!visited[i] && distance[i] < best) { best = distance[i]; current = i; }
+      i = i + 1;
+    }
+    when (current == -1) { halt; }
+    visited[current] = true;
+    let neighbor: i32 = 0;
+    loop (neighbor < 6) {
+      let edge: i32 = graph[current * 6 + neighbor];
+      when (edge > 0 && !visited[neighbor] && distance[current] + edge < distance[neighbor]) {
+        distance[neighbor] = distance[current] + edge;
+      }
+      neighbor = neighbor + 1;
+    }
+    round = round + 1;
+  }
+  i = 0;
+  loop (i < 6) { emit distance[i]; i = i + 1; }
+  yield 0;
+}`
 };
 const allArtifacts = { includeSource: true, includeAst: true, includeDesugaredAst: true, includeCore: true, includeAnf: true, includeCfg: true, includeSsa: true, includeOptimizedSsa: true, includeLLVM: true, includeGraphs: true, includeRemarks: true, includeTelemetry: true, includeProvenance: true };
 type RunMode = 'core' | 'ssa' | 'jit' | 'adaptive-jit';
@@ -71,7 +114,7 @@ export default function App() {
     <header className="topbar"><div className="brand"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><strong>NanoPass</strong><span>Compiler Lab</span></div><nav aria-label="Lab views"><button className="active" onClick={() => document.getElementById('compiler-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Workbench</button><button onClick={() => document.getElementById('feature-tour')?.scrollIntoView({ behavior: 'smooth' })}>Field guide</button><button onClick={() => { setGraphKind('cfg'); document.getElementById('compiler-workspace')?.scrollIntoView({ behavior: 'smooth' }); }}>Control flow</button></nav><div className="top-actions"><label>O-level <select aria-label="Optimization level" value={level} onChange={(event) => setLevel(Number(event.target.value))}>{[0,1,2,3].map((item) => <option key={item} value={item}>O{item}</option>)}</select></label><button onClick={share}>Share session</button><button className="run" disabled={busy} onClick={() => void doRun('ssa')}>{busy ? 'Compiling…' : 'Run SSA'}</button></div></header>
     <section className="toolbar"><label>Example <select aria-label="Example program" value={exampleName} onChange={(event) => { if (event.target.value) { setExampleName(event.target.value); setSource(examples[event.target.value]); } }}>{exampleName === '' && <option value="">Custom source</option>}{Object.keys(examples).map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label>Inline policy <select aria-label="Inline policy" value={policy} disabled={custom.length > 0} onChange={(event) => setPolicy(event.target.value as typeof policy)}><option value="default">Default pipeline</option><option value="heuristic">Heuristic</option><option value="learned">Learned (reviewed model)</option></select></label><details className="pipeline-picker"><summary>Custom pipeline <small>{custom.length ? `${custom.length} selected` : 'optional'}</small></summary><div className="pipeline-options">{allowedPasses.map((pass) => <label key={pass}><input type="checkbox" checked={custom.includes(pass)} onChange={() => setCustom((current) => current.includes(pass) ? current.filter((item) => item !== pass) : [...current, pass])} />{pass}</label>)}</div>{custom.length > 1 && <div className="pipeline-order" aria-label="Custom pipeline order">{custom.map((pass, index) => <span key={pass}>{pass}<button aria-label={`Move ${pass} earlier`} disabled={index === 0} onClick={() => movePass(index, -1)}>↑</button><button aria-label={`Move ${pass} later`} disabled={index === custom.length - 1} onClick={() => movePass(index, 1)}>↓</button></span>)}</div>}</details><button disabled={busy} onClick={() => void doCompare()}>Compare O0–O3</button><button disabled={busy} onClick={() => void doBenchmark()}>Measure source</button><span className={result?.success ? 'compile-status good' : 'compile-status'}>{result ? result.success ? `verified · ${result.telemetry.totalCompileUs} μs` : 'diagnostics reported' : 'waiting'}</span><span className="compiler-revision" aria-label="Compiler revision">{result?.compilerRevision ?? 'waiting'}</span></section>
     <section className="workspace" id="compiler-workspace">
-      <div className="panel source-panel"><header><div><strong>Source</strong><span>Nano</span></div><button className="format-source" onClick={() => setSource(formatNano(source))}>Format source</button></header><div className="editor"><SourceEditor value={source} focusLine={focusLine} onCursorLine={(line) => { const related = result?.values.find((candidate) => candidate.line === line); if (related) setSelectedValue(related.value); }} onChange={(next) => { setSource(next); setExampleName(''); }} /></div></div>
+      <div className="panel source-panel"><header><div><strong>Source</strong><span>NanoPass surface</span></div><button className="format-source" onClick={() => setSource(formatNano(source))}>Format source</button></header><div className="editor"><SourceEditor value={source} focusLine={focusLine} onCursorLine={(line) => { const related = result?.values.find((candidate) => candidate.line === line); if (related) setSelectedValue(related.value); }} onChange={(next) => { setSource(next); setExampleName(''); }} /></div></div>
       <div className="panel ir-panel"><header><div><strong>Representation</strong><span>{snapshot?.displayName ?? 'waiting'}</span></div><select aria-label="IR stage" value={snapshot?.stageId ?? ''} onChange={(event) => setSelectedStage(event.target.value)}>{result?.snapshots.map((item) => <option key={item.stageId} value={item.stageId}>{item.displayName}</option>)}</select></header><CodeView snapshot={snapshot} selectedBlock={selectedBlock} selectedValue={value} onValue={setSelectedValue} onBlock={setSelectedBlock} /></div>
       <div className="panel timeline-panel"><header><strong>Pass timeline</strong><span>compiler facts</span></header><Timeline passes={result?.passes ?? []} selected={selectedPass} onSelect={setSelectedPass} /></div>
       <div className="panel graph-panel"><header><div><strong>Graph explorer</strong><span>{graph?.function ? `@${graph.function}` : 'no graph'}</span></div><select aria-label="Graph kind" value={graphKind} onChange={(event) => setGraphKind(event.target.value)}>{['cfg','dominator-tree','loops','call-graph'].map((kind) => <option key={kind}>{kind}</option>)}</select></header><GraphPane graph={graph} profile={runResult?.runtimeProfile} selectedBlock={selectedBlock} onSelect={(id) => { const match = /bb(\d+)$/.exec(id); setSelectedBlock(match ? Number(match[1]) : undefined); }} /></div>

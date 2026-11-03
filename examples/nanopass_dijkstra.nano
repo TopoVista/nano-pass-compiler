@@ -1,0 +1,49 @@
+// NanoPass surface syntax: a fixed-size adjacency-matrix Dijkstra run.
+fn main() -> i32 {
+  let graph: i32[36];
+  let distance: i32[6];
+  let visited: truth[6];
+  let i: i32 = 0;
+
+  loop (i < 36) { graph[i] = 0; i = i + 1; }
+  graph[1] = 7; graph[6] = 7;
+  graph[2] = 9; graph[12] = 9;
+  graph[5] = 14; graph[30] = 14;
+  graph[7] = 10; graph[13] = 10;
+  graph[9] = 15; graph[19] = 15;
+  graph[15] = 11; graph[20] = 11;
+  graph[17] = 2; graph[32] = 2;
+  graph[22] = 6; graph[27] = 6;
+  graph[29] = 9; graph[34] = 9;
+
+  i = 0;
+  loop (i < 6) { distance[i] = 1000000; visited[i] = false; i = i + 1; }
+  distance[0] = 0;
+
+  let round: i32 = 0;
+  loop (round < 6) {
+    let best: i32 = 1000000;
+    let current: i32 = -1;
+    i = 0;
+    loop (i < 6) {
+      when (!visited[i] && distance[i] < best) { best = distance[i]; current = i; }
+      i = i + 1;
+    }
+    when (current == -1) { halt; }
+    visited[current] = true;
+
+    let neighbor: i32 = 0;
+    loop (neighbor < 6) {
+      let edge: i32 = graph[current * 6 + neighbor];
+      when (edge > 0 && !visited[neighbor] && distance[current] + edge < distance[neighbor]) {
+        distance[neighbor] = distance[current] + edge;
+      }
+      neighbor = neighbor + 1;
+    }
+    round = round + 1;
+  }
+
+  i = 0;
+  loop (i < 6) { emit distance[i]; i = i + 1; }
+  yield 0;
+}

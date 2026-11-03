@@ -372,6 +372,33 @@ Each pass runs **once** — not once per top-level statement.
 
 ## Language reference
 
+NanoPass accepts a compatibility C-like form and a named NanoPass surface
+dialect. They lower to the same typed AST and have identical semantics; the
+dialect is a deliberate language-design layer, not a macro preprocessor.
+
+```nano
+fn path_cost(origin: i32, target: i32) -> i32 {
+  let cost: i32 = origin + target;
+  when (cost > 0) { emit cost; } otherwise { emit 0; }
+  yield cost;
+}
+```
+
+| NanoPass spelling | Compatibility spelling | Meaning |
+|---|---|---|
+| `fn` | typed function prefix | Function with named parameters and `->` result type |
+| `let name: type` | `type name` | Typed local binding |
+| `when` / `otherwise` | `if` / `else` | Conditional branch |
+| `loop` | `while` | Condition-controlled loop |
+| `emit` | `print` | Observable output |
+| `yield` | `return` | Return from function |
+| `halt` / `next` | `break` / `continue` | Loop control |
+| `i32`, `truth`, `unit` | `int`, `bool`, `void` | Canonical NanoPass type names |
+
+See [the full language reference](docs/language.md), including exact grammar
+and current limitations. The compatibility form remains supported for existing
+programs and examples.
+
 Current supported constructs:
 
 ```

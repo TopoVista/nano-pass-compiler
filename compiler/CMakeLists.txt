@@ -541,6 +541,16 @@ endif()
     )
   endforeach()
 
+  # The branded source form must travel through the same verified SSA path as
+  # compatibility syntax. This particular example also exercises arrays,
+  # short-circuit conditions, nested loops, and loop-control aliases.
+  add_test(
+      NAME verify_nanopass_surface_dijkstra
+      COMMAND nano verify ${CMAKE_SOURCE_DIR}/examples/nanopass_dijkstra.nano
+                       --backend=ssa -O2
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
+
   foreach(example optimizer sccp dce cse)
     add_test(
         NAME optimized_${example}

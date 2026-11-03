@@ -61,6 +61,14 @@ private:
 
   unique_ptr<Stmt> statement() {
 
+    // NanoPass surface dialect.  These forms deliberately lower into the
+    // same AST as the compatibility C-like grammar below: the rest of the
+    // compiler therefore observes no semantic fork.
+    if (match({TokenType::FUNCTION}))
+      return styledFunctionStatement();
+    if (match({TokenType::LET}))
+      return styledLetDeclaration();
+
     if (check(TokenType::INT) || check(TokenType::FLOAT) ||
         check(TokenType::DOUBLE) || check(TokenType::BOOL) ||
         check(TokenType::CHAR) || check(TokenType::VOID)) {
@@ -120,24 +128,9 @@ private:
   // ============================================================
 
   unique_ptr<Stmt> varDeclaration() {
-
-    LangType baseType = parseType();
-
-    int arraySize = -1;
-
-    if (match({TokenType::LBRACKET})) {
-      Token sizeTok = consume(TokenType::NUMBER, "Expected array size");
-      arraySize = stoi(sizeTok.lexeme);
-      consume(TokenType::RBRACKET, "Expected ']'");
-    }
+    LangType finalType = parseTypeWithArraySuffix();
 
     Token name = consume(TokenType::IDENTIFIER, "Expected variable name");
-
-    LangType finalType = baseType;
-
-    if (arraySize != -1) {
-      finalType = LangType::Array(baseType, arraySize);
-    }
 
     unique_ptr<Expr> initializer = nullptr;
 
@@ -149,6 +142,26 @@ private:
 
     auto statement = make_unique<VarDeclStmt>(name.lexeme, finalType,
                                               std::move(initializer));
+    statement->loc = SourceLocation(name.line, name.col);
+    return statement;
+  }
+
+  // `let name: type = value;` is the canonical declaration spelling for the
+  // NanoPass surface dialect. Arrays live with their type (`int[8]`) instead
+  // of with the binding name, which keeps the declaration readable in a
+  // typed, name-first form.
+  unique_ptr<Stmt> styledLetDeclaration() {
+    Token name = consume(TokenType::IDENTIFIER, "Expected binding name after 'let'");
+    consume(TokenType::COLON, "Expected ':' after binding name");
+    LangType type = parseTypeWithArraySuffix();
+
+    unique_ptr<Expr> initializer = nullptr;
+    if (match({TokenType::EQUAL}))
+      initializer = expression();
+
+    consume(TokenType::SEMICOLON, "Expected ';' after let binding");
+    auto statement = make_unique<VarDeclStmt>(name.lexeme, type,
+                                               std::move(initializer));
     statement->loc = SourceLocation(name.line, name.col);
     return statement;
   }
@@ -178,6 +191,16 @@ private:
       return LangType::Void();
 
     throw runtime_error("Expected type");
+  }
+
+  LangType parseTypeWithArraySuffix() {
+    LangType baseType = parseType();
+    if (!match({TokenType::LBRACKET}))
+      return baseType;
+
+    Token sizeTok = consume(TokenType::NUMBER, "Expected array size");
+    consume(TokenType::RBRACKET, "Expected ']' after array size");
+    return LangType::Array(baseType, stoi(sizeTok.lexeme));
   }
 
   // ============================================================
@@ -308,6 +331,41 @@ private:
     consume(TokenType::RPAREN, "Expected ')'");
     consume(TokenType::LBRACE, "Expected '{'");
 
+    auto body = blockStatement();
+
+    auto statement = make_unique<FunctionStmt>(
+        name.lexeme, returnType, std::move(params),
+        unique_ptr<BlockStmt>(static_cast<BlockStmt *>(body.release())));
+    statement->loc = SourceLocation(name.line, name.col);
+    return statement;
+  }
+
+  // `fn name(arg: type) -> type { ... }` provides an unmistakable NanoPass
+  // identity while retaining exactly the existing FunctionStmt contract.
+  unique_ptr<Stmt> styledFunctionStatement() {
+    Token name = consume(TokenType::IDENTIFIER, "Expected function name after 'fn'");
+    consume(TokenType::LPAREN, "Expected '(' after function name");
+
+    vector<pair<string, LangType>> params;
+    if (!check(TokenType::RPAREN)) {
+      do {
+        Token paramName = consume(TokenType::IDENTIFIER, "Expected parameter name");
+        consume(TokenType::COLON, "Expected ':' after parameter name");
+        params.push_back({paramName.lexeme, parseTypeWithArraySuffix()});
+      } while (match({TokenType::COMMA}));
+    }
+
+    unordered_set<string> seen;
+    for (const auto &param : params) {
+      if (seen.count(param.first))
+        throw runtime_error("Duplicate parameter name '" + param.first + "'");
+      seen.insert(param.first);
+    }
+
+    consume(TokenType::RPAREN, "Expected ')' after parameters");
+    consume(TokenType::ARROW, "Expected '->' before function return type");
+    LangType returnType = parseTypeWithArraySuffix();
+    consume(TokenType::LBRACE, "Expected '{' before function body");
     auto body = blockStatement();
 
     auto statement = make_unique<FunctionStmt>(

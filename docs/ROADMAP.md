@@ -152,6 +152,8 @@ deterministic Phase 9 foundation; they are not represented as implemented.
 - [ ] Remote multi-tenant execution hardening and benchmark dashboard (future)
 
 ## Phase 11 — Production hardening and portfolio release (in progress)
+- [x] Named NanoPass surface dialect, compatibility parser coverage, editor
+      highlighting/formatting, a Dijkstra lab example, and language reference
 - [x] Central service resource budgets, structured limit errors, execution
       policies, and explicit local-trusted JIT boundary
 - [x] Reproducible 13-program benchmark corpus and JSON median/quartile harness

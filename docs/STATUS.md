@@ -17,6 +17,10 @@ explicit local evidence rather than CI claims.
 ## Stable
 
 ### Phase 11 foundations
+- **NanoPass surface dialect** — backwards-compatible `fn`/`let` typed
+  declarations, `when`/`otherwise`, `loop`, `emit`, `yield`, `halt`/`next`,
+  and canonical `i32`/`truth`/`unit` spellings.  It parses into the existing
+  AST and follows the same resolver, verifier, optimizer, and backend path.
 - **Resource-aware local service** — centralized source/token/AST/function/
   CFG/SSA/optimization/execution/profile budgets, structured resource errors,
   cooperative compile deadlines, interpreter wall-clock limits, and a bounded
@@ -34,7 +38,7 @@ explicit local evidence rather than CI claims.
   and structural metrics. Timing files are ignored by Git.
 
 ### Final local audit (2026-11-03)
-- **Correctness** — WSL LLVM 18.1.3 CTest: 101/101; ASan+UBSan: 5,540 IR,
+- **Correctness** — WSL LLVM 18.1.3 CTest: 102/102; ASan+UBSan: 5,540 IR,
   80 service, and 22 service/JIT assertions passed.
 - **Policy fuzzing** — seed `20261103`, 1,000 generated/valid/comparable
   programs per policy: heuristic had 6,000 decisions and 3,000 inlines;
