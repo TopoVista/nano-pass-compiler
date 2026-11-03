@@ -14,6 +14,7 @@ describe('compiler lab', () => {
   it('renders compiler facts, graph selection, value inspection, and execution', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getAllByText('Optimized SSA').length).toBeGreaterThan(0));
+    expect(screen.getByLabelText('Compiler revision')).toHaveTextContent('test');
     expect(screen.getByText('SCCP')).toBeInTheDocument();
     expect(screen.getByText(/UNSAFE_TO_SPECULATE/)).toBeInTheDocument();
     expect(screen.getByText(/inline-imitation-v1/)).toBeInTheDocument();

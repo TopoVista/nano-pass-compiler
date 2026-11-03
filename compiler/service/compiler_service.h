@@ -35,6 +35,7 @@
 #include "passes/ASTAnalyses.h"
 #include "sema/resolve_scopes.h"
 #include "sema/type_check.h"
+#include "support/project_version.h"
 #include "testing/differential_runner.h"
 
 #if defined(NANO_SERVICE_HAS_LLVM)
@@ -164,7 +165,7 @@ struct PolicyFeatureInfo {
 struct CompileResponseV1 {
   uint32_t schemaVersion = kCompilerServiceSchemaVersion;
   bool success = false;
-  std::string compilerRevision = "phase11-service-v1";
+  std::string compilerRevision = std::string(build::kCompilerRevision);
   std::vector<ServiceDiagnostic> diagnostics;
   std::vector<IRSnapshot> snapshots;
   std::vector<TransformationSnapshot> transformations;

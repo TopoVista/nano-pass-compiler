@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "interpreter/profile_sink.h"
+#include "support/project_version.h"
 
 namespace nanopass::profile {
 
@@ -40,6 +41,7 @@ public:
   std::map<std::string, uint64_t> functionCounts;
   std::map<std::string, BranchCounts> branchCounts;
   std::map<std::string, uint64_t> loopIterations;
+  std::string compilerRevision = std::string(build::kCompilerRevision);
 };
 
 inline std::string escapeJson(std::string_view text) {
@@ -58,7 +60,8 @@ inline std::string escapeJson(std::string_view text) {
 }
 
 inline void writeProfileJson(const NanoProfile &profile, std::ostream &out) {
-  out << "{\n  \"schema_version\": " << NanoProfile::kSchemaVersion;
+  out << "{\n  \"schema_version\": " << NanoProfile::kSchemaVersion
+      << ",\n  \"compiler_revision\": \"" << escapeJson(profile.compilerRevision) << "\"";
   auto writeMapPrefix = [&](std::string_view name) { out << ",\n  \"" << name << "\": {"; };
   writeMapPrefix("function_counts");
   bool first = true;

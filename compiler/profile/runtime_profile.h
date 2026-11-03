@@ -15,6 +15,7 @@
 
 #include "ir/ssa/loop_analysis.h"
 #include "ir/ssa/ssa_printer.h"
+#include "support/project_version.h"
 
 namespace nanopass::profile {
 
@@ -50,6 +51,7 @@ enum class ProfileStatus { Complete, Partial, Failed };
 struct ProgramRuntimeProfile {
   static constexpr uint64_t kSchemaVersion = 1;
   uint64_t schemaVersion = kSchemaVersion;
+  std::string compilerRevision = std::string(build::kCompilerRevision);
   std::string programFingerprint;
   // The SSA optimization level used to create this profile. Tier-0/O0 is the
   // compatible baseline for the current PGO consumer; higher levels remain
@@ -150,6 +152,8 @@ inline void writeRuntimeProfileJson(const ProgramRuntimeProfile &profile,
                                     std::ostream &out) {
   out << "{\n  \"schema_version\": " << profile.schemaVersion
       << ",\n  \"profile_kind\": \"ssa-runtime\""
+      << ",\n  \"compiler_revision\": \""
+      << escapeRuntimeProfileJson(profile.compilerRevision) << "\""
       << ",\n  \"program_fingerprint\": \""
       << escapeRuntimeProfileJson(profile.programFingerprint) << "\""
       << ",\n  \"optimization_level\": " << profile.optimizationLevel
@@ -341,6 +345,7 @@ inline std::optional<ProgramRuntimeProfile> readRuntimeProfileJson(
   if (!root) return std::nullopt;
   const auto *version = detail::profileField(*root, "schema_version", detail::JsonValue::Kind::Number);
   const auto *kind = detail::profileField(*root, "profile_kind", detail::JsonValue::Kind::String);
+  const auto *compilerRevision = detail::profileField(*root, "compiler_revision", detail::JsonValue::Kind::String);
   const auto *fingerprint = detail::profileField(*root, "program_fingerprint", detail::JsonValue::Kind::String);
   const auto *optimizationLevel = detail::profileField(*root, "optimization_level", detail::JsonValue::Kind::Number);
   const auto *executionMode = detail::profileField(*root, "execution_mode", detail::JsonValue::Kind::String);
@@ -354,6 +359,7 @@ inline std::optional<ProgramRuntimeProfile> readRuntimeProfileJson(
   const auto parsedStatus = parseRuntimeProfileStatus(status->string);
   if (!parsedStatus) { error = "unknown runtime profile status"; return std::nullopt; }
   ProgramRuntimeProfile profile;
+  if (compilerRevision) profile.compilerRevision = compilerRevision->string;
   profile.programFingerprint = fingerprint->string;
   // These fields were added without changing the v1 counter schema. Accept
   // older v1 files as baseline profiles, but write both fields going forward.

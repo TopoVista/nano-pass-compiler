@@ -4,6 +4,7 @@
 #include <string>
 
 #include "service/compiler_service.h"
+#include "support/project_version.h"
 
 namespace {
 int assertions = 0;
@@ -27,6 +28,7 @@ int main() {
   const auto valid = request(R"(int choose(int x) { if (x > 0) { return 7; } return 3; } int main() { int y = choose(1); print(y); return y; })");
   const auto compiled = service.compile(valid);
   ASSERT(compiled.success); ASSERT(compiled.schemaVersion == kCompilerServiceSchemaVersion);
+  ASSERT(compiled.compilerRevision == nanopass::build::kCompilerRevision);
   ASSERT(!compiled.snapshots.empty()); ASSERT(!compiled.passes.empty()); ASSERT(!compiled.graphs.empty()); ASSERT(!compiled.values.empty());
   ASSERT(std::any_of(compiled.passes.begin(), compiled.passes.end(), [](const auto &event) { return event.id == "lex" && event.counters.contains("tokens"); }));
   ASSERT(std::any_of(compiled.passes.begin(), compiled.passes.end(), [](const auto &event) { return event.id == "type-check" && event.category == "frontend"; }));

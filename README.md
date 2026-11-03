@@ -8,6 +8,8 @@ visually explains every transformation.
 > observable.  A developer should always be able to answer:
 > "What happened to my program?"
 
+![NanoPass Compiler Lab inspecting a verified SSA transformation](docs/images/compiler-lab.png)
+
 ```
 Source → Lex → Parse → Resolve → TypeCheck
        → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]
@@ -33,6 +35,12 @@ has established legality and budget compliance; deterministic compiler code
 performs the clone and the SSA verifier still gates the result. It is neither
 an LLM nor a runtime-performance claim. See [the learned-policy design](docs/learned-policy.md),
 [benchmark methodology](docs/benchmarks.md), and [the threat model](docs/threat-model.md).
+
+The source-controlled project identity is **0.3.0+phase11-dev**. It appears
+in `nano --version`, service readiness, the Compiler Lab, runtime profiles,
+and compiler-generated policy datasets. It is intentionally not tagged as a
+final release until the Docker and hosted-CI gates in
+[the roadmap](docs/ROADMAP.md) have passed.
 
 NanoPass also differentially tests supported programs: CoreIR execution is
 compared with independently executed SSA O0–O3 programs. This is empirical

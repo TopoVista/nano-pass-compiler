@@ -9,6 +9,7 @@
 
 #include "testing/differential_runner.h"
 #include "testing/nano_generator.h"
+#include "support/project_version.h"
 
 namespace nanopass {
 
@@ -48,7 +49,7 @@ private:
 #ifdef NANOPASS_GIT_REVISION
     return NANOPASS_GIT_REVISION;
 #else
-    return "unknown";
+    return std::string(build::kCompilerRevision);
 #endif
   }
 };

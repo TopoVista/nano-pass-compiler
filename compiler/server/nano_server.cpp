@@ -110,7 +110,7 @@ std::string errorJson(int status,std::string_view code,std::string_view message)
 std::string healthJson(const CompilerService &service) {
   std::ostringstream out;
   out << "{\"schemaVersion\":1,\"status\":\"ok\",\"ready\":true"
-      << ",\"compilerRevision\":\"phase11-service-v1\""
+      << ",\"compilerRevision\":\"" << nanopass::build::kCompilerRevision << "\""
       << ",\"llvmVersion\":\"" LLVM_VERSION_STRING "\""
       << ",\"executionPolicy\":\"" << executionPolicyName(service.executionPolicy()) << "\"}";
   return out.str();

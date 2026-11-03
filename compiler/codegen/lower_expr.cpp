@@ -27,8 +27,6 @@ static void emitBoundsCheck(LLVMCodegen &cg, Value *index, int size) {
 
   Function *fn = cg.currentFunction;
 
-  BasicBlock *currentBB = cg.builder.GetInsertBlock();
-
   Value *zero = ConstantInt::get(index->getType(), 0);
   Value *upper = ConstantInt::get(index->getType(), size);
 

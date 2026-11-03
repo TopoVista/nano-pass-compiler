@@ -57,6 +57,7 @@
 #include "interpreter/ssa_interpreter.h"
 #include "profile/nano_profile.h"
 #include "profile/runtime_profile.h"
+#include "support/project_version.h"
 #include "visualize/ast_graphviz.h"
 
 // Pass infrastructure
@@ -67,11 +68,7 @@
 #include "optimizer/learned_policy.h"
 #include "optimizer/optimization_policy.h"
 
-// ============================================================
-// Version
-// ============================================================
 namespace {
-constexpr std::string_view kVersion = "nano 0.3.0";
 std::string gProgramPath;
 
 // ============================================================
@@ -133,7 +130,7 @@ struct Options {
 // Help
 // ============================================================
 void printHelp(std::ostream &out) {
-    out << "NanoPass Compiler Lab " << kVersion << "\n\n"
+    out << "NanoPass Compiler Lab " << nanopass::build::kCliVersion << "\n\n"
         << "Usage:\n"
         << "  nano <command> <file> [options]\n\n"
         << "Commands:\n"
@@ -755,7 +752,9 @@ bool writePolicyDecisionLog(
         decision.estimatedCost = static_cast<double>(decision.features.instructionCount);
         const auto observation = observations.contains(function.name)
             ? observations.at(function.name) : policyObservation(function);
-        out << "{\"schema_version\":1,\"program_fingerprint\":\"" << fingerprint
+        out << "{\"schema_version\":1,\"compiler_revision\":\""
+            << nanopass::build::kCompilerRevision
+            << "\",\"program_fingerprint\":\"" << fingerprint
             << "\",\"configuration\":" << policyConfigurationJson()
             << ",\"record\":" << nanopass::opt::optimizationPolicyDecisionJson(decision)
             << ",\"structural_result\":{\"instructions_before\":"
@@ -782,7 +781,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (argc == 2 && std::string_view(argv[1]) == "--version") {
-        std::cout << kVersion << '\n';
+        std::cout << nanopass::build::kCliVersion << '\n';
         return 0;
     }
 
@@ -1235,7 +1234,9 @@ int main(int argc, char **argv) {
                 if (!out) { std::cerr << "error: could not append inline policy dataset\n"; return 1; }
                 const auto fingerprint = nanopass::profile::stableProgramFingerprint(*policyDecisionInput);
                 for (const auto &record : inlinePolicyRecords)
-                    out << "{\"schema_version\":1,\"program_fingerprint\":\"" << fingerprint
+                    out << "{\"schema_version\":1,\"compiler_revision\":\""
+                        << nanopass::build::kCompilerRevision
+                        << "\",\"program_fingerprint\":\"" << fingerprint
                         << "\",\"record\":"
                         << appendInlineStructuralResult(record, policyObservations) << "}\n";
             }

@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('inspects compiler stages, graphs, execution profile, and adaptive events', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText(/verified ·/)).toBeVisible();
+  await expect(page.getByLabel('Compiler revision')).toHaveText('0.3.0+phase11-dev');
 
   await page.getByLabel('IR stage').selectOption('ssa');
   await expect(page.getByLabel('IR viewer')).toContainText('func @main');

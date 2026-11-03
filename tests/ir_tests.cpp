@@ -1361,7 +1361,7 @@ static void test_reference_profile_is_deterministic_and_site_distinct() {
     ASSERT(ifSite!=first.branchCounts.end());ASSERT(loopSite!=first.branchCounts.end());
     if(ifSite!=first.branchCounts.end()){ASSERT_EQ(ifSite->second.taken,2u);ASSERT_EQ(ifSite->second.notTaken,1u);}
     if(loopSite!=first.branchCounts.end()){ASSERT_EQ(loopSite->second.taken,3u);ASSERT_EQ(loopSite->second.notTaken,1u);}
-    std::ostringstream firstJson,secondJson;profile::writeProfileJson(first,firstJson);profile::writeProfileJson(second,secondJson);ASSERT_EQ(firstJson.str(),secondJson.str());ASSERT(firstJson.str().find("\"schema_version\": 1")!=std::string::npos);
+    std::ostringstream firstJson,secondJson;profile::writeProfileJson(first,firstJson);profile::writeProfileJson(second,secondJson);ASSERT_EQ(firstJson.str(),secondJson.str());ASSERT(firstJson.str().find("\"schema_version\": 1")!=std::string::npos);ASSERT(firstJson.str().find("\"compiler_revision\": \"0.3.0+phase11-dev\"")!=std::string::npos);
     std::istringstream serialized(firstJson.str());std::string profileError;auto read=profile::readProfileJson(serialized,profileError);ASSERT(read.has_value());if(read)ASSERT_EQ(read->functionCounts.at("worker"),1u);
     std::istringstream malformed(R"({"schema_version": 99, "function_counts": {}, "branch_counts": {}, "loop_iterations": {}})");auto rejected=profile::readProfileJson(malformed,profileError);ASSERT(!rejected.has_value());
     std::istringstream malformedCounts(R"({"schema_version": 1, "function_counts": 1, "branch_counts": {}, "loop_iterations": {}})");rejected=profile::readProfileJson(malformedCounts,profileError);ASSERT(!rejected.has_value());
@@ -1382,7 +1382,7 @@ static void test_ssa_runtime_profile_is_deterministic_serializable_and_compatibl
     std::ostringstream a,b; profile::writeRuntimeProfileJson(first,a); profile::writeRuntimeProfileJson(second,b);
     ASSERT_EQ(a.str(),b.str()); ASSERT(a.str().find("\"profile_kind\": \"ssa-runtime\"")!=std::string::npos);ASSERT(a.str().find("\"optimization_level\": 0")!=std::string::npos);
     std::istringstream encoded(a.str()); std::string error; auto decoded=profile::readRuntimeProfileJson(encoded,error);
-    ASSERT(decoded.has_value()); if(decoded){ASSERT(profile::runtimeProfileMatches(*decoded,result.ssa));ASSERT_EQ(decoded->optimizationLevel,0u);ASSERT_EQ(decoded->executionMode,"unspecified");ASSERT_EQ(decoded->functions.at("helper").calls,2u);}
+    ASSERT(decoded.has_value()); if(decoded){ASSERT(profile::runtimeProfileMatches(*decoded,result.ssa));ASSERT_EQ(decoded->compilerRevision,"0.3.0+phase11-dev");ASSERT_EQ(decoded->optimizationLevel,0u);ASSERT_EQ(decoded->executionMode,"unspecified");ASSERT_EQ(decoded->functions.at("helper").calls,2u);}
     SSAProgram different=compileToIR(R"(int main(){return 9;})").ssa; ASSERT(!profile::runtimeProfileMatches(first,different));
     std::istringstream malformed("{\"schema_version\":99}"); ASSERT(!profile::readRuntimeProfileJson(malformed,error).has_value());
     std::istringstream incomplete("{\"schema_version\":1,\"profile_kind\":\"ssa-runtime\"}"); ASSERT(!profile::readRuntimeProfileJson(incomplete,error).has_value());

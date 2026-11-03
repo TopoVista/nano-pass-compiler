@@ -34,8 +34,8 @@ explicit local evidence rather than CI claims.
   and structural metrics. Timing files are ignored by Git.
 
 ### Final local audit (2026-11-03)
-- **Correctness** — WSL LLVM 18.1.3 CTest: 101/101; ASan+UBSan: 5,538 IR,
-  79 service, and 22 service/JIT assertions passed.
+- **Correctness** — WSL LLVM 18.1.3 CTest: 101/101; ASan+UBSan: 5,540 IR,
+  80 service, and 22 service/JIT assertions passed.
 - **Policy fuzzing** — seed `20261103`, 1,000 generated/valid/comparable
   programs per policy: heuristic had 6,000 decisions and 3,000 inlines;
   learned had 3,000 decisions and 3,000 inlines; both had zero mismatches,
@@ -229,9 +229,9 @@ explicit local evidence rather than CI claims.
 | CLI smoke (help, version, passes, analyses) | 4 |
 | Frontend unit | 1 |
 | Pass manager assertions | 90 |
-| IR/SSA/optimizer/correctness assertions | 5,538 |
+| IR/SSA/optimizer/correctness assertions | 5,540 |
 | LLVM backend/JIT assertions | 503 |
-| Compiler service assertions | 79 |
+| Compiler service assertions | 80 |
 | Compiler service LLVM/JIT assertions | 22 |
 | LLVM 18.1.3 WSL CTest (Phase 11 local) | 101 / 101 passed |
 | Per-example emit/desugar/verify (8 examples × 3) | 24 |
@@ -242,11 +242,15 @@ explicit local evidence rather than CI claims.
 | Errors.nano rejection | 1 |
 
 Final local WSL validation with LLVM 18.1.3: **101/101 CTest** passed;
-ASan+UBSan also passed the 5,538-assertion IR suite, 79-assertion service
+ASan+UBSan also passed the 5,540-assertion IR suite, 80-assertion service
 suite, and 22-assertion service LLVM/JIT suite. The actual real-service
 Playwright journey passed locally (1/1). The Windows LLVM package remains
 invalid because its imported targets reference a missing
 `C:\llvm\bin\llvm-tblgen.exe`; it was not modified or bypassed.
+
+The source-controlled pre-release identity is `0.3.0+phase11-dev`; CLI, API,
+Lab, runtime profiles, and policy-decision datasets report it consistently.
+It remains pre-release until the Docker-image and hosted-CI gates complete.
 
 ---
 
@@ -290,7 +294,7 @@ invalid because its imported targets reference a missing
 - [x] Differential O0–O3 semantic corpus and fixed-seed 1,000-case / 4,000-comparison campaign
 - [x] Mismatch persistence, AST-guided semantic reduction, and malformed-input smoke fuzzing
 - [x] LLVM-independent GitHub Actions correctness job with bounded fuzz smoke
-- [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,538 IR assertions and
+- [x] WSL LLVM 18.1.3 ASan+UBSan execution: current 5,540 IR assertions and
   503 backend/JIT assertions passed. The Windows package remains independently
   broken (`C:\llvm\bin\llvm-tblgen.exe` missing).
 

@@ -161,6 +161,8 @@ deterministic Phase 9 foundation; they are not represented as implemented.
       program-level split metadata, verifier-gated decision records, and web view
 - [x] Learned and heuristic inline differential fuzz commands, CI smoke coverage,
       and final 1,000-program campaigns for each policy
+- [x] Source-controlled pre-release identity exposed by CLI, API, Lab, profiles,
+      and policy-decision datasets (`0.3.0+phase11-dev`)
 - [x] Actual local real-service Playwright journey (compiler, graphs, runtime,
       adaptive events) in addition to the CI browser job definition
 - [x] Pinned LLVM 18/Node 22 container definitions, compose hardening, readiness,
