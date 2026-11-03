@@ -44,9 +44,11 @@ explicit local evidence rather than CI claims.
   1,589 Tier-1 promotions across 857 cases, and zero mismatches, crashes, and
   timeouts.
 - **Browser journey** — the real-service Playwright flow passed locally (1/1).
-- **Container gate** — Docker definitions and CI smoke are committed, but the
-  local Docker Desktop Linux engine was unavailable; no image-build or CI-pass
-  result is claimed.
+- **Container gate** — Docker Desktop 28.1.1 built the pinned server and web
+  images locally. The interpreter-only server passed readiness plus a schema-v1
+  compile request; the web image served its root document with HTTP 200.
+- **Web dependency audit** — Node 22.21.0 `npm audit` reported zero known
+  vulnerabilities after the Vite/Vitest/DOMPurify security update.
 
 ### SSA middle end
 - **Dominator analysis** — deterministic reachable-block RPO plus iterative
@@ -250,7 +252,7 @@ invalid because its imported targets reference a missing
 
 The source-controlled pre-release identity is `0.3.0+phase11-dev`; CLI, API,
 Lab, runtime profiles, and policy-decision datasets report it consistently.
-It remains pre-release until the Docker-image and hosted-CI gates complete.
+It remains pre-release until the hosted-CI gate completes.
 
 ---
 

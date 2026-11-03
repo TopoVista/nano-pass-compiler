@@ -117,7 +117,7 @@ npm ci
 npm run dev
 ```
 
-Open the Vite URL printed by the client. The lab provides real compiler
+Open `http://127.0.0.1:5173` (or the Vite URL printed by the client). The lab provides real compiler
 snapshots, pass telemetry, CFG/dominator/loop/call graphs, SSA value
 provenance, verifier-backed optimization remarks, before/after SSA,
 profile heat overlays, adaptive events, bounded differential correctness, and

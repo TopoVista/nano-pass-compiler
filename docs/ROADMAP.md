@@ -167,7 +167,8 @@ deterministic Phase 9 foundation; they are not represented as implemented.
       adaptive events) in addition to the CI browser job definition
 - [x] Pinned LLVM 18/Node 22 container definitions, compose hardening, readiness,
       container CI, and release workflow definitions
-- [ ] Run Docker image smoke in an environment with an active Docker engine
+- [x] Run Docker image smoke: pinned server/web images built locally; readiness,
+      schema-v1 compile, and web HTTP probes passed on Docker Desktop 28.1.1
 - [ ] Final release tag only after all CI/container gates pass
 - [ ] Profile-guided branch layout decisions
 - [ ] Verifier-gated GenAI advisor (LLM suggests known passes; compiler validates)

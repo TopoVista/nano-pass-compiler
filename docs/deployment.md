@@ -18,4 +18,13 @@ The container starts the server with `--execution-policy=interpreter-only`; JIT/
 
 `disabled` rejects all execution, and `interpreter-only` admits only bounded CoreIR/SSA interpreter execution. The readiness endpoint verifies the initialized compiler service and reports LLVM version and policy. See [the threat model](threat-model.md) before changing these defaults.
 
+## Local container evidence
+
+On 2026-11-03, Docker Desktop 28.1.1 built both pinned images from this
+repository. The server image passed its `/api/v1/readiness` probe in
+`interpreter-only` mode and compiled a schema-v1 learned-policy request with
+zero diagnostics. The web image served its root document with HTTP 200. This
+is local smoke evidence, not a claim that hosted CI or public deployment has
+completed.
+
 The images do not make compilation safe for hostile multi-tenant input. Production hosting needs a request worker boundary, OS-enforced CPU/memory quotas, request cancellation, authentication/rate limiting, and an explicit CORS/origin policy.

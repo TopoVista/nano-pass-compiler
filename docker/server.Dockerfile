@@ -3,7 +3,8 @@
 FROM ubuntu:24.04 AS build
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates cmake ninja-build clang-18 llvm-18-dev && \
+    ca-certificates cmake ninja-build clang-18 llvm-18-dev \
+    libedit-dev libxml2-dev libzstd-dev zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY CMakeLists.txt ./
@@ -14,6 +15,8 @@ COPY examples ./examples
 # The install rule packages both the CLI and service targets.
 RUN cmake -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER=clang-18 \
+    -DCMAKE_CXX_COMPILER=clang++-18 \
     -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
     -DNANO_BUILD_TESTS=OFF -DNANO_BUILD_WEB_SERVER=ON -DNANO_BUILD_JIT=OFF && \
     cmake --build build --target nano nano-server -j2 && \
