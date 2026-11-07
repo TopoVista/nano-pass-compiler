@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('uses the public landing page to enter the dashboard workbench', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /watch a program become machine code/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeVisible();
   await Promise.all([
     page.waitForURL(/\/lab$/),
     page.getByRole('link', { name: /open compiler lab/i }).click(),

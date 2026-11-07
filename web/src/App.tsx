@@ -172,6 +172,7 @@ export default function App() {
   const [comparison, setComparison] = useState<Compilation[]>();
   const [benchmark, setBenchmark] = useState<BenchmarkMeasurement>();
   const [busy, setBusy] = useState(false);
+  const [serviceError, setServiceError] = useState<string>();
   const [executionStep, setExecutionStep] = useState(0);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const options = useMemo(
@@ -188,14 +189,20 @@ export default function App() {
     setBusy(true);
     setRunResult(undefined);
     setCorrectness(undefined);
-    const response = await compile(options);
-    setResult(response);
-    if (
-      response.snapshots.length &&
-      !response.snapshots.some((snapshot) => snapshot.stageId === selectedStage)
-    )
-      setSelectedStage(response.snapshots.at(-1)!.stageId);
-    setBusy(false);
+    setServiceError(undefined);
+    try {
+      const response = await compile(options);
+      setResult(response);
+      if (
+        response.snapshots.length &&
+        !response.snapshots.some((snapshot) => snapshot.stageId === selectedStage)
+      )
+        setSelectedStage(response.snapshots.at(-1)!.stageId);
+    } catch {
+      setServiceError("The compiler service is waking up or unavailable. Check its URL, then retry.");
+    } finally {
+      setBusy(false);
+    }
   };
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -343,6 +350,14 @@ export default function App() {
         return { tone: "success", lines: [`compile ${measurement.compileUs} μs`, `samples ${samples.join(", ")} μs`, `median ${measurement.medianUs} μs · p25/p75 ${measurement.p25Us}/${measurement.p75Us} μs`] };
       }
       return { tone: "error", lines: [`Unknown command: ${verb}`, "Type help to list safe in-app commands."] };
+    } catch {
+      return {
+        tone: "error",
+        lines: [
+          "Compiler service unavailable.",
+          "Check the local service URL, then run the command again.",
+        ],
+      };
     } finally { setBusy(false); }
   };
   const share = async () => {
@@ -495,6 +510,7 @@ export default function App() {
             : "diagnostics reported"
           : "waiting"}
       </span>
+      {serviceError && <button className="service-retry" onClick={() => void doCompile()}>Retry compiler service</button>}
       <span className="compiler-revision" aria-label="Compiler revision">
         {result?.compilerRevision ?? "waiting"}
       </span>

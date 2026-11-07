@@ -56,10 +56,11 @@ in the share URL fragment.
 The fragment remains client-side; source is only sent to the configured local
 service for compilation.
 
-The design reference used for this implementation is
-`web/design/compiler-lab-concept.png`. The shipped UI intentionally keeps its
-graphite, compact developer-tooling hierarchy while using the real local API
-instead of placeholder cards.
+The shipped public surface uses a black editorial system that leads to the
+workbench; the lab itself is a compact dark instrument with a single lime
+signal color for selected or verified compiler states. Both use the real local
+API instead of placeholder cards. Durable visual decisions live in
+[`DESIGN.md`](../DESIGN.md).
 
 `npm run test:e2e` is a bounded Playwright journey that starts the real local
 `nano-server` plus Vite, loads a source example, switches IR/graphs, opens a

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#050505"/>
+  <rect x="64" y="62" width="1072" height="506" fill="none" stroke="#383834"/>
+  <text x="96" y="126" fill="#e8ff57" font-family="monospace" font-size="17" letter-spacing="3">NANOPASS COMPILER LAB</text>
+  <text x="96" y="242" fill="#f3f1ec" font-family="Arial, sans-serif" font-size="78" font-weight="600">A compiler you can</text>
+  <text x="96" y="326" fill="#f3f1ec" font-family="Georgia, serif" font-size="92" font-style="italic">interrogate.</text>
+  <rect x="762" y="176" width="304" height="270" fill="#0c0c0b" stroke="#5d5d56"/>
+  <text x="786" y="212" fill="#96938c" font-family="monospace" font-size="14">06 / SSA @score</text>
+  <text x="786" y="263" fill="#e8ff57" font-family="monospace" font-size="16">%0 = const 4</text>
+  <text x="786" y="298" fill="#f3f1ec" font-family="monospace" font-size="16">branch %1, bb1, bb2</text>
+  <text x="786" y="352" fill="#f3f1ec" font-family="monospace" font-size="16">%3 = phi i32</text>
+  <text x="786" y="406" fill="#e8ff57" font-family="monospace" font-size="16">✓ SSA verified</text>
+  <text x="96" y="502" fill="#aaa7a0" font-family="Arial, sans-serif" font-size="22">Source → typed IR → CFG → SSA → optimizer → LLVM</text>
+</svg>

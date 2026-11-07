@@ -10,6 +10,16 @@ visually explains every transformation.
 
 ![NanoPass Compiler Lab inspecting a verified SSA transformation](docs/images/compiler-lab.png)
 
+## The public compiler lab
+
+The project includes an editorial public site and a React workbench that consume
+the versioned compiler JSON API—never terminal scraping or fabricated results.
+The landing page introduces the actual compiler architecture; `/lab` is where
+source, typed representations, graphs, verification evidence, and bounded
+execution are inspected. See [the lab guide](docs/web-lab.md),
+[security boundary](docs/web-security.md), and
+[production deployment guide](docs/deployment-production.md).
+
 ```
 Source → Lex → Parse → Resolve → TypeCheck
        → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]

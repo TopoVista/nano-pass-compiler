@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nanopass-compiler-lab.vercel.app/sitemap.xml

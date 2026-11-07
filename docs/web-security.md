@@ -28,6 +28,7 @@ and its timeout is cooperative rather than preemptive; local-trusted JIT has
 no process sandbox. The container compose demo defaults to interpreter-only,
 non-root, read-only operation, but a deployed multi-user service must still
 place compilation in a dedicated worker with OS-level CPU/memory limits,
-authentication, origin policy, and rate limiting. The local browser's
-permissive CORS response is intentional for development and must be tightened
-before any non-loopback deployment. See [the threat model](threat-model.md).
+authentication, origin policy, and rate limiting. CORS is origin-allowlisted:
+local development defaults to Vite origins on port 5173, while deployments
+must set `NANO_ALLOWED_ORIGINS` to an explicit comma-separated frontend list.
+The server does not emit a wildcard CORS response. See [the threat model](threat-model.md).

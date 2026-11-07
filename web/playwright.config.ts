@@ -11,6 +11,7 @@ export default defineConfig({
       url: 'http://127.0.0.1:18080/api/v1/health',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
+      env: { NANO_ALLOWED_ORIGINS: 'http://127.0.0.1:15173' },
     },
     {
       command: 'npm run dev -- --host 127.0.0.1 --port=15173',

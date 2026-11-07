@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: nanopass-compiler-api
+    runtime: docker
+    dockerfilePath: ./docker/server.Dockerfile
+    dockerCommand: --bind=all --port=$PORT --execution-policy=interpreter-only
+    healthCheckPath: /api/v1/readiness
+    envVars:
+      - key: NANO_ALLOWED_ORIGINS
+        sync: false
+      - key: PORT
+        value: "8080"
+    autoDeploy: false

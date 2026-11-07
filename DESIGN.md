@@ -1,98 +1,135 @@
 ---
-version: alpha
-name: "NanoPass Compiler Lab"
-description: "A dense, inspectable compiler workbench whose visual hierarchy follows program flow and compiler facts."
+name: "NanoPass: Black Editorial Instrument"
+description: "A monochrome editorial public site paired with a precise dark compiler workbench."
 colors:
-  primary: "#5AA7FF"
-  secondary: "#47DFAD"
-  canvas: "#F5F2F8"
-  surface: "#FFFFFF"
-  surfaceRaised: "#FCFAFF"
-  border: "#E4DEEB"
-  text: "#2A2338"
-  muted: "#847B90"
-  wire: "#7351AA"
-  signal: "#208463"
-  warning: "#A66316"
-  danger: "#BF3F62"
+  primary: "#dfff4f"
+  neutral-canvas: "#060606"
+  neutral-surface: "#0d0d0d"
+  neutral-raised: "#121212"
+  neutral-ink: "#f4f2ec"
+  neutral-muted: "#92918b"
+  neutral-line: "#2c2c29"
+  warning: "#ffd166"
+  danger: "#ff8078"
 typography:
-  sans:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Helvetica Neue, Arial, sans-serif"
-  mono:
-    fontFamily: "Cascadia Mono, SFMono-Regular, Consolas, monospace"
+  display:
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: "108px"
+    fontWeight: 600
+    lineHeight: 0.92
+    letterSpacing: "-0.07em"
+  headline:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "76px"
+    fontWeight: 600
+    lineHeight: 0.98
+    letterSpacing: "-0.065em"
+  body:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.65
+  label:
+    fontFamily: "DM Mono, SFMono-Regular, Consolas, monospace"
+    fontSize: "10px"
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: "0.08em"
 rounded:
-  DEFAULT: "0.625rem"
-  sm: "0.375rem"
-  md: "0.625rem"
+  instrument: "0px"
 spacing:
-  workspace-gap: "0.5625rem"
-  panel-padding: "0.8125rem"
+  compact: "12px"
+  panel: "20px"
+  section: "96px"
 components:
-  panel: { backgroundColor: "{colors.surface}", rounded: "{rounded.md}", padding: "{spacing.panel-padding}" }
-  action: { backgroundColor: "{colors.signal}", textColor: "#FFFFFF", rounded: "{rounded.sm}" }
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "#101207"
+    rounded: "{rounded.instrument}"
+    padding: "0 17px"
+    height: "47px"
+  panel:
+    backgroundColor: "{colors.neutral-surface}"
+    rounded: "{rounded.instrument}"
+    padding: "{spacing.panel}"
 ---
 
-# NanoPass Compiler Lab Design System
+# Design System: NanoPass
 
 ## Overview
 
-### Creative North Star
+**Creative North Star: “The Black Editorial Instrument.”**
 
-The lab is a **compiler signal plane**: a calm, Apple-system UI around deliberately high-contrast technical instruments. Real compiler stages read as an observable sequence rather than generic dashboard cards. The IR and graph canvases carry the visual energy; the rest of the interface remains deliberately quiet.
+NanoPass is a calm black research artifact in public and a focused technical instrument in the lab. The public route uses intentional negative space, a limited serif voice, and one compiler representation artifact; the workbench is dense only where the compiler creates facts.
 
-### Product context and register
+Key characteristics:
 
-- **Audience and primary job:** Compiler engineers and learners inspect a source program as it becomes typed IR, SSA, optimized SSA, graph data, and executable output.
-- **Target market(s) and evidence:** Global English-language developer tooling; the Vite lab and local compiler API document the supported product boundary in `docs/web-lab.md` and `docs/compiler-api.md`.
-- **Locale(s) and language policy:** English only at present. No Japan-market or Japanese-locale behavior is inferred.
-- **Usage scene:** A desktop-first, sustained technical workbench. A narrower layout stacks panels without losing controls.
-- **Register:** Hybrid. The public landing route is an editorial product introduction; the compiler routes are dense technical instruments. Task clarity, signal density, keyboard access, and observable compiler truth outweigh decorative branding inside the lab.
-- **Memorable signature:** The public landing page uses a quiet lavender editorial frame and one large, rounded compiler-artifact hero. The workbench extends that same lavender system into a sharp left navigation rail and white dashboard panels, with deep plum surfaces reserved for source, IR, and terminal instruments. Mint is reserved for verified/successful facts. The Guide is a separate route that introduces a real interactive compiler journey.
-- **Restraint:** No simulated metrics, ornamental hero, fake data, or strong shadows around every surface.
-- **Anti-references:** Neon cyberpunk dashboards, generic SaaS metric-card grids, and terminal parody interfaces.
-- **Token ownership/runtime mapping:** Existing runtime CSS is canonical. This file mirrors the exact variables in `web/src/styles.css`; panels, graph nodes, actions, and scrollbar surfaces consume those variables directly.
+- Black canvas, off-white content, thin structural rules.
+- A single acid-lime signal for verification, primary action, and active state.
+- Editorial serif only for a few public-heading words; UI and prose remain system-sans.
+- No rounded SaaS cards, decorative gradients, stock visuals, or invented performance claims.
 
 ## Colors
 
-`canvas` and `surface` establish a deep blue-black instrument panel. Primary blue is exclusively for IR selection, graph structure, and focus; mint signifies verified/successful execution facts. Warning and danger retain textual labels and icons; color is never their sole meaning.
+The palette is a restrained neutral field with one high-contrast signal color.
+
+### Primary
+
+- **Verification lime** (#dfff4f): primary action, active navigation, verified state, and meaningful compiler trace only.
+
+### Neutral
+
+- **Black canvas** (#060606): application and public-site ground.
+- **Instrument surface** (#0d0d0d): panels and terminals.
+- **Raised surface** (#121212): headers and selected controls.
+- **Off-white ink** (#f4f2ec): high-priority text.
+- **Muted graphite** (#92918b): secondary explanation and metadata.
+- **Structure line** (#2c2c29): all panel and grid boundaries.
+
+**The Signal Rarity Rule.** Lime is never decorative. It appears only when a user may act, inspect an active view, or trust a compiler-reported success.
 
 ## Typography
 
-The Apple system font stack carries labels, navigation, and readable technical summaries without a third-party font request. SF Mono/Cascadia Mono (with system fallbacks) is restricted to identifiers, IR, timings, revision metadata, and graph-adjacent facts. Uppercase micro-labels describe source/type/status. A large headline is reserved for the Guide route only, where it introduces an actual interactive task rather than decorative marketing copy.
+**Display Font:** Fraunces with Georgia fallback.
+
+**Body Font:** Inter with system fallback.
+**Label/Mono Font:** DM Mono with platform monospace fallback.
+
+The editorial serif earns attention on the public site; the workbench prioritizes fast technical scanning with sans and monospaced facts.
+
+### Hierarchy
+
+- **Display:** 56–108px, tight leading. Used only for the public narrative headline.
+- **Headline:** 42–76px, tight leading. Used for landing-section statements and focused route titles.
+- **Body:** 15px/1.65. Used for explanations intended for a general software engineer.
+- **Label:** 9–10px mono with tracked uppercase. Used for compiler state, timing, stages, and controls.
 
 ## Layout
 
-The public landing route uses generous whitespace, a centered nav, a single statement of value, and a compiler-artifact preview rather than stock imagery. Desktop lab layout begins with a persistent 272px left rail, then a compact workspace header and a two-column instrument grid: source/terminal on the left, representation on the right, and graph/inspector evidence below. The pass timeline bridges those regions as a real compiler sequence. The source header exposes a Focus mode for sustained editing: it expands the source editor and its compiler terminal into the full workspace without changing source or compiler state. Below 900px the rail becomes a compact horizontal navigation; below 800px the panels stack in compiler-flow order. Every scrollable region keeps a visible, tokenized scrollbar.
+The public route uses a 1440px maximum editorial grid, high vertical breathing room, and asymmetric source-to-SSA artifacts. The workbench begins with a fixed 240px navigation rail, then a 68px context bar and 76px command bar. Its primary layout is a two-column source/terminal and representation system; secondary evidence follows in a compiler-flow sequence.
+
+Below 900px, the rail becomes a compact horizontal navigation bar and panels stack in workflow order. At 620px and below, controls remain operable without horizontal content clipping.
 
 ## Elevation & Depth
 
-Hierarchy comes from tonal layers and thin borders first. Light panels have a 12px technical radius and a restrained shadow; code, terminal, and IR viewers use deep plum surfaces with square interior lines. The landing hero gets its depth from a violet tonal field and soft nested code windows; the graph canvas uses the light dashboard surface so selected violet wires retain contrast.
+The interface is intentionally flat. Borders and tonal layers establish hierarchy; shadows are reserved for a single public landing artifact. The lab does not use floating cards or translucent dashboard glass.
 
 ## Shapes
 
-Cards and controls use a 6–10px technical radius; no pills except contextual status-like chips. Graph nodes use a smaller radius to feel like actual process blocks, not dashboard cards.
+The instrument uses square corners, thin one-pixel borders, and compact controls. Circular forms are reserved for status lights, pass state, and execution steps.
 
 ## Components
 
-### Foundational visual states
-
-Buttons have visible hover, pressed, disabled, and blue focus states. Compiler busy state keeps the Run SSA control's geometry stable. Empty and unavailable data uses explicit text rather than an invented visualization.
-
-### Buttons and actions
-
-The green Run SSA action is the only dominant action. Neutral controls remain graphite. Destructive intent is not currently exposed in the lab.
-
-### Navigation and data display
-
-The top bar establishes route-level endpoints for Workbench, Guide, Graphs, and Optimizations. The terminal uses a VS Code-like command prompt, a command reference strip, and only renders command output assembled from compiler responses; it is deliberately not an operating-system shell. The inspector owns SSA provenance and a compact plain-language representation explanation. The pass rail reflects compiler order with proportional duration marks. Proof, benchmark, and policy panels use visible paths, samples, and gates derived from actual state; they never substitute decorative charts for missing data. Graph nodes render actual CFG/dominator/loop/call-graph JSON in deterministic flow layers and use the same `wire` semantic token as selected IR.
-
-### Motion
-
-Short color/border transitions acknowledge selection and control states. Reduced-motion preferences remove transitions. The graph does not use decorative animation.
+- **Primary button:** verification lime with near-black text; reserved for “Open Compiler Lab” and “Run SSA.”
+- **Secondary button:** dark surface with a structural border; used for non-destructive workbench actions.
+- **Terminal:** visible state lights, compiler prompt, bounded command input, suggestions, output history, and shell-free command handling.
+- **Panel:** thin border, compact header, no drop shadow, explicit artifact label.
 
 ## Do's and Don'ts
 
-- **Do:** Let actual compiler hierarchy decide emphasis: source → representation → graph/remarks → runtime.
-- **Do:** Use blue for relationships and selection, green for verified facts, and monospaced text for machine-readable details.
-- **Don't:** Represent unavailable compiler capability as a successful panel or statistic.
-- **Don't:** hide scrollbars, rely on color alone, or replace semantic controls with clickable containers.
+- Do explain compiler terminology adjacent to live output.
+- Do keep optimization statements attached to compiler-recorded remarks.
+- Do show an unavailable state rather than fabricate JIT, PGO, benchmark, or proof results.
+- Do not use lime as general decoration.
+- Do not make the terminal an arbitrary operating-system shell.
+- Do not replace compiler artifacts with generic dashboard charts.

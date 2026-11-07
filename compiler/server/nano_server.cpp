@@ -115,7 +115,48 @@ std::string healthJson(const CompilerService &service) {
       << ",\"executionPolicy\":\"" << executionPolicyName(service.executionPolicy()) << "\"}";
   return out.str();
 }
-void sendResponse(Socket socket,int status,std::string_view body){const char*text=status==200?"OK":status==400?"Bad Request":status==404?"Not Found":status==413?"Payload Too Large":"Internal Server Error";std::ostringstream response;response<<"HTTP/1.1 "<<status<<' '<<text<<"\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;const auto data=response.str();size_t sent=0;while(sent<data.size()){const int result=send(socket,data.data()+sent,static_cast<int>(data.size()-sent),0);if(result<=0)break;sent+=static_cast<size_t>(result);}}
+std::optional<std::string> requestHeader(std::string_view request, std::string_view name) {
+  const auto lower = [](std::string_view value) {
+    std::string result(value);
+    for (char &character : result)
+      character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+    return result;
+  };
+  const auto wanted = lower(name);
+  size_t lineStart = request.find("\r\n");
+  if (lineStart == std::string_view::npos) return std::nullopt;
+  lineStart += 2;
+  while (lineStart < request.size()) {
+    const auto lineEnd = request.find("\r\n", lineStart);
+    if (lineEnd == lineStart || lineEnd == std::string_view::npos) break;
+    const auto colon = request.find(':', lineStart);
+    if (colon != std::string_view::npos && colon < lineEnd && lower(request.substr(lineStart, colon - lineStart)) == wanted) {
+      std::string value(request.substr(colon + 1, lineEnd - colon - 1));
+      const auto first = value.find_first_not_of(" \t");
+      const auto last = value.find_last_not_of(" \t");
+      return first == std::string::npos ? std::string{} : value.substr(first, last - first + 1);
+    }
+    lineStart = lineEnd + 2;
+  }
+  return std::nullopt;
+}
+
+std::set<std::string> allowedOrigins() {
+  const char *raw = std::getenv("NANO_ALLOWED_ORIGINS");
+  std::set<std::string> origins{"http://127.0.0.1:5173", "http://localhost:5173"};
+  if (!raw || std::string_view(raw).empty()) return origins;
+  origins.clear();
+  std::istringstream values(raw);
+  std::string origin;
+  while (std::getline(values, origin, ',')) if (!origin.empty()) origins.insert(origin);
+  return origins;
+}
+
+bool originAllowed(const std::optional<std::string> &origin, const std::set<std::string> &origins) {
+  return !origin || origins.contains(*origin);
+}
+
+void sendResponse(Socket socket,int status,std::string_view body,const std::optional<std::string> &origin={}){const char*text=status==200?"OK":status==400?"Bad Request":status==403?"Forbidden":status==404?"Not Found":status==413?"Payload Too Large":"Internal Server Error";std::ostringstream response;response<<"HTTP/1.1 "<<status<<' '<<text<<"\r\nContent-Type: application/json; charset=utf-8\r\n";if(origin)response<<"Access-Control-Allow-Origin: "<<*origin<<"\r\nVary: Origin\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\n";response<<"Content-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;const auto data=response.str();size_t sent=0;while(sent<data.size()){const int result=send(socket,data.data()+sent,static_cast<int>(data.size()-sent),0);if(result<=0)break;sent+=static_cast<size_t>(result);}}
 
 std::string readRequest(Socket socket){std::string request;std::array<char,8192>chunk{};while(request.size()<512*1024){const int n=recv(socket,chunk.data(),static_cast<int>(chunk.size()),0);if(n<=0)break;request.append(chunk.data(),static_cast<size_t>(n));if(request.find("\r\n\r\n")!=std::string::npos){const auto end=request.find("\r\n\r\n");const auto marker=request.find("Content-Length:");if(marker==std::string::npos||marker>end)break;const auto lineEnd=request.find("\r\n",marker);const size_t length=static_cast<size_t>(std::strtoull(request.substr(marker+15,lineEnd-marker-15).c_str(),nullptr,10));if(request.size()>=end+4+length)break;}}return request;}
 void setClientReceiveTimeout(Socket socket) {
@@ -128,11 +169,11 @@ void setClientReceiveTimeout(Socket socket) {
   setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 #endif
 }
-void handle(Socket socket,const CompilerService &service){const auto request=readRequest(socket);if(request.size()>=512*1024){sendResponse(socket,413,errorJson(413,"REQUEST_LIMIT_EXCEEDED","request exceeds server byte limit"));return;}const auto headerEnd=request.find("\r\n\r\n");if(headerEnd==std::string::npos){sendResponse(socket,400,errorJson(400,"MALFORMED_HTTP","missing HTTP header terminator"));return;}const auto lineEnd=request.find("\r\n");const auto line=request.substr(0,lineEnd);std::istringstream words(line);std::string method,path,version;words>>method>>path>>version;if(method=="OPTIONS"){sendResponse(socket,200,"{\"schemaVersion\":1,\"success\":true}");return;}if(method=="GET"&&(path=="/api/v1/health"||path=="/api/v1/readiness")){sendResponse(socket,200,healthJson(service));return;}if(method!="POST"){sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"));return;}CompileRequestV1 compile;std::string error;const auto body=request.substr(headerEnd+4);if(!decodeCompileRequest(body,compile,error)){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error));return;}if(path=="/api/v1/correctness"){auto result=service.checkCorrectness(compile);sendResponse(socket,result.compilation.success?200:400,correctnessResponseJson(result));return;}if(path=="/api/v1/compile"||path=="/api/v1/analyze"||path=="/api/v1/optimize"){if(path=="/api/v1/analyze"){compile.include.graphs=true;compile.include.provenance=true;compile.include.ssa=true;}if(path=="/api/v1/optimize"){compile.include.optimizedSsa=true;compile.include.remarks=true;compile.include.telemetry=true;}auto result=service.compile(compile);sendResponse(socket,result.success?200:400,compileResponseJson(result));return;}if(path=="/api/v1/run"||path=="/api/v1/profile"){RunRequestV1 run;run.compile=compile;if(path=="/api/v1/profile")run.mode=ExecutionMode::SSAInterpreter;else {auto mode=decodeRunMode(body,error);if(!mode){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error));return;}run.mode=*mode;}auto result=service.run(run);sendResponse(socket,result.compilation.success?200:400,runResponseJson(result));return;}sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"));}
+void handle(Socket socket,const CompilerService &service,const std::set<std::string> &origins){const auto request=readRequest(socket);const auto origin=requestHeader(request,"Origin");if(!originAllowed(origin,origins)){sendResponse(socket,403,errorJson(403,"ORIGIN_NOT_ALLOWED","request origin is not allowed"));return;}if(request.size()>=512*1024){sendResponse(socket,413,errorJson(413,"REQUEST_LIMIT_EXCEEDED","request exceeds server byte limit"),origin);return;}const auto headerEnd=request.find("\r\n\r\n");if(headerEnd==std::string::npos){sendResponse(socket,400,errorJson(400,"MALFORMED_HTTP","missing HTTP header terminator"),origin);return;}const auto lineEnd=request.find("\r\n");const auto line=request.substr(0,lineEnd);std::istringstream words(line);std::string method,path,version;words>>method>>path>>version;if(method=="OPTIONS"){sendResponse(socket,200,"{\"schemaVersion\":1,\"success\":true}",origin);return;}if(method=="GET"&&(path=="/api/v1/health"||path=="/api/v1/readiness")){sendResponse(socket,200,healthJson(service),origin);return;}if(method!="POST"){sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"),origin);return;}CompileRequestV1 compile;std::string error;const auto body=request.substr(headerEnd+4);if(!decodeCompileRequest(body,compile,error)){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error),origin);return;}if(path=="/api/v1/correctness"){auto result=service.checkCorrectness(compile);sendResponse(socket,result.compilation.success?200:400,correctnessResponseJson(result),origin);return;}if(path=="/api/v1/compile"||path=="/api/v1/analyze"||path=="/api/v1/optimize"){if(path=="/api/v1/analyze"){compile.include.graphs=true;compile.include.provenance=true;compile.include.ssa=true;}if(path=="/api/v1/optimize"){compile.include.optimizedSsa=true;compile.include.remarks=true;compile.include.telemetry=true;}auto result=service.compile(compile);sendResponse(socket,result.success?200:400,compileResponseJson(result),origin);return;}if(path=="/api/v1/run"||path=="/api/v1/profile"){RunRequestV1 run;run.compile=compile;if(path=="/api/v1/profile")run.mode=ExecutionMode::SSAInterpreter;else {auto mode=decodeRunMode(body,error);if(!mode){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error),origin);return;}run.mode=*mode;}auto result=service.run(run);sendResponse(socket,result.compilation.success?200:400,runResponseJson(result),origin);return;}sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"),origin);}
 }
 
 int main(int argc,char**argv){int port=8080;bool bindAll=false;ExecutionPolicy policy=ExecutionPolicy::LocalTrusted;for(int i=1;i<argc;++i){std::string_view arg=argv[i];if(arg.starts_with("--port=")){try{port=std::stoi(std::string(arg.substr(7)));}catch(...){std::cerr<<"invalid port\n";return 2;}}else if(arg.starts_with("--execution-policy=")){const auto value=arg.substr(19);if(value=="disabled")policy=ExecutionPolicy::Disabled;else if(value=="interpreter-only")policy=ExecutionPolicy::InterpreterOnly;else if(value=="local-trusted")policy=ExecutionPolicy::LocalTrusted;else{std::cerr<<"invalid execution policy\n";return 2;}}else if(arg=="--bind=loopback")bindAll=false;else if(arg=="--bind=all")bindAll=true;else if(arg=="--help"){std::cout<<"nano-server --port=8080 --bind=loopback|all --execution-policy=disabled|interpreter-only|local-trusted\n";return 0;}else{std::cerr<<"unknown argument: "<<arg<<'\n';return 2;}}if(port<1024||port>65535){std::cerr<<"port must be in 1024..65535\n";return 2;}
 #ifdef _WIN32
   WSADATA data{};if(WSAStartup(MAKEWORD(2,2),&data)!=0){std::cerr<<"WSAStartup failed\n";return 1;}
 #endif
-  Socket server=socket(AF_INET,SOCK_STREAM,0);if(server==kInvalidSocket){std::cerr<<"could not create server socket\n";return 1;}int reuse=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,reinterpret_cast<const char*>(&reuse),sizeof(reuse));sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(bindAll?INADDR_ANY:INADDR_LOOPBACK);address.sin_port=htons(static_cast<uint16_t>(port));if(bind(server,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0||listen(server,16)<0){std::cerr<<"could not bind nano-server\n";closeSocket(server);return 1;}std::cout<<"nano-server listening on "<<(bindAll?"all interfaces":"127.0.0.1")<<":"<<port<<" (schema v1, "<<executionPolicyName(policy)<<")\n";CompilerService service({},policy);while(true){Socket client=accept(server,nullptr,nullptr);if(client==kInvalidSocket)continue;setClientReceiveTimeout(client);handle(client,service);closeSocket(client);} }
+  Socket server=socket(AF_INET,SOCK_STREAM,0);if(server==kInvalidSocket){std::cerr<<"could not create server socket\n";return 1;}int reuse=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,reinterpret_cast<const char*>(&reuse),sizeof(reuse));sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(bindAll?INADDR_ANY:INADDR_LOOPBACK);address.sin_port=htons(static_cast<uint16_t>(port));if(bind(server,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0||listen(server,16)<0){std::cerr<<"could not bind nano-server\n";closeSocket(server);return 1;}const auto origins=allowedOrigins();std::cout<<"nano-server listening on "<<(bindAll?"all interfaces":"127.0.0.1")<<":"<<port<<" (schema v1, "<<executionPolicyName(policy)<<", "<<origins.size()<<" allowed origins)\n";CompilerService service({},policy);while(true){Socket client=accept(server,nullptr,nullptr);if(client==kInvalidSocket)continue;setClientReceiveTimeout(client);handle(client,service,origins);closeSocket(client);} }

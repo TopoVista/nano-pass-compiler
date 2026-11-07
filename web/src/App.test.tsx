@@ -75,7 +75,7 @@ describe('compiler lab', () => {
   it('serves a dedicated public landing route', () => {
     window.history.pushState({}, '', '/');
     render(<App />);
-    expect(screen.getByRole('heading', { name: /watch a program become machine code/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open compiler lab/i })).toHaveAttribute('href', '/lab');
   });
   it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
