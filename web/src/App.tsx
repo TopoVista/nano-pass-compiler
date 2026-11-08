@@ -61,11 +61,11 @@ const examples: Record<string, string> = {
     "int work(int x) { return x * 2 + 1; } int main() { int i = 0; int total = 0; while (i < 20) { total = work(total); i = i + 1; } print(total); return total; }",
   "Adaptive JIT":
     "int step(int x) { return x + 1; }\nint main() { int i = 0; int total = 0; while (i < 12) { total = step(total); i = i + 1; } print(total); return total; }",
-  "NanoPass Dijkstra": `i32 main() {
-  i32 graph[36];
-  i32 distance[6];
-  truth visited[6];
-  i32 i = 0;
+  "NanoPass Dijkstra": `int main() {
+  int graph[36];
+  int distance[6];
+  bool visited[6];
+  int i = 0;
   while (i < 36) { graph[i] = 0; i = i + 1; }
   graph[1] = 7; graph[6] = 7;
   graph[2] = 9; graph[12] = 9;
@@ -79,10 +79,10 @@ const examples: Record<string, string> = {
   i = 0;
   while (i < 6) { distance[i] = 1000000; visited[i] = false; i = i + 1; }
   distance[0] = 0;
-  i32 round = 0;
+  int round = 0;
   while (round < 6) {
-    i32 best = 1000000;
-    i32 current = -1;
+    int best = 1000000;
+    int current = -1;
     i = 0;
     while (i < 6) {
       if (!visited[i] && distance[i] < best) { best = distance[i]; current = i; }
@@ -90,9 +90,9 @@ const examples: Record<string, string> = {
     }
     if (current == -1) { break; }
     visited[current] = true;
-    i32 neighbor = 0;
+    int neighbor = 0;
     while (neighbor < 6) {
-      i32 edge = graph[current * 6 + neighbor];
+      int edge = graph[current * 6 + neighbor];
       if (edge > 0 && !visited[neighbor] && distance[current] + edge < distance[neighbor]) {
         distance[neighbor] = distance[current] + edge;
       }

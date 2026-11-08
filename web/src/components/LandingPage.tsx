@@ -1,7 +1,7 @@
 const pipeline = ["Source", "Typed AST", "CoreIR", "ANF", "CFG", "SSA", "Optimizer", "LLVM"];
 
-const source = `i32 score(i32 x) {
-  i32 bias = 4;
+const source = `int score(int x) {
+  int bias = 4;
   if (x > 0) { return x * bias; }
   return bias;
 }`;
@@ -16,7 +16,7 @@ bb1:
   jump bb3
 
 bb3:
-  %3 = phi i32 [bb1: %2] [bb2: %0]
+  %3 = phi int [bb1: %2] [bb2: %0]
   return %3`;
 
 function Arrow() {
@@ -109,7 +109,7 @@ export function LandingPage() {
 
       <section className="public-lab-callout">
         <div><p>THE WORKBENCH</p><h2>Bring a program.<br />Leave with a <em>trace.</em></h2></div>
-        <div className="mini-lab" aria-label="Compiler Lab preview"><header><span>examples/optimizer.nano</span><b>O2</b></header><pre>{`i32 total = 0;\nwhile (i < 4) {\n  total = total + 2 * 3;\n}`}</pre><aside><strong>03</strong><span>pass details</span><strong>CFG</strong><span>graph state</span><strong>✓</strong><span>SSA valid</span></aside></div>
+        <div className="mini-lab" aria-label="Compiler Lab preview"><header><span>examples/optimizer.nano</span><b>O2</b></header><pre>{`int total = 0;\nwhile (i < 4) {\n  total = total + 2 * 3;\n}`}</pre><aside><strong>03</strong><span>pass details</span><strong>CFG</strong><span>graph state</span><strong>✓</strong><span>SSA valid</span></aside></div>
         <a className="public-action primary" href="/lab">Start in the lab <Arrow /></a>
       </section>
 

@@ -53,7 +53,7 @@ describe('compiler lab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Format source' }));
     expect(editor).toHaveValue('int main() {\n  return 0;\n}');
     fireEvent.click(screen.getByRole('button', { name: 'Generate program' }));
-    expect((editor as HTMLTextAreaElement).value).toContain('i32 main()');
+    expect((editor as HTMLTextAreaElement).value).toContain('int main()');
   });
   it('offers a distraction-free source and terminal focus mode', async () => {
     render(<App />);

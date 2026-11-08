@@ -16,8 +16,8 @@ export function SourceEditor({ value, onChange, focusLine, onCursorLine }: Props
     monaco.languages.register({ id: 'nano' });
     monaco.languages.setMonarchTokensProvider('nano', { tokenizer: { root: [
       [/\/\/.*$/, 'comment'], [/\/\*/, 'comment', '@comment'], [/[{}()\[\]]/, '@brackets'],
-      [/\b(?:fn|let|when|otherwise|loop|emit|yield|halt|next|if|else|while|for|return|break|continue|print)\b/, 'keyword'],
-      [/\b(?:i32|truth|unit|int|bool|void|true|false)\b/, 'type'], [/[a-zA-Z_]\w*/, 'identifier'],
+      [/\b(?:if|else|while|for|return|break|continue|print)\b/, 'keyword'],
+      [/\b(?:int|bool|void|true|false)\b/, 'type'], [/[a-zA-Z_]\w*/, 'identifier'],
       [/\d+/, 'number'], [/(?:->|[+\-*/%<>=!&|]+)/, 'operator'],
     ], comment: [[/[^*/]+/, 'comment'], [/\*\//, 'comment', '@pop'], [/[*/]/, 'comment']] } });
   }} />;
