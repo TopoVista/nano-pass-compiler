@@ -2,13 +2,13 @@
 name: "NanoPass: Monochrome Editorial Instrument"
 description: "A monochrome editorial public site paired with a deep-navy compiler workbench."
 colors:
-  primary: "#45d8ff"
-  neutral-canvas: "#07101d"
-  neutral-surface: "#0b1726"
-  neutral-raised: "#101f31"
-  neutral-ink: "#eff6ff"
-  neutral-muted: "#91a6ba"
-  neutral-line: "#1c354c"
+  primary: "#67e8f9"
+  neutral-canvas: "#060a10"
+  neutral-surface: "#0b1521"
+  neutral-raised: "#0f1d2b"
+  neutral-ink: "#edf5ff"
+  neutral-muted: "#8ba0b5"
+  neutral-line: "#1c3448"
   warning: "#ffc76d"
   danger: "#ff7f91"
 typography:
@@ -36,7 +36,7 @@ typography:
     lineHeight: 1.4
     letterSpacing: "0.08em"
 rounded:
-  instrument: "0px"
+  instrument: "3px"
 spacing:
   compact: "12px"
   panel: "20px"
@@ -75,27 +75,27 @@ The palette is a restrained neutral field with one high-contrast signal color.
 
 ### Primary
 
-- **Inspection cyan** (#45d8ff): active navigation, inspectable values, and explicit user action in the lab.
-- **Verification mint** (#4de2a8): compiler-reported success only.
+- **Inspection cyan** (#67e8f9): active navigation, inspectable values, and explicit user action in the lab.
+- **Verification mint** (#61e6b0): compiler-reported success only.
 
 ### Neutral
 
 - **Public black** (#050505): editorial landing ground.
-- **Lab canvas** (#07101d): application ground.
-- **Instrument surface** (#0b1726): panels and terminals.
-- **Raised surface** (#101f31): headers and selected controls.
-- **Lab ink** (#eff6ff): high-priority text.
-- **Muted blue-grey** (#91a6ba): secondary explanation and metadata.
-- **Structure line** (#1c354c): all lab panel and grid boundaries.
+- **Lab canvas** (#060a10): application ground.
+- **Instrument surface** (#0b1521): panels and terminals.
+- **Raised surface** (#0f1d2b): headers and selected controls.
+- **Lab ink** (#edf5ff): high-priority text.
+- **Muted blue-grey** (#8ba0b5): secondary explanation and metadata.
+- **Structure line** (#1c3448): all lab panel and grid boundaries.
 
 **The Signal Rarity Rule.** Cyan is never decorative. Mint appears only when a compiler-reported check has succeeded.
 
 ## Typography
 
-**Display Font:** Fraunces with Georgia fallback.
+**Display Font:** Iowan Old Style with Baskerville/Georgia fallback.
 
-**Body Font:** Inter with system fallback.
-**Label/Mono Font:** DM Mono with platform monospace fallback.
+**Body Font:** Native Apple/system sans with Segoe UI fallback.
+**Label/Mono Font:** SFMono/Cascadia Code with platform monospace fallback.
 
 The editorial serif earns attention on the public site; the workbench prioritizes fast technical scanning with sans and monospaced facts.
 
@@ -108,13 +108,13 @@ The editorial serif earns attention on the public site; the workbench prioritize
 
 ## Layout
 
-The public route uses a 1440px maximum editorial grid, high vertical breathing room, and asymmetric source-to-SSA artifacts. The workbench begins with a fixed 240px navigation rail, then a 68px context bar and 76px command bar. Its primary layout is a two-column source/terminal and representation system; secondary evidence follows in a compiler-flow sequence.
+The public route uses a 1440px maximum editorial grid, high vertical breathing room, and asymmetric source-to-SSA artifacts. The workbench begins with a fixed 216px navigation rail, then a 64px context bar and 76px command bar. Its primary layout is a two-column source/terminal and representation system; the Focus control deliberately expands the source and terminal into the full workspace.
 
 Below 900px, the rail becomes a compact horizontal navigation bar and panels stack in workflow order. At 620px and below, controls remain operable without horizontal content clipping.
 
 ## Elevation & Depth
 
-The interface is intentionally flat. Borders and tonal layers establish hierarchy; shadows are reserved for a single public landing artifact. The lab does not use floating cards or translucent dashboard glass.
+The interface is intentionally flat. Borders and tonal layers establish hierarchy; modest shadows are reserved for major workspace separation and the public landing artifact. The lab does not use floating cards or translucent dashboard glass.
 
 ## Shapes
 
