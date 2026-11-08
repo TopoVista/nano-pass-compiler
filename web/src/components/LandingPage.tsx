@@ -44,7 +44,7 @@ export function LandingPage() {
         <div className="public-hero-copy">
           <p className="public-kicker">NanoPass Compiler Lab</p>
           <h1 id="public-title">A compiler you can <em>interrogate.</em></h1>
-          <p className="public-intro">Trace a small C-like language through typed representations, SSA construction, verification, optimization, LLVM, and execution—without treating the middle as a black box.</p>
+          <p className="public-intro">Trace a small C-like language through typed representations, SSA construction, verification, optimization, LLVM, and execution, without treating the middle as a black box.</p>
           <div className="public-actions">
             <a className="public-action primary" href="/lab">Open Compiler Lab <Arrow /></a>
             <a className="public-action text" href="#method">See the method <span aria-hidden="true">↓</span></a>
@@ -84,7 +84,7 @@ export function LandingPage() {
 
       <section className="public-feature public-feature-optimizer" id="optimizer">
         <div className="feature-number">A</div>
-        <div className="feature-statement"><p>Optimization is a claim with evidence.</p><h2>See what changed.<br />See why it <em>didn’t.</em></h2><p>Pass telemetry, structured optimization remarks, and SSA verification keep every rewrite accountable. A skipped loop-invariant move has a concrete recorded reason—not a generated excuse.</p><a href="/optimizations">Inspect optimization evidence <Arrow /></a></div>
+        <div className="feature-statement"><p>Optimization is a claim with evidence.</p><h2>See what changed.<br />See why it <em>didn’t.</em></h2><p>Pass telemetry, structured optimization remarks, and SSA verification keep every rewrite accountable. A skipped loop-invariant move has a concrete recorded reason, not a generated excuse.</p><a href="/optimizations">Inspect optimization evidence <Arrow /></a></div>
         <div className="optimization-artifact" aria-label="Optimization remark example">
           <header><span>OPTIMIZATION REMARK</span><b>LICM</b></header>
           <div><i className="remark-status missed">MISSED</i><strong>%23 = load ptr %a</strong><p>Memory dependence could not be proven loop-invariant.</p></div>
@@ -95,7 +95,7 @@ export function LandingPage() {
       <section className="public-feature public-feature-correctness">
         <div className="feature-number">B</div>
         <div className="correctness-diagram" aria-label="Differential correctness flow"><span>CoreIR interpreter</span><i>→</i><span>SSA O0</span><i>→</i><span>SSA O3</span><i>→</i><span>compare observable result</span></div>
-        <div className="feature-statement"><p>Correctness is exercised, not presumed.</p><h2>Different paths.<br /><em>Same program.</em></h2><p>NanoPass can compare reference CoreIR execution with independently executed optimized SSA programs. It is differential testing, clearly labeled as empirical—not a substitute for formal proof.</p><a href="/lab">Run a bounded correctness check <Arrow /></a></div>
+        <div className="feature-statement"><p>Correctness is exercised, not presumed.</p><h2>Different paths.<br /><em>Same program.</em></h2><p>NanoPass can compare reference CoreIR execution with independently executed optimized SSA programs. It is differential testing, clearly labeled as empirical, not a substitute for formal proof.</p><a href="/verification">Run a bounded correctness check <Arrow /></a></div>
       </section>
 
       <section className="public-section public-runtime">

@@ -8,7 +8,7 @@ type Props = {
 };
 
 const lenses: Record<Lens, { eyebrow: string; title: string; body: string; action: string; stage?: string; graph?: string; example: string }> = {
-  pipeline: { eyebrow: '01 / IR journey', title: 'See every representation.', body: 'Move from source through ANF, CFG and SSA using compiler-generated snapshots—not illustrations.', action: 'Open SSA', stage: 'ssa', example: 'SCCP branch' },
+  pipeline: { eyebrow: '01 / IR journey', title: 'See every representation.', body: 'Move from source through ANF, CFG and SSA using compiler-generated snapshots, not illustrations.', action: 'Open SSA', stage: 'ssa', example: 'SCCP branch' },
   graphs: { eyebrow: '02 / control flow', title: 'Make flow visible.', body: 'Inspect real basic blocks, dominance and loop structure. Selecting a node focuses the matching IR block.', action: 'Open CFG', graph: 'cfg', example: 'Nested loops' },
   evidence: { eyebrow: '03 / proof layer', title: 'Ask why a pass changed code.', body: 'Pass events, verifier gates and optimization remarks stay tied to facts emitted by the compiler service.', action: 'Inspect optimization', stage: 'optimized-ssa', example: 'Why not LICM' }
 };

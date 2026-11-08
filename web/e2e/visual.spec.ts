@@ -21,6 +21,7 @@ test.describe('visual baselines', () => {
     await page.route('**/api/v1/**', (route) => route.abort());
     await page.setViewportSize({ width: 1440, height: 980 });
     await page.goto('/lab');
+    await page.locator('.monaco-editor').waitFor();
     await expect(page.getByRole('button', { name: 'Retry compiler service' })).toBeVisible();
     await expect(page).toHaveScreenshot('workbench-desktop.png', {
       animations: 'disabled',

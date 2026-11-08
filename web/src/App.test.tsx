@@ -13,18 +13,13 @@ vi.mock('./lib/api', async (original) => { const actual = await original<typeof 
 describe('compiler lab', () => {
   beforeEach(() => window.history.pushState({}, '', '/lab'));
 
-  it('renders compiler facts, graph selection, value inspection, and execution', async () => {
+  it('keeps code, IR, and the compiler timeline in the focused workbench', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByLabelText('Compiler revision')).toHaveTextContent('test'));
     expect(screen.getByText('SCCP')).toBeInTheDocument();
-    expect(screen.getByText(/UNSAFE_TO_SPECULATE/)).toBeInTheDocument();
-    expect(screen.getByText(/inline-imitation-v1/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('IR stage'), { target: { value: 'ssa' } });
     fireEvent.click(screen.getAllByText('%7')[0]);
-    expect(screen.getByText(/%7 · int/)).toBeInTheDocument();
-    fireEvent.click(screen.getByText('bb0'));
-    fireEvent.click(screen.getByRole('button', { name: 'ssa' }));
-    await waitFor(() => expect(screen.getByText('1 calls')).toBeInTheDocument());
+    expect(screen.getByLabelText('Compiler terminal')).toBeInTheDocument();
   });
   it('offers an allowlisted custom pipeline control', async () => {
     render(<App />);
@@ -78,11 +73,19 @@ describe('compiler lab', () => {
     expect(screen.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open compiler lab/i })).toHaveAttribute('href', '/lab');
   });
-  it('renders structured adaptive events, differential correctness, and compiler comparison facts', async () => {
+  it('keeps optimization evidence and verification controls on dedicated routes', async () => {
+    window.history.pushState({}, '', '/optimizations');
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(/UNSAFE_TO_SPECULATE/)).toBeInTheDocument());
+    expect(screen.getByText(/inline-imitation-v1/)).toBeInTheDocument();
+    window.history.pushState({}, '', '/verification');
+  });
+  it('runs structured adaptive events, correctness, and comparison from verification', async () => {
+    window.history.pushState({}, '', '/verification');
     render(<App />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'adaptive-jit' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'adaptive-jit' }));
-    await waitFor(() => expect(screen.getByText('tier1_installed')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/tier1_installed/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'check correctness' }));
     await waitFor(() => expect(screen.getByText('CoreIR')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Compare O-levels' }));

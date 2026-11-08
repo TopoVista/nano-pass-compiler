@@ -3,7 +3,6 @@ import { CodeView } from "./components/CodeView";
 import { GraphPane } from "./components/GraphPane";
 import {
   Diagnostics,
-  Profile,
   Remarks,
   Timeline,
   ValueInspector,
@@ -143,6 +142,7 @@ const sessionFromHash = (): SharedSession => {
 };
 export default function App() {
   const session = sessionFromHash();
+  const [route, setRoute] = useState(() => window.location.pathname);
   // Start with a small executable optimization example so the first-run
   // profile view demonstrates a complete compiler/runtime round trip.
   const [source, setSource] = useState(
@@ -422,12 +422,24 @@ export default function App() {
   const transform = transformKey
     ? result?.transformations.find((item) => item.passId === transformKey)
     : undefined;
-  const route = window.location.pathname;
+  useEffect(() => {
+    const syncRoute = () => setRoute(window.location.pathname);
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+  const navigate = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    const target = event.currentTarget.getAttribute("href");
+    if (!target || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    window.history.pushState({}, "", target);
+    setRoute(window.location.pathname);
+  };
   const navigation = [
-    { href: "/lab", label: "Workbench" },
-    { href: "/guide", label: "Guide" },
-    { href: "/graphs", label: "Graphs" },
-    { href: "/optimizations", label: "Optimizations" },
+    { href: "/lab", label: "Workbench", detail: "Code + output" },
+    { href: "/graphs", label: "Graphs", detail: "Control flow" },
+    { href: "/optimizations", label: "Optimize", detail: "Pass evidence" },
+    { href: "/verification", label: "Verify", detail: "Runtime checks" },
+    { href: "/guide", label: "Guide", detail: "Learn NanoPass" },
   ];
   const routeLabel = navigation.find((item) => item.href === route)?.label ?? "Workbench";
   const toolbar = (
@@ -517,12 +529,6 @@ export default function App() {
         )}
       </details>
       </div>
-      <div className="toolbar-actions"><small>3 · Measure</small><button disabled={busy} onClick={() => void doCompare()}>
-        Compare O-levels
-      </button>
-      <button disabled={busy} onClick={() => void doBenchmark()}>
-        Benchmark
-      </button></div>
       <span
         className={result?.success ? "compile-status good" : "compile-status"}
       >
@@ -630,110 +636,6 @@ export default function App() {
           onSelect={setSelectedPass}
         />
       </div>
-      <div className="panel graph-panel">
-        <header>
-          <div>
-            <strong>Graph explorer</strong>
-            <span>{graph?.function ? `@${graph.function}` : "no graph"}</span>
-          </div>
-          <select
-            aria-label="Graph kind"
-            value={graphKind}
-            onChange={(event) => setGraphKind(event.target.value)}
-          >
-            {["cfg", "dominator-tree", "loops", "call-graph"].map((kind) => (
-              <option key={kind}>{kind}</option>
-            ))}
-          </select>
-        </header>
-        <GraphPane
-          graph={graph}
-          profile={runResult?.runtimeProfile}
-          selectedBlock={selectedBlock}
-          onSelect={(id) => {
-            const match = /bb(\d+)$/.exec(id);
-            setSelectedBlock(match ? Number(match[1]) : undefined);
-          }}
-        />
-      </div>
-      <aside className="inspector">
-        <ValueInspector value={value} />
-        <Remarks remarks={result?.remarks ?? []} />
-      </aside>
-      <div className="panel diagnostics-panel">
-        <Diagnostics
-          diagnostics={result?.diagnostics ?? []}
-          onSelect={setFocusLine}
-        />
-      </div>
-      <div className="panel runtime-panel">
-        <div className="run-controls">
-          <strong>Execution</strong>
-          {(["core", "ssa", "jit", "adaptive-jit"] as RunMode[]).map((mode) => (
-            <button key={mode} disabled={busy} onClick={() => void doRun(mode)}>
-              {mode}
-            </button>
-          ))}
-          <button disabled={busy} onClick={() => void doCorrectness()}>
-            check correctness
-          </button>
-        </div>
-        <div className="execution-content">
-          <div className="execution-trace" aria-label="Execution progress">
-            {["Lower", "Verify", "Execute", "Report"].map((label, index) => (
-              <span
-                key={label}
-                className={
-                  executionStep > index
-                    ? "complete"
-                    : executionStep === index
-                      ? "active"
-                      : ""
-                }
-              >
-                <i>{index + 1}</i>
-                {label}
-              </span>
-            ))}
-          </div>
-          <Profile
-            profile={runResult?.runtimeProfile}
-            stdout={runResult?.stdout}
-            mode={runResult ? runResult.status : "not run"}
-            status={runResult?.errorKind}
-            events={runResult?.adaptiveEvents}
-          />
-        </div>
-      </div>
-      <div className="panel correctness-wrap">
-        <Correctness result={correctness} onRun={() => void doCorrectness()} />
-      </div>
-      <div className="panel comparison-wrap">
-        <OptimizationComparison results={comparison} />
-      </div>
-      <div className="panel comparison-wrap">
-        <BenchmarkPanel result={benchmark} onMeasure={() => void doBenchmark()} />
-      </div>
-      <div className="panel policy-wrap">
-        <PolicyFeatures
-          features={runResult?.policyFeatures ?? result?.policyFeatures}
-        />
-      </div>
-      <div className="panel policy-wrap">
-        <PolicyDecisions records={result?.policyRecords} />
-      </div>
-      {transform && selectedPass && (
-        <div className="panel diff-panel">
-          <header>
-            <strong>Before / after</strong>
-            <span>{selectedPass}</span>
-          </header>
-          <div className="diff">
-            <pre>{transform.before}</pre>
-            <pre>{transform.after}</pre>
-          </div>
-        </div>
-      )}
     </section>
   );
   const focusedGraphs = (
@@ -798,6 +700,67 @@ export default function App() {
         <Remarks remarks={result?.remarks ?? []} />
         <IRExplainer snapshot={snapshot} value={value} />
       </section>
+      <section className="route-grid optimization-evidence-grid">
+        <PolicyFeatures
+          features={runResult?.policyFeatures ?? result?.policyFeatures}
+        />
+        <PolicyDecisions records={result?.policyRecords} />
+      </section>
+      {transform && selectedPass && (
+        <section className="panel diff-panel">
+          <header>
+            <strong>Before / after</strong>
+            <span>{selectedPass}</span>
+          </header>
+          <div className="diff">
+            <pre>{transform.before}</pre>
+            <pre>{transform.after}</pre>
+          </div>
+        </section>
+      )}
+    </section>
+  );
+  const focusedVerification = (
+    <section className="route-page verification-page">
+      <header className="route-intro">
+        <span>VERIFICATION CONSOLE</span>
+        <h1>Measure what the compiler can actually prove.</h1>
+        <p>
+          Execute safe interpreter modes, compare observable results, and keep
+          performance measurements separate from correctness evidence.
+        </p>
+      </header>
+      <section className="verification-actionbar" aria-label="Execution controls">
+        <div>
+          <strong>Run current source</strong>
+          <span>Each mode uses the compiler service; unavailable engines report their real state.</span>
+        </div>
+        <div>
+          {(["core", "ssa", "jit", "adaptive-jit"] as RunMode[]).map((mode) => (
+            <button key={mode} disabled={busy} onClick={() => void doRun(mode)}>{mode}</button>
+          ))}
+          <button disabled={busy} onClick={() => void doCompare()}>Compare O-levels</button>
+          <button disabled={busy} onClick={() => void doBenchmark()}>Benchmark</button>
+          <button className="verification-primary" disabled={busy} onClick={() => void doCorrectness()}>check correctness</button>
+        </div>
+      </section>
+      <section className="verification-grid">
+        <div className="panel verification-runtime">
+          <header><strong>Latest execution</strong><span>{runResult?.status ?? "not run"}</span></header>
+          <div className="execution-content">
+            <div className="execution-trace" aria-label="Execution progress">
+              {["Lower", "Verify", "Execute", "Report"].map((label, index) => (
+                <span key={label} className={executionStep > index ? "complete" : executionStep === index ? "active" : ""}><i>{index + 1}</i>{label}</span>
+              ))}
+            </div>
+            {runResult ? <pre className="output">{[runResult.stdout || "(no output)", runResult.returnValue ? `return ${runResult.returnValue}` : "", ...((runResult.adaptiveEvents ?? []).map((event) => `${event.kind} @${event.function}${event.detail ? ` · ${event.detail}` : ""}`))].filter(Boolean).join("\n")}</pre> : <p className="quiet">Use the terminal command <code>run ssa</code>, or choose an engine above. Execution traces appear here after a real run.</p>}
+          </div>
+        </div>
+        <Correctness result={correctness} onRun={() => void doCorrectness()} />
+        <OptimizationComparison results={comparison} />
+        <BenchmarkPanel result={benchmark} onMeasure={() => void doBenchmark()} />
+      </section>
+      <section className="panel verification-diagnostics"><Diagnostics diagnostics={result?.diagnostics ?? []} onSelect={setFocusLine} /></section>
     </section>
   );
   if (route === "/") return <LandingPage />;
@@ -814,18 +777,17 @@ export default function App() {
           <span><strong>NanoPass</strong><small>Compiler Lab</small></span>
         </a>
         <nav className="rail-nav" aria-label="Lab views">
-          <span className="rail-label">Workspace</span>
-          {navigation.map((item, index) => (
+          <span className="rail-label">Compiler lab</span>
+          {navigation.map((item) => (
             <span className="rail-link-wrap" key={item.href}>
-              {index === 1 && <span className="rail-label rail-label-secondary">Inspect</span>}
               <a
                 className={route === item.href ? "active" : ""}
                 href={item.href}
+                onClick={navigate}
                 aria-current={route === item.href ? "page" : undefined}
               >
                 <i aria-hidden="true" />
-                <span>{item.label}</span>
-                {item.href === "/lab" && <em>⌘1</em>}
+                <span><b>{item.label}</b><small>{item.detail}</small></span>
               </a>
             </span>
           ))}
@@ -880,6 +842,8 @@ export default function App() {
         focusedGraphs
       ) : route === "/optimizations" ? (
         focusedOptimizations
+      ) : route === "/verification" ? (
+        focusedVerification
       ) : (
         <>
           {toolbar}

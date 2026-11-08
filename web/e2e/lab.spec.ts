@@ -23,21 +23,36 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
 
   await page.getByLabel('IR stage').selectOption('ssa');
   await expect(page.getByLabel('IR viewer')).toContainText('func @main');
+
+  await page.getByRole('link', { name: /optimize/i }).click();
+  await expect(page).toHaveURL(/\/optimizations$/);
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByRole('button', { name: /Nano SSA Optimization @main/ }).click();
   await expect(page.getByText('Before / after')).toBeVisible();
 
+  await page.getByRole('link', { name: /^graphs/i }).click();
+  await expect(page).toHaveURL(/\/graphs$/);
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByLabel('Graph kind').selectOption('dominator-tree');
   await expect(page.getByLabel('dominator-tree graph')).toBeVisible();
   await page.getByLabel('Graph kind').selectOption('cfg');
   await page.getByText('bb1.then', { exact: true }).click();
 
+  await page.getByRole('link', { name: /^verify/i }).click();
+  await expect(page).toHaveURL(/\/verification$/);
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByRole('button', { name: 'ssa', exact: true }).click();
-  await expect(page.getByText(/^\d+ calls$/)).toBeVisible();
-
+  await expect(page.getByText(/return/)).toBeVisible();
+  await page.getByRole('link', { name: /^workbench/i }).click();
+  await expect(page).toHaveURL(/\/lab$/);
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByLabel('Example program').selectOption('Adaptive JIT');
   await expect(page.locator('.compile-status')).toContainText('verified');
+  await page.getByRole('link', { name: /^verify/i }).click();
+  await expect(page).toHaveURL(/\/verification$/);
+  await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByRole('button', { name: 'adaptive-jit', exact: true }).click();
-  await expect(page.getByText('Adaptive JIT events')).toBeVisible();
+  await expect(page.getByText('tier1_installed')).toBeVisible();
 });
 
 test('keeps a selected custom pipeline and restores a shared session', async ({ page }) => {

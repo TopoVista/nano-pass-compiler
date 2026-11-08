@@ -108,9 +108,9 @@ The editorial serif earns attention on the public site; the workbench prioritize
 
 ## Layout
 
-The public route uses a 1440px maximum editorial grid, high vertical breathing room, and asymmetric source-to-SSA artifacts. The workbench begins with a fixed 216px navigation rail, then a 64px context bar and 76px command bar. Its primary layout is a two-column source/terminal and representation system; the Focus control deliberately expands the source and terminal into the full workspace.
+The public route uses a 1440px maximum editorial grid, high vertical breathing room, and asymmetric source-to-SSA artifacts. The workbench begins with a fixed 248px navigation rail, then a 72px context bar and a compact command bar. Its primary layout is a two-column source/terminal and representation system; the Focus control deliberately expands the source and terminal into the full workspace. Graphs, optimizer evidence, runtime verification, and the field guide have their own persistent routes so the working editor does not become a card wall.
 
-Below 900px, the rail becomes a compact horizontal navigation bar and panels stack in workflow order. At 620px and below, controls remain operable without horizontal content clipping.
+Below 1180px, the rail becomes a compact icon rail and the output moves beneath the editor. At 760px and below, controls remain operable without horizontal content clipping.
 
 ## Elevation & Depth
 
