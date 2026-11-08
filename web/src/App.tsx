@@ -213,54 +213,76 @@ export default function App() {
   const doRun = async (mode: RunMode) => {
     setBusy(true);
     setExecutionStep(1);
-    const response = await run(options, mode);
-    setRunResult(response);
-    setBusy(false);
-    [2, 3, 4].forEach((step, index) =>
-      window.setTimeout(() => setExecutionStep(step), 260 * (index + 1)),
-    );
+    setServiceError(undefined);
+    try {
+      const response = await run(options, mode);
+      setRunResult(response);
+      [2, 3, 4].forEach((step, index) =>
+        window.setTimeout(() => setExecutionStep(step), 260 * (index + 1)),
+      );
+    } catch {
+      setExecutionStep(0);
+      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+    } finally {
+      setBusy(false);
+    }
   };
   const doCorrectness = async () => {
     setBusy(true);
-    setCorrectness(await checkCorrectness(options));
-    setBusy(false);
+    setServiceError(undefined);
+    try {
+      setCorrectness(await checkCorrectness(options));
+    } catch {
+      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+    } finally {
+      setBusy(false);
+    }
   };
   const doCompare = async () => {
     setBusy(true);
-    setComparison(
-      await Promise.all(
-        [0, 1, 2, 3].map((optimizationLevel) =>
-          compile({ ...options, optimizationLevel }),
+    setServiceError(undefined);
+    try {
+      setComparison(
+        await Promise.all(
+          [0, 1, 2, 3].map((optimizationLevel) =>
+            compile({ ...options, optimizationLevel }),
+          ),
         ),
-      ),
-    );
-    setBusy(false);
+      );
+    } catch {
+      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+    } finally {
+      setBusy(false);
+    }
   };
   const doBenchmark = async () => {
     setBusy(true);
     setBenchmark(undefined);
-    const compilation = await compile(options);
-    await run(options, "ssa");
-    const samples: number[] = [];
-    for (let index = 0; index < 5; ++index) {
-      const measured = await run(options, "ssa");
-      if (!measured.success || measured.executionDurationUs === undefined) {
-        setBusy(false);
-        return;
+    setServiceError(undefined);
+    try {
+      const compilation = await compile(options);
+      await run(options, "ssa");
+      const samples: number[] = [];
+      for (let index = 0; index < 5; ++index) {
+        const measured = await run(options, "ssa");
+        if (!measured.success || measured.executionDurationUs === undefined) return;
+        samples.push(measured.executionDurationUs);
       }
-      samples.push(measured.executionDurationUs);
+      const ordered = [...samples].sort((left, right) => left - right);
+      const percentile = (fraction: number) =>
+        ordered[Math.round((ordered.length - 1) * fraction)];
+      setBenchmark({
+        compileUs: compilation.telemetry.totalCompileUs,
+        samplesUs: samples,
+        medianUs: percentile(0.5),
+        p25Us: percentile(0.25),
+        p75Us: percentile(0.75),
+      });
+    } catch {
+      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+    } finally {
+      setBusy(false);
     }
-    const ordered = [...samples].sort((left, right) => left - right);
-    const percentile = (fraction: number) =>
-      ordered[Math.round((ordered.length - 1) * fraction)];
-    setBenchmark({
-      compileUs: compilation.telemetry.totalCompileUs,
-      samplesUs: samples,
-      medianUs: percentile(0.5),
-      p25Us: percentile(0.25),
-      p75Us: percentile(0.75),
-    });
-    setBusy(false);
   };
   const runTerminalCommand = async (rawCommand: string): Promise<TerminalReply> => {
     const [verb = "", ...arguments_] = rawCommand.trim().toLowerCase().split(/\s+/);
@@ -504,7 +526,11 @@ export default function App() {
       <span
         className={result?.success ? "compile-status good" : "compile-status"}
       >
-        {result
+        {busy
+          ? result
+            ? "updating compiler facts…"
+            : "starting compiler service…"
+          : result
           ? result.success
             ? `verified · ${result.telemetry.totalCompileUs} μs`
             : "diagnostics reported"
@@ -788,28 +814,33 @@ export default function App() {
           <span><strong>NanoPass</strong><small>Compiler Lab</small></span>
         </a>
         <nav className="rail-nav" aria-label="Lab views">
-          {navigation.map((item) => (
-            <a
-              key={item.href}
-              className={route === item.href ? "active" : ""}
-              href={item.href}
-            >
-              <i aria-hidden="true" />
-              {item.label}
-            </a>
+          <span className="rail-label">Workspace</span>
+          {navigation.map((item, index) => (
+            <span className="rail-link-wrap" key={item.href}>
+              {index === 1 && <span className="rail-label rail-label-secondary">Inspect</span>}
+              <a
+                className={route === item.href ? "active" : ""}
+                href={item.href}
+                aria-current={route === item.href ? "page" : undefined}
+              >
+                <i aria-hidden="true" />
+                <span>{item.label}</span>
+                {item.href === "/lab" && <em>⌘1</em>}
+              </a>
+            </span>
           ))}
         </nav>
         <div className="rail-status">
           <span>LOCAL COMPILER</span>
-          <b><i /> Verifier ready</b>
-          <small>Deterministic pipeline</small>
+          <b><i /> {result?.success ? "Verifier passed" : "Compiler ready"}</b>
+          <small>{result ? `${result.telemetry.functions} function${result.telemetry.functions === 1 ? "" : "s"} · ${result.telemetry.blocks} blocks` : "Awaiting source"}</small>
         </div>
       </aside>
       <section className="app-main">
       <header className="topbar dashboard-topbar">
         <div className="dashboard-context">
-          <span>Nanopass / compiler workspace</span>
-          <strong>{routeLabel}</strong>
+          <span>LOCAL SESSION / NANO C</span>
+          <strong>{routeLabel}<i aria-hidden="true">/</i><b>{snapshot?.displayName ?? "Compile view"}</b></strong>
         </div>
         <div className="top-actions">
           <label>

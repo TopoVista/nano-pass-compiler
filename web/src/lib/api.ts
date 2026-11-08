@@ -18,7 +18,38 @@ export type RuntimeProfile = { functions?: Record<string, { calls: number; block
 export type CompileOptions = { source: string; optimizationLevel: number; policy?: 'default' | 'heuristic' | 'learned'; passes?: string[]; includeSource?: boolean; includeSsa?: boolean; includeOptimizedSsa?: boolean; includeLLVM?: boolean; includeGraphs?: boolean; includeRemarks?: boolean; includeTelemetry?: boolean; includeProvenance?: boolean; includeCore?: boolean; includeAnf?: boolean; includeCfg?: boolean; includeAst?: boolean; includeDesugaredAst?: boolean };
 const base = import.meta.env.VITE_NANO_SERVER_URL ?? 'http://127.0.0.1:8080';
 const cache = new Map<string, Compilation>();
-const request = async <T>(path: string, body: unknown): Promise<T> => { const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const data = await response.json() as T; if (!response.ok && !(data as { success?: boolean }).success) return data; return data; };
+export class CompilerServiceError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = 'CompilerServiceError';
+  }
+}
+const request = async <T>(path: string, body: unknown): Promise<T> => {
+  let response: Response;
+  try {
+    response = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new CompilerServiceError('The compiler service could not be reached.');
+  }
+  const text = await response.text();
+  let data: T;
+  try {
+    data = JSON.parse(text) as T;
+  } catch {
+    throw new CompilerServiceError('The compiler service returned an invalid response.', response.status);
+  }
+  if (
+    !response.ok &&
+    (typeof data !== 'object' || data === null || !('success' in data))
+  ) {
+    throw new CompilerServiceError('The compiler service rejected this request.', response.status);
+  }
+  return data;
+};
 export async function compile(options: CompileOptions, path = '/api/v1/compile'): Promise<Compilation> { const key = `${path}:${JSON.stringify(options)}`; const existing = cache.get(key); if (existing) return existing; const result = await request<Compilation>(path, { schemaVersion: 1, ...options }); if (result.success) cache.set(key, result); return result; }
 export async function run(options: CompileOptions, mode: 'core' | 'ssa' | 'jit' | 'adaptive-jit'): Promise<RunResult> { return request<RunResult>('/api/v1/run', { schemaVersion: 1, ...options, mode }); }
 export async function checkCorrectness(options: CompileOptions): Promise<CorrectnessResult> { return request<CorrectnessResult>('/api/v1/correctness', { schemaVersion: 1, ...options }); }

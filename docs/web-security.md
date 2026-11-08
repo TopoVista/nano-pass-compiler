@@ -30,5 +30,6 @@ non-root, read-only operation, but a deployed multi-user service must still
 place compilation in a dedicated worker with OS-level CPU/memory limits,
 authentication, origin policy, and rate limiting. CORS is origin-allowlisted:
 local development defaults to Vite origins on port 5173, while deployments
-must set `NANO_ALLOWED_ORIGINS` to an explicit comma-separated frontend list.
+must set `NANOPASS_ALLOWED_ORIGINS` to an explicit comma-separated frontend
+list. `NANO_ALLOWED_ORIGINS` remains a backwards-compatible development alias.
 The server does not emit a wildcard CORS response. See [the threat model](threat-model.md).

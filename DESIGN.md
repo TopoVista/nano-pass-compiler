@@ -1,36 +1,36 @@
 ---
-name: "NanoPass: Black Editorial Instrument"
-description: "A monochrome editorial public site paired with a precise dark compiler workbench."
+name: "NanoPass: Monochrome Editorial Instrument"
+description: "A monochrome editorial public site paired with a deep-navy compiler workbench."
 colors:
-  primary: "#dfff4f"
-  neutral-canvas: "#060606"
-  neutral-surface: "#0d0d0d"
-  neutral-raised: "#121212"
-  neutral-ink: "#f4f2ec"
-  neutral-muted: "#92918b"
-  neutral-line: "#2c2c29"
-  warning: "#ffd166"
-  danger: "#ff8078"
+  primary: "#45d8ff"
+  neutral-canvas: "#07101d"
+  neutral-surface: "#0b1726"
+  neutral-raised: "#101f31"
+  neutral-ink: "#eff6ff"
+  neutral-muted: "#91a6ba"
+  neutral-line: "#1c354c"
+  warning: "#ffc76d"
+  danger: "#ff7f91"
 typography:
   display:
-    fontFamily: "Fraunces, Georgia, serif"
+    fontFamily: "Iowan Old Style, Baskerville, Georgia, serif"
     fontSize: "108px"
     fontWeight: 600
     lineHeight: 0.92
     letterSpacing: "-0.07em"
   headline:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "76px"
     fontWeight: 600
     lineHeight: 0.98
     letterSpacing: "-0.065em"
   body:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.65
   label:
-    fontFamily: "DM Mono, SFMono-Regular, Consolas, monospace"
+    fontFamily: "SFMono-Regular, Menlo, Consolas, monospace"
     fontSize: "10px"
     fontWeight: 500
     lineHeight: 1.4
@@ -44,7 +44,7 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "#101207"
+    textColor: "#031019"
     rounded: "{rounded.instrument}"
     padding: "0 17px"
     height: "47px"
@@ -60,12 +60,12 @@ components:
 
 **Creative North Star: “The Black Editorial Instrument.”**
 
-NanoPass is a calm black research artifact in public and a focused technical instrument in the lab. The public route uses intentional negative space, a limited serif voice, and one compiler representation artifact; the workbench is dense only where the compiler creates facts.
+NanoPass is a calm black research artifact in public and a focused deep-navy technical instrument in the lab. The public route uses intentional negative space, a limited serif voice, and one compiler representation artifact; the workbench is dense only where the compiler creates facts.
 
 Key characteristics:
 
-- Black canvas, off-white content, thin structural rules.
-- A single acid-lime signal for verification, primary action, and active state.
+- Public canvas is near-black and monochrome with off-white content and thin structural rules.
+- The lab uses a restrained cyan action signal, mint for verified state, and amber for caution.
 - Editorial serif only for a few public-heading words; UI and prose remain system-sans.
 - No rounded SaaS cards, decorative gradients, stock visuals, or invented performance claims.
 
@@ -75,18 +75,20 @@ The palette is a restrained neutral field with one high-contrast signal color.
 
 ### Primary
 
-- **Verification lime** (#dfff4f): primary action, active navigation, verified state, and meaningful compiler trace only.
+- **Inspection cyan** (#45d8ff): active navigation, inspectable values, and explicit user action in the lab.
+- **Verification mint** (#4de2a8): compiler-reported success only.
 
 ### Neutral
 
-- **Black canvas** (#060606): application and public-site ground.
-- **Instrument surface** (#0d0d0d): panels and terminals.
-- **Raised surface** (#121212): headers and selected controls.
-- **Off-white ink** (#f4f2ec): high-priority text.
-- **Muted graphite** (#92918b): secondary explanation and metadata.
-- **Structure line** (#2c2c29): all panel and grid boundaries.
+- **Public black** (#050505): editorial landing ground.
+- **Lab canvas** (#07101d): application ground.
+- **Instrument surface** (#0b1726): panels and terminals.
+- **Raised surface** (#101f31): headers and selected controls.
+- **Lab ink** (#eff6ff): high-priority text.
+- **Muted blue-grey** (#91a6ba): secondary explanation and metadata.
+- **Structure line** (#1c354c): all lab panel and grid boundaries.
 
-**The Signal Rarity Rule.** Lime is never decorative. It appears only when a user may act, inspect an active view, or trust a compiler-reported success.
+**The Signal Rarity Rule.** Cyan is never decorative. Mint appears only when a compiler-reported check has succeeded.
 
 ## Typography
 

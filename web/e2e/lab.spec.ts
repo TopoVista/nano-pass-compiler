@@ -39,3 +39,41 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await page.getByRole('button', { name: 'adaptive-jit', exact: true }).click();
   await expect(page.getByText('Adaptive JIT events')).toBeVisible();
 });
+
+test('keeps a selected custom pipeline and restores a shared session', async ({ page }) => {
+  await page.goto('/lab');
+  await expect(page.locator('.compile-status')).toContainText('verified');
+
+  await page.locator('.pipeline-picker summary').click();
+  await page.locator('.pipeline-options label', { hasText: 'sccp' }).locator('input').check();
+  await page.locator('.pipeline-options label', { hasText: 'dce' }).locator('input').check();
+  await expect(page.getByLabel('Custom pipeline order')).toBeVisible();
+  await page.getByRole('button', { name: 'Move dce earlier' }).click();
+
+  await expect(page.locator('.compile-status')).toContainText('verified');
+  await page.getByRole('button', { name: 'Share session' }).click();
+  await expect(page).toHaveURL(/#session=/);
+  await page.reload();
+  await expect(page.locator('.pipeline-picker summary')).toContainText('2 selected');
+});
+
+test('shows a useful compiler diagnostic for malformed source', async ({ page }) => {
+  await page.goto('/lab');
+  const editor = page.locator('.monaco-editor textarea');
+  await editor.click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await page.keyboard.insertText('int main( { return 0; }');
+  await expect(page.locator('.compile-status')).toContainText('diagnostics reported');
+  await expect(page.getByText(/error\[/i).first()).toBeVisible();
+});
+
+test('preserves an operable lab shell on mobile and explains an unavailable API', async ({ browser }) => {
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await mobile.newPage();
+  await page.route('**/api/v1/**', (route) => route.abort());
+  await page.goto('/lab');
+  await expect(page.getByRole('navigation', { name: 'Lab views' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry compiler service' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Terminal command' })).toBeVisible();
+  await mobile.close();
+});

@@ -17,14 +17,14 @@ test.describe('visual baselines', () => {
     });
   });
 
-  test('workbench preserves the code-first shell', async ({ page }) => {
+  test('workbench preserves the code-first shell without a compiler service', async ({ page }) => {
+    await page.route('**/api/v1/**', (route) => route.abort());
     await page.setViewportSize({ width: 1440, height: 980 });
     await page.goto('/lab');
-    await expect(page.locator('.compile-status')).toContainText('verified');
+    await expect(page.getByRole('button', { name: 'Retry compiler service' })).toBeVisible();
     await expect(page).toHaveScreenshot('workbench-desktop.png', {
       animations: 'disabled',
       fullPage: false,
-      mask: [page.locator('.compile-status'), page.locator('.compiler-revision')],
     });
   });
 });

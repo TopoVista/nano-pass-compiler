@@ -57,12 +57,17 @@ The fragment remains client-side; source is only sent to the configured local
 service for compilation.
 
 The shipped public surface uses a black editorial system that leads to the
-workbench; the lab itself is a compact dark instrument with a single lime
-signal color for selected or verified compiler states. Both use the real local
-API instead of placeholder cards. Durable visual decisions live in
+workbench; the lab itself is a focused deep-navy instrument with cyan
+inspection state, mint compiler-verification state, and amber caution state.
+Both use the real local API instead of placeholder cards. Durable visual decisions live in
 [`DESIGN.md`](../DESIGN.md).
 
 `npm run test:e2e` is a bounded Playwright journey that starts the real local
 `nano-server` plus Vite, loads a source example, switches IR/graphs, opens a
 transformation, runs/profile the program, and inspects adaptive events. Install
 Chromium once with `npm run test:e2e:install`.
+
+On a workstation where the compiler binary lives outside the default build
+directory, set `NANOPASS_SERVER_COMMAND` to its command line. To test against
+an already-running service, set `NANOPASS_SERVER_URL=https://host.example`;
+Playwright will then start only the Vite client.

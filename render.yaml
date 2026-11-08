@@ -6,7 +6,7 @@ services:
     dockerCommand: --bind=all --port=$PORT --execution-policy=interpreter-only
     healthCheckPath: /api/v1/readiness
     envVars:
-      - key: NANO_ALLOWED_ORIGINS
+      - key: NANOPASS_ALLOWED_ORIGINS
         sync: false
       - key: PORT
         value: "8080"

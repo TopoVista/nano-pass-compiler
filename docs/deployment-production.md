@@ -18,10 +18,10 @@ The client has no secret environment variables. It sends source text only to tha
 
 ```sh
 PORT=8080
-NANO_ALLOWED_ORIGINS=https://your-frontend.example.com
+NANOPASS_ALLOWED_ORIGINS=https://your-frontend.example.com
 ```
 
-Health checks use `/api/v1/readiness`. The server logs its bind address, execution policy, and allowlist count only; it does not log user source. It accepts a 512 KiB HTTP request maximum and delegates source, token, AST, CFG, SSA, runtime-step, output, and optimizer limits to the compiler service.
+Health checks use `/api/v1/readiness`. The server logs a request ID, endpoint, status, duration, bind address, execution policy, and allowlist count—but never user source. Error envelopes carry the correlation ID. It accepts a 512 KiB HTTP request maximum and delegates source, token, AST, CFG, SSA, runtime-step, output, and optimizer limits to the compiler service. `NANO_ALLOWED_ORIGINS` remains accepted as a backwards-compatible alias.
 
 ## Public execution boundary
 

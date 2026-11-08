@@ -1,5 +1,7 @@
 #include <array>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -32,6 +34,25 @@ inline void closeSocket(Socket socket) { close(socket); }
 
 namespace {
 using namespace nanopass::service;
+
+struct RequestContext {
+  uint64_t id = 0;
+  std::string path = "unknown";
+  std::chrono::steady_clock::time_point started;
+};
+
+std::atomic<uint64_t> nextRequestId{1};
+thread_local std::optional<RequestContext> activeRequest;
+
+void logResponse(int status) {
+  if (!activeRequest) return;
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - activeRequest->started);
+  std::cerr << "request_id=req-" << activeRequest->id
+            << " endpoint=" << activeRequest->path
+            << " status=" << status
+            << " duration_ms=" << elapsed.count() << '\n';
+}
 
 // This is a small, intentionally strict request decoder.  It supports only
 // the JSON values the public API accepts, rejects malformed escape sequences,
@@ -106,7 +127,7 @@ std::optional<ExecutionMode> decodeRunMode(const std::string &body, std::string 
   error="unsupported execution mode"; return std::nullopt;
 }
 
-std::string errorJson(int status,std::string_view code,std::string_view message){std::ostringstream out;out<<"{\"schemaVersion\":1,\"success\":false,\"status\":"<<status<<",\"error\":{\"code\":\""<<jsonEscape(code)<<"\",\"message\":\""<<jsonEscape(message)<<"\"}}";return out.str();}
+std::string errorJson(int status,std::string_view code,std::string_view message){std::ostringstream out;out<<"{\"schemaVersion\":1,\"success\":false,\"status\":"<<status;if(activeRequest)out<<",\"requestId\":\"req-"<<activeRequest->id<<"\"";out<<",\"error\":{\"code\":\""<<jsonEscape(code)<<"\",\"message\":\""<<jsonEscape(message)<<"\"}}";return out.str();}
 std::string healthJson(const CompilerService &service) {
   std::ostringstream out;
   out << "{\"schemaVersion\":1,\"status\":\"ok\",\"ready\":true"
@@ -142,7 +163,8 @@ std::optional<std::string> requestHeader(std::string_view request, std::string_v
 }
 
 std::set<std::string> allowedOrigins() {
-  const char *raw = std::getenv("NANO_ALLOWED_ORIGINS");
+  const char *raw = std::getenv("NANOPASS_ALLOWED_ORIGINS");
+  if (!raw || std::string_view(raw).empty()) raw = std::getenv("NANO_ALLOWED_ORIGINS");
   std::set<std::string> origins{"http://127.0.0.1:5173", "http://localhost:5173"};
   if (!raw || std::string_view(raw).empty()) return origins;
   origins.clear();
@@ -156,9 +178,36 @@ bool originAllowed(const std::optional<std::string> &origin, const std::set<std:
   return !origin || origins.contains(*origin);
 }
 
-void sendResponse(Socket socket,int status,std::string_view body,const std::optional<std::string> &origin={}){const char*text=status==200?"OK":status==400?"Bad Request":status==403?"Forbidden":status==404?"Not Found":status==413?"Payload Too Large":"Internal Server Error";std::ostringstream response;response<<"HTTP/1.1 "<<status<<' '<<text<<"\r\nContent-Type: application/json; charset=utf-8\r\n";if(origin)response<<"Access-Control-Allow-Origin: "<<*origin<<"\r\nVary: Origin\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\n";response<<"Content-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;const auto data=response.str();size_t sent=0;while(sent<data.size()){const int result=send(socket,data.data()+sent,static_cast<int>(data.size()-sent),0);if(result<=0)break;sent+=static_cast<size_t>(result);}}
+void sendResponse(Socket socket,int status,std::string_view body,const std::optional<std::string> &origin={}){const char*text=status==200?"OK":status==400?"Bad Request":status==403?"Forbidden":status==404?"Not Found":status==413?"Payload Too Large":"Internal Server Error";std::ostringstream response;response<<"HTTP/1.1 "<<status<<' '<<text<<"\r\nContent-Type: application/json; charset=utf-8\r\n";if(origin)response<<"Access-Control-Allow-Origin: "<<*origin<<"\r\nVary: Origin\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\n";response<<"Content-Length: "<<body.size()<<"\r\nConnection: close\r\n\r\n"<<body;const auto data=response.str();size_t sent=0;while(sent<data.size()){const int result=send(socket,data.data()+sent,static_cast<int>(data.size()-sent),0);if(result<=0)break;sent+=static_cast<size_t>(result);}logResponse(status);}
 
-std::string readRequest(Socket socket){std::string request;std::array<char,8192>chunk{};while(request.size()<512*1024){const int n=recv(socket,chunk.data(),static_cast<int>(chunk.size()),0);if(n<=0)break;request.append(chunk.data(),static_cast<size_t>(n));if(request.find("\r\n\r\n")!=std::string::npos){const auto end=request.find("\r\n\r\n");const auto marker=request.find("Content-Length:");if(marker==std::string::npos||marker>end)break;const auto lineEnd=request.find("\r\n",marker);const size_t length=static_cast<size_t>(std::strtoull(request.substr(marker+15,lineEnd-marker-15).c_str(),nullptr,10));if(request.size()>=end+4+length)break;}}return request;}
+std::string readRequest(Socket socket) {
+  activeRequest = RequestContext{
+      nextRequestId.fetch_add(1), "unknown", std::chrono::steady_clock::now()};
+  std::string request;
+  std::array<char, 8192> chunk{};
+  while (request.size() < 512 * 1024) {
+    const int received = recv(socket, chunk.data(), static_cast<int>(chunk.size()), 0);
+    if (received <= 0) break;
+    request.append(chunk.data(), static_cast<size_t>(received));
+    const auto headerEnd = request.find("\r\n\r\n");
+    if (headerEnd == std::string::npos) continue;
+    const auto requestLineEnd = request.find("\r\n");
+    if (requestLineEnd != std::string::npos && activeRequest) {
+      std::istringstream requestLine(request.substr(0, requestLineEnd));
+      std::string method;
+      std::string path;
+      requestLine >> method >> path;
+      if (!path.empty()) activeRequest->path = path;
+    }
+    const auto marker = request.find("Content-Length:");
+    if (marker == std::string::npos || marker > headerEnd) break;
+    const auto lineEnd = request.find("\r\n", marker);
+    const size_t length = static_cast<size_t>(std::strtoull(
+        request.substr(marker + 15, lineEnd - marker - 15).c_str(), nullptr, 10));
+    if (request.size() >= headerEnd + 4 + length) break;
+  }
+  return request;
+}
 void setClientReceiveTimeout(Socket socket) {
 #ifdef _WIN32
   DWORD timeoutMs = 5000;
