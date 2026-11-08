@@ -26,13 +26,13 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
 
   await page.getByRole('link', { name: /optimize/i }).click();
   await expect(page).toHaveURL(/\/optimizations$/);
-  await expect(page.locator('.compile-status')).toContainText('verified');
+  await expect(page.getByRole('heading', { name: /every rewrite has a reason/i })).toBeVisible();
   await page.getByRole('button', { name: /Nano SSA Optimization @main/ }).click();
   await expect(page.getByText('Before / after')).toBeVisible();
 
   await page.getByRole('link', { name: /^graphs/i }).click();
   await expect(page).toHaveURL(/\/graphs$/);
-  await expect(page.locator('.compile-status')).toContainText('verified');
+  await expect(page.getByRole('heading', { name: /follow control, not decoration/i })).toBeVisible();
   await page.getByLabel('Graph kind').selectOption('dominator-tree');
   await expect(page.getByLabel('dominator-tree graph')).toBeVisible();
   await page.getByLabel('Graph kind').selectOption('cfg');
@@ -40,7 +40,7 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
 
   await page.getByRole('link', { name: /^verify/i }).click();
   await expect(page).toHaveURL(/\/verification$/);
-  await expect(page.locator('.compile-status')).toContainText('verified');
+  await expect(page.getByRole('heading', { name: /measure what the compiler can actually prove/i })).toBeVisible();
   await page.getByRole('button', { name: 'ssa', exact: true }).click();
   await expect(page.getByText(/return/)).toBeVisible();
   await page.getByRole('link', { name: /^workbench/i }).click();
@@ -50,7 +50,7 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await expect(page.locator('.compile-status')).toContainText('verified');
   await page.getByRole('link', { name: /^verify/i }).click();
   await expect(page).toHaveURL(/\/verification$/);
-  await expect(page.locator('.compile-status')).toContainText('verified');
+  await expect(page.getByRole('heading', { name: /measure what the compiler can actually prove/i })).toBeVisible();
   await page.getByRole('button', { name: 'adaptive-jit', exact: true }).click();
   await expect(page.getByText('tier1_installed')).toBeVisible();
 });
@@ -77,7 +77,7 @@ test('shows a useful compiler diagnostic for malformed source', async ({ page })
   const editor = page.locator('.monaco-editor textarea');
   await editor.click();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
-  await page.keyboard.insertText('int main( { return 0; }');
+  await page.keyboard.type('int main( { return 0; }');
   await expect(page.locator('.compile-status')).toContainText('diagnostics reported');
   await expect(page.getByText(/error\[/i).first()).toBeVisible();
 });

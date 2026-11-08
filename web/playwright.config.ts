@@ -19,6 +19,9 @@ const compilerServer = process.env.NANOPASS_SERVER_URL
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // Keep one reviewed baseline for the supported Chromium rendering path. The
+  // previous platform suffix made Linux CI create a new, unreviewed baseline.
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
   use: { baseURL: 'http://127.0.0.1:15173', browserName: 'chromium', headless: true },
   webServer: [
     ...compilerServer,
