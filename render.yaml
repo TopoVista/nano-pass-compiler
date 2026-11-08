@@ -3,11 +3,17 @@ services:
     name: nanopass-compiler-api
     runtime: docker
     dockerfilePath: ./docker/server.Dockerfile
-    dockerCommand: --bind=all --port=$PORT --execution-policy=interpreter-only
+    dockerCommand: --bind=all
     healthCheckPath: /api/v1/readiness
     envVars:
       - key: NANOPASS_ALLOWED_ORIGINS
         sync: false
       - key: PORT
         value: "8080"
+      - key: NANOPASS_ENV
+        value: production
+      - key: NANOPASS_EXECUTION_POLICY
+        value: interpreter-only
+      - key: NANOPASS_MAX_SOURCE_BYTES
+        value: "262144"
     autoDeploy: false

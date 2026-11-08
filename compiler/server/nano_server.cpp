@@ -199,11 +199,16 @@ std::string readRequest(Socket socket) {
       requestLine >> method >> path;
       if (!path.empty()) activeRequest->path = path;
     }
-    const auto marker = request.find("Content-Length:");
-    if (marker == std::string::npos || marker > headerEnd) break;
-    const auto lineEnd = request.find("\r\n", marker);
-    const size_t length = static_cast<size_t>(std::strtoull(
-        request.substr(marker + 15, lineEnd - marker - 15).c_str(), nullptr, 10));
+    const auto contentLength = requestHeader(request, "Content-Length");
+    if (!contentLength) break;
+    size_t parsed = 0;
+    size_t length = 0;
+    try {
+      length = std::stoull(*contentLength, &parsed);
+    } catch (...) {
+      break;
+    }
+    if (parsed != contentLength->size()) break;
     if (request.size() >= headerEnd + 4 + length) break;
   }
   return request;
@@ -219,10 +224,90 @@ void setClientReceiveTimeout(Socket socket) {
 #endif
 }
 void handle(Socket socket,const CompilerService &service,const std::set<std::string> &origins){const auto request=readRequest(socket);const auto origin=requestHeader(request,"Origin");if(!originAllowed(origin,origins)){sendResponse(socket,403,errorJson(403,"ORIGIN_NOT_ALLOWED","request origin is not allowed"));return;}if(request.size()>=512*1024){sendResponse(socket,413,errorJson(413,"REQUEST_LIMIT_EXCEEDED","request exceeds server byte limit"),origin);return;}const auto headerEnd=request.find("\r\n\r\n");if(headerEnd==std::string::npos){sendResponse(socket,400,errorJson(400,"MALFORMED_HTTP","missing HTTP header terminator"),origin);return;}const auto lineEnd=request.find("\r\n");const auto line=request.substr(0,lineEnd);std::istringstream words(line);std::string method,path,version;words>>method>>path>>version;if(method=="OPTIONS"){sendResponse(socket,200,"{\"schemaVersion\":1,\"success\":true}",origin);return;}if(method=="GET"&&(path=="/api/v1/health"||path=="/api/v1/readiness")){sendResponse(socket,200,healthJson(service),origin);return;}if(method!="POST"){sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"),origin);return;}CompileRequestV1 compile;std::string error;const auto body=request.substr(headerEnd+4);if(!decodeCompileRequest(body,compile,error)){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error),origin);return;}if(path=="/api/v1/correctness"){auto result=service.checkCorrectness(compile);sendResponse(socket,result.compilation.success?200:400,correctnessResponseJson(result),origin);return;}if(path=="/api/v1/compile"||path=="/api/v1/analyze"||path=="/api/v1/optimize"){if(path=="/api/v1/analyze"){compile.include.graphs=true;compile.include.provenance=true;compile.include.ssa=true;}if(path=="/api/v1/optimize"){compile.include.optimizedSsa=true;compile.include.remarks=true;compile.include.telemetry=true;}auto result=service.compile(compile);sendResponse(socket,result.success?200:400,compileResponseJson(result),origin);return;}if(path=="/api/v1/run"||path=="/api/v1/profile"){RunRequestV1 run;run.compile=compile;if(path=="/api/v1/profile")run.mode=ExecutionMode::SSAInterpreter;else {auto mode=decodeRunMode(body,error);if(!mode){sendResponse(socket,400,errorJson(400,"MALFORMED_REQUEST",error),origin);return;}run.mode=*mode;}auto result=service.run(run);sendResponse(socket,result.compilation.success?200:400,runResponseJson(result),origin);return;}sendResponse(socket,404,errorJson(404,"ROUTE_NOT_FOUND","unsupported endpoint"),origin);}
+std::optional<int> environmentPort(const char *name) {
+  const char *raw = std::getenv(name);
+  if (!raw || std::string_view(raw).empty()) return std::nullopt;
+  try {
+    size_t parsed = 0;
+    const int value = std::stoi(raw, &parsed);
+    if (parsed != std::strlen(raw)) return std::nullopt;
+    return value;
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
-int main(int argc,char**argv){int port=8080;bool bindAll=false;ExecutionPolicy policy=ExecutionPolicy::LocalTrusted;for(int i=1;i<argc;++i){std::string_view arg=argv[i];if(arg.starts_with("--port=")){try{port=std::stoi(std::string(arg.substr(7)));}catch(...){std::cerr<<"invalid port\n";return 2;}}else if(arg.starts_with("--execution-policy=")){const auto value=arg.substr(19);if(value=="disabled")policy=ExecutionPolicy::Disabled;else if(value=="interpreter-only")policy=ExecutionPolicy::InterpreterOnly;else if(value=="local-trusted")policy=ExecutionPolicy::LocalTrusted;else{std::cerr<<"invalid execution policy\n";return 2;}}else if(arg=="--bind=loopback")bindAll=false;else if(arg=="--bind=all")bindAll=true;else if(arg=="--help"){std::cout<<"nano-server --port=8080 --bind=loopback|all --execution-policy=disabled|interpreter-only|local-trusted\n";return 0;}else{std::cerr<<"unknown argument: "<<arg<<'\n';return 2;}}if(port<1024||port>65535){std::cerr<<"port must be in 1024..65535\n";return 2;}
+std::optional<ExecutionPolicy> parseExecutionPolicy(std::string_view value) {
+  if (value == "disabled") return ExecutionPolicy::Disabled;
+  if (value == "interpreter-only") return ExecutionPolicy::InterpreterOnly;
+  if (value == "local-trusted") return ExecutionPolicy::LocalTrusted;
+  return std::nullopt;
+}
+
+bool productionEnvironment() {
+  const char *environment = std::getenv("NANOPASS_ENV");
+  return environment && std::string_view(environment) == "production";
+}
+
+}
+
+int main(int argc, char **argv) {
+  int port = 8080;
+  bool bindAll = false;
+  ExecutionPolicy policy = ExecutionPolicy::LocalTrusted;
+  ServiceLimits limits;
+
+  if (const auto configuredPort = environmentPort("PORT")) port = *configuredPort;
+  else if (std::getenv("PORT")) { std::cerr << "invalid PORT\n"; return 2; }
+  if (const char *configuredPolicy = std::getenv("NANOPASS_EXECUTION_POLICY")) {
+    const auto parsed = parseExecutionPolicy(configuredPolicy);
+    if (!parsed) { std::cerr << "invalid NANOPASS_EXECUTION_POLICY\n"; return 2; }
+    policy = *parsed;
+  }
+  if (const char *configuredBind = std::getenv("NANOPASS_BIND")) {
+    if (std::string_view(configuredBind) == "all") bindAll = true;
+    else if (std::string_view(configuredBind) == "loopback") bindAll = false;
+    else { std::cerr << "invalid NANOPASS_BIND\n"; return 2; }
+  }
+  if (const auto configuredLimit = environmentPort("NANOPASS_MAX_SOURCE_BYTES")) {
+    if (*configuredLimit <= 0 || *configuredLimit > 512 * 1024) {
+      std::cerr << "NANOPASS_MAX_SOURCE_BYTES must be in 1..524288\n";
+      return 2;
+    }
+    limits.maxSourceBytes = static_cast<size_t>(*configuredLimit);
+  } else if (std::getenv("NANOPASS_MAX_SOURCE_BYTES")) {
+    std::cerr << "invalid NANOPASS_MAX_SOURCE_BYTES\n";
+    return 2;
+  }
+
+  for (int index = 1; index < argc; ++index) {
+    const std::string_view argument = argv[index];
+    if (argument.starts_with("--port=")) {
+      try { port = std::stoi(std::string(argument.substr(7))); }
+      catch (...) { std::cerr << "invalid port\n"; return 2; }
+    } else if (argument.starts_with("--execution-policy=")) {
+      const auto parsed = parseExecutionPolicy(argument.substr(19));
+      if (!parsed) { std::cerr << "invalid execution policy\n"; return 2; }
+      policy = *parsed;
+    } else if (argument == "--bind=loopback") {
+      bindAll = false;
+    } else if (argument == "--bind=all") {
+      bindAll = true;
+    } else if (argument == "--help") {
+      std::cout << "nano-server [--port=8080] [--bind=loopback|all] "
+                   "[--execution-policy=disabled|interpreter-only|local-trusted]\n";
+      return 0;
+    } else {
+      std::cerr << "unknown argument: " << argument << '\n';
+      return 2;
+    }
+  }
+  if (productionEnvironment() && !std::getenv("NANOPASS_ALLOWED_ORIGINS")) {
+    std::cerr << "NANOPASS_ALLOWED_ORIGINS is required when NANOPASS_ENV=production\n";
+    return 2;
+  }
+  if (port < 1024 || port > 65535) { std::cerr << "port must be in 1024..65535\n"; return 2; }
 #ifdef _WIN32
   WSADATA data{};if(WSAStartup(MAKEWORD(2,2),&data)!=0){std::cerr<<"WSAStartup failed\n";return 1;}
 #endif
-  Socket server=socket(AF_INET,SOCK_STREAM,0);if(server==kInvalidSocket){std::cerr<<"could not create server socket\n";return 1;}int reuse=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,reinterpret_cast<const char*>(&reuse),sizeof(reuse));sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(bindAll?INADDR_ANY:INADDR_LOOPBACK);address.sin_port=htons(static_cast<uint16_t>(port));if(bind(server,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0||listen(server,16)<0){std::cerr<<"could not bind nano-server\n";closeSocket(server);return 1;}const auto origins=allowedOrigins();std::cout<<"nano-server listening on "<<(bindAll?"all interfaces":"127.0.0.1")<<":"<<port<<" (schema v1, "<<executionPolicyName(policy)<<", "<<origins.size()<<" allowed origins)\n";CompilerService service({},policy);while(true){Socket client=accept(server,nullptr,nullptr);if(client==kInvalidSocket)continue;setClientReceiveTimeout(client);handle(client,service,origins);closeSocket(client);} }
+  Socket server=socket(AF_INET,SOCK_STREAM,0);if(server==kInvalidSocket){std::cerr<<"could not create server socket\n";return 1;}int reuse=1;setsockopt(server,SOL_SOCKET,SO_REUSEADDR,reinterpret_cast<const char*>(&reuse),sizeof(reuse));sockaddr_in address{};address.sin_family=AF_INET;address.sin_addr.s_addr=htonl(bindAll?INADDR_ANY:INADDR_LOOPBACK);address.sin_port=htons(static_cast<uint16_t>(port));if(bind(server,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0||listen(server,16)<0){std::cerr<<"could not bind nano-server\n";closeSocket(server);return 1;}const auto origins=allowedOrigins();std::cout<<"nano-server listening on "<<(bindAll?"all interfaces":"127.0.0.1")<<":"<<port<<" (schema v1, "<<executionPolicyName(policy)<<", "<<origins.size()<<" allowed origins)\n";CompilerService service(limits,policy);while(true){Socket client=accept(server,nullptr,nullptr);if(client==kInvalidSocket)continue;setClientReceiveTimeout(client);handle(client,service,origins);closeSocket(client);} }

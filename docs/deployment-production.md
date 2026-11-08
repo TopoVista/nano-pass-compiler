@@ -17,11 +17,19 @@ The client has no secret environment variables. It sends source text only to tha
 `render.yaml` and `docker/server.Dockerfile` build `nano-server` with LLVM 18, then run the non-root runtime image. The service binds `0.0.0.0` only because the platform routes requests to it; set:
 
 ```sh
+NANOPASS_ENV=production
 PORT=8080
 NANOPASS_ALLOWED_ORIGINS=https://your-frontend.example.com
+NANOPASS_EXECUTION_POLICY=interpreter-only
+NANOPASS_MAX_SOURCE_BYTES=262144
 ```
 
-Health checks use `/api/v1/readiness`. The server logs a request ID, endpoint, status, duration, bind address, execution policy, and allowlist count—but never user source. Error envelopes carry the correlation ID. It accepts a 512 KiB HTTP request maximum and delegates source, token, AST, CFG, SSA, runtime-step, output, and optimizer limits to the compiler service. `NANO_ALLOWED_ORIGINS` remains accepted as a backwards-compatible alias.
+Health checks use `/api/v1/readiness`. The server logs a request ID, endpoint, status, duration, bind address, execution policy, and allowlist count—but never user source. Error envelopes carry the correlation ID. It accepts a 512 KiB HTTP request maximum and delegates source, token, AST, CFG, SSA, runtime-step, output, and optimizer limits to the compiler service. `NANO_ALLOWED_ORIGINS` remains accepted as a backwards-compatible alias. In `NANOPASS_ENV=production`, startup requires `NANOPASS_ALLOWED_ORIGINS`; it will not fall back to local Vite origins.
+
+`PORT`, `NANOPASS_EXECUTION_POLICY`, `NANOPASS_BIND`, and
+`NANOPASS_MAX_SOURCE_BYTES` are validated at startup. Explicit server CLI
+flags take precedence over their environment equivalents. `NANOPASS_MAX_SOURCE_BYTES`
+must be between 1 and 524288 and is additionally bounded by the HTTP request cap.
 
 ## Public execution boundary
 

@@ -34,4 +34,3 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD /bin/sh -c "wget -q -O - http://127.0.0.1:8080/api/v1/readiness | grep -q '\"ready\":true'"
 ENTRYPOINT ["/opt/nanopass/bin/nano-server"]
-CMD ["--bind=all", "--port=8080", "--execution-policy=interpreter-only"]

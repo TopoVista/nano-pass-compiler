@@ -32,4 +32,8 @@ authentication, origin policy, and rate limiting. CORS is origin-allowlisted:
 local development defaults to Vite origins on port 5173, while deployments
 must set `NANOPASS_ALLOWED_ORIGINS` to an explicit comma-separated frontend
 list. `NANO_ALLOWED_ORIGINS` remains a backwards-compatible development alias.
-The server does not emit a wildcard CORS response. See [the threat model](threat-model.md).
+The server does not emit a wildcard CORS response. In `NANOPASS_ENV=production`,
+startup fails unless `NANOPASS_ALLOWED_ORIGINS` is explicitly supplied. The
+server validates `PORT`, `NANOPASS_EXECUTION_POLICY`, `NANOPASS_BIND`, and the
+bounded `NANOPASS_MAX_SOURCE_BYTES` configuration before accepting traffic.
+See [the threat model](threat-model.md).
