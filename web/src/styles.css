@@ -209,6 +209,13 @@ a { color: inherit; text-decoration: none; }
 
 @media (min-width: 761px) and (max-width: 1180px) { .dashboard-shell { grid-template-columns: 78px minmax(0, 1fr); }.app-rail { width: 78px; padding-inline: 10px; }.rail-brand { justify-content: center; padding-inline: 0; }.rail-brand > span:last-child, .rail-label, .rail-nav a > span, .rail-status { display: none; }.rail-nav a { justify-content: center; padding: 0; }.workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(820px, calc(100vh - 168px)) auto; padding-inline: 22px; }.workspace > .ir-panel { grid-column: 1; grid-row: auto; min-height: 680px; }.source-panel { grid-column: 1; grid-row: 1; }.timeline-panel { grid-row: auto; }.source-actions .focus-editor { display: inline-flex; }.verification-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .workspace { padding: 0 14px 40px; }.workspace > .panel { margin-top: 14px; }.source-panel > header, .ir-panel > header { min-height: 56px; padding-inline: 12px; }.source-actions .focus-editor { display: none; }.source-actions button { padding-inline: 7px; }.terminal-path { display: none; }.route-page { padding: 34px 18px 56px; }.verification-actionbar, .verification-grid { grid-template-columns: 1fr; }.verification-actionbar { display: grid; }.verification-actionbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }.verification-actionbar .verification-primary { grid-column: 1 / -1; }
+  .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; gap: 14px; }
+  .workspace > .ir-panel { grid-column: 1; min-width: 0; }
+  .editor, .terminal-pane, .terminal-suggestions { min-width: 0; max-width: 100%; }
+  .editor, .terminal-pane { overflow: hidden; }
+  .ir-panel > header { gap: 8px; min-width: 0; }
+  .ir-panel > header > div { min-width: 0; }
+  .ir-panel > header select { min-width: 0; max-width: 48%; }
   .rail-nav a > span { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
   .timeline-panel { grid-column: 1; grid-row: auto; }
 }
