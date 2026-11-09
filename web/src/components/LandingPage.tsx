@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUpRight, Check } from 'lucide-react';
+import { ArchitectureDiagram } from './ArchitectureDiagram';
 
 const pipeline = ["Source", "Typed AST", "CoreIR", "ANF", "CFG", "SSA", "Optimizer", "LLVM"];
 
@@ -118,6 +119,7 @@ export function LandingPage() {
       <section className="public-section public-architecture" id="architecture">
         <div className="section-title"><p>Architecture</p><h2>Compiler first.<br />Interface <em>second.</em></h2></div>
         <div className="architecture-copy"><p>The browser consumes a versioned, bounded JSON compiler API. It does not scrape terminal output or invent a compiler. The deterministic C++ compiler remains the source of truth; optional policies can only choose from known legal decisions and are always verifier-gated.</p><a href="https://github.com/TopoVista/nano-pass-compiler">Read the source on GitHub <Arrow /></a></div>
+        <ArchitectureDiagram />
       </section>
 
       <footer className="public-footer"><a className="public-brand" href="/"><Mark /><span>NanoPass</span></a><p>Transparent compiler engineering.</p><div><a href="/lab">Compiler Lab</a><a href="/guide">Guide</a><a href="https://github.com/TopoVista/nano-pass-compiler">GitHub</a></div></footer>

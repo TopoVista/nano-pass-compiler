@@ -34,7 +34,7 @@ export function SourceEditor({ value, onChange, focusLine, onCursorLine }: Props
         'editorWidget.background': '#111111', 'editorWidget.border': '#51514D', 'editorStickyScroll.background': '#090909',
       },
       rules: [
-        { token: 'keyword', foreground: 'F5F5F1' }, { token: 'type', foreground: 'D5D4CE' }, { token: 'comment', foreground: '7C7B75' },
+        { token: 'keyword', foreground: 'A7C5FF' }, { token: 'type', foreground: 'D5D4CE' }, { token: 'comment', foreground: '7C7B75' },
         { token: 'number', foreground: 'E7E6E0' }, { token: 'operator', foreground: 'C9C8C1' }, { token: 'identifier', foreground: 'ECEBE5' },
       ],
     });

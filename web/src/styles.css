@@ -98,6 +98,16 @@ a { color: inherit; text-decoration: none; }
 .runtime-rows article { display: grid; grid-template-columns: 145px 1fr 140px; gap: 20px; padding: 20px 0; border-top: 1px solid var(--line); }.runtime-rows article:last-child { border-bottom: 1px solid var(--line); }.runtime-rows span, .runtime-rows small { color: var(--muted); font: 10px var(--font-code); }.runtime-rows b { font-size: 13px; line-height: 1.45; }
 .public-lab-callout { display: grid; grid-template-columns: .7fr 1fr auto; gap: 60px; align-items: center; padding: 95px 0; border-top: 1px solid var(--line); }
 .mini-lab { display: grid; grid-template-columns: 1fr 125px; }.mini-lab header { grid-column: 1 / -1; display: flex; justify-content: space-between; padding: 11px 13px; border-bottom: 1px solid var(--line); color: var(--muted); font: 9px var(--font-code); }.mini-lab pre { margin: 0; padding: 18px; color: #deded8; font: 10px/1.7 var(--font-code); }.mini-lab aside { display: grid; align-content: center; gap: 4px; padding: 18px; border-left: 1px solid var(--line); }.mini-lab aside strong { font: 12px var(--font-code); }.mini-lab aside span { margin-bottom: 9px; color: var(--muted); font-size: 10px; }
+.architecture-diagram { grid-column: 1 / -1; margin: 2px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.architecture-diagram figcaption { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(260px, .76fr); gap: 28px; align-items: baseline; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.architecture-diagram figcaption > span { color: var(--muted); font: 9px var(--font-code); letter-spacing: .12em; text-transform: uppercase; }
+.architecture-diagram figcaption strong { font-size: 18px; letter-spacing: -.04em; }.architecture-diagram figcaption p { margin: 0; color: #b6b6ae; font-size: 12px; line-height: 1.65; }
+.architecture-scroll { overflow-x: auto; }.architecture-canvas { position: relative; width: 1000px; height: 500px; background-color: #090909; background-image: radial-gradient(circle at 1px 1px, #353531 1px, transparent 1.25px); background-size: 24px 24px; }
+.architecture-group { position: absolute; border: 1px solid #51514d; background: rgb(255 255 255 / .018); }.architecture-group b { position: absolute; top: 13px; left: 13px; color: #9c9b94; font: 10px var(--font-code); letter-spacing: .04em; }
+.architecture-group-client { top: 66px; left: 214px; width: 430px; height: 200px; }.architecture-group-compiler { top: 66px; left: 610px; width: 300px; height: 200px; }.architecture-group-backend { top: 286px; left: 610px; width: 356px; height: 176px; }
+.architecture-edges { position: absolute; inset: 0; width: 1000px; height: 500px; pointer-events: none; }.architecture-edge { fill: none; stroke: #8d8c85; stroke-width: 1.35; }.architecture-edge-primary { stroke: #f5f5f1; stroke-width: 1.55; }.architecture-edges text { fill: #9c9b94; font: 9px var(--font-code); text-anchor: middle; paint-order: stroke; stroke: #090909; stroke-width: 5px; stroke-linejoin: round; }
+.architecture-node { position: absolute; width: 132px; display: grid; justify-items: center; text-align: center; }.architecture-tile { display: grid; place-items: center; width: 60px; height: 60px; border: 1px solid #7b7a73; background: #f5f5f1; color: #090909; }.architecture-node strong { margin-top: 8px; padding: 0 4px; color: #f5f5f1; background: #090909; font-size: 13px; letter-spacing: -.02em; }.architecture-node small { margin-top: 2px; padding: 0 4px; color: #9c9b94; background: #090909; font: 9px var(--font-code); letter-spacing: .02em; }
+.architecture-legend { display: flex; flex-wrap: wrap; gap: 20px; padding: 13px 0; color: #9c9b94; font: 9px var(--font-code); }.architecture-legend span { display: inline-flex; align-items: center; gap: 7px; }.architecture-legend i { display: inline-block; width: 28px; border-top: 1px solid #8d8c85; }.architecture-legend i.architecture-primary { border-top: 2px solid #f5f5f1; }
 .public-footer { display: flex; align-items: center; justify-content: space-between; min-height: 110px; border-top: 1px solid var(--line); }.public-footer p, .public-footer div { color: var(--muted); font-size: 11px; }.public-footer div { display: flex; gap: 20px; }
 
 /* Product: a sharp single workspace, not a card-wall dashboard. */
@@ -289,3 +299,10 @@ a { color: inherit; text-decoration: none; }
 .benchmark-empty .sample-bars i { background: #d7d6cf; }
 .sample-chart i { background: #d7d6cf; }
 .verification-actionbar .verification-primary { color: #050505; border-color: #f5f5f1; background: #f5f5f1; }
+
+@media (max-width: 760px) {
+  .architecture-diagram { min-width: 0; }
+  .architecture-diagram figcaption { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 18px 0; }
+  .architecture-scroll { min-width: 0; width: 100%; }
+  .architecture-legend { gap: 12px; }
+}
