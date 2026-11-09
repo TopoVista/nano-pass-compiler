@@ -106,3 +106,32 @@ test('preserves an operable lab shell on mobile and explains an unavailable API'
   await expect(page.getByRole('textbox', { name: 'Terminal command' })).toBeVisible();
   await mobile.close();
 });
+
+test('keeps the public and lab shells inside the viewport at supported breakpoints', async ({ page }) => {
+  const breakpoints = [
+    { width: 375, height: 812 },
+    { width: 390, height: 844 },
+    { width: 768, height: 1024 },
+    { width: 1024, height: 900 },
+    { width: 1440, height: 980 },
+    { width: 1920, height: 1080 },
+  ];
+
+  for (const viewport of breakpoints) {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `landing at ${viewport.width}px`).toBe(true);
+
+    await page.goto('/lab');
+    await expect(page.getByRole('textbox', { name: 'Terminal command' })).toBeVisible();
+    const labBounds = await page.evaluate(() => {
+      const oversized = [...document.querySelectorAll<HTMLElement>('*')]
+        .map((element) => ({ element: element.className || element.tagName, parent: element.parentElement?.className || element.parentElement?.tagName, right: element.getBoundingClientRect().right }))
+        .filter(({ right }) => right > window.innerWidth + 1)
+        .slice(0, 8);
+      return { scrollWidth: document.documentElement.scrollWidth, viewport: window.innerWidth, oversized };
+    });
+    expect(labBounds.scrollWidth <= labBounds.viewport, `lab at ${viewport.width}px: ${JSON.stringify(labBounds)}`).toBe(true);
+  }
+});

@@ -13,6 +13,10 @@ VITE_NANO_SERVER_URL=https://your-api.example.com
 
 `VITE_SITE_URL` sets the built canonical, OpenGraph, `robots.txt`, and sitemap URLs. It must be the actual HTTPS frontend origin; it is intentionally not hard-coded in the repository. The client has no secret environment variables. It sends source text only to that configured API URL.
 
+The public landing route is code-split from the compiler cockpit. Monaco and its
+editor worker are emitted as local, lazy-loaded assets, so the lab does not
+depend on a third-party CDN at runtime.
+
 ## API: Render or a compatible Docker host
 
 `render.yaml` and `docker/server.Dockerfile` build `nano-server` with LLVM 18, then run the non-root runtime image. The service binds `0.0.0.0` only because the platform routes requests to it; set:

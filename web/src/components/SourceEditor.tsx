@@ -1,7 +1,18 @@
-import Editor, { type OnMount } from '@monaco-editor/react';
+import Editor, { loader, type OnMount } from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
+import * as monaco from 'monaco-editor/editor/editor.api.js';
 import type { editor } from 'monaco-editor';
+import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import { formatNano } from '../lib/formatNano';
+
+// The React wrapper defaults to a CDN loader. Keep Monaco self-contained so
+// the editor works on private networks and does not leak a worker error when
+// third-party scripts are blocked.
+loader.config({ monaco });
+const workerHost = globalThis as typeof globalThis & {
+  MonacoEnvironment?: { getWorker: () => Worker };
+};
+workerHost.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 
 type Props = { value: string; onChange: (value: string) => void; focusLine?: number; onCursorLine?: (line: number) => void };
 export function SourceEditor({ value, onChange, focusLine, onCursorLine }: Props) {

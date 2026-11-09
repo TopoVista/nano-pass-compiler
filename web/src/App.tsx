@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { CodeView } from "./components/CodeView";
-import { GraphPane } from "./components/GraphPane";
 import {
   Diagnostics,
   Remarks,
@@ -15,7 +14,6 @@ import {
 } from "./components/BenchmarkPanel";
 import { PolicyFeatures } from "./components/PolicyFeatures";
 import { PolicyDecisions } from "./components/PolicyDecisions";
-import { SourceEditor } from "./components/SourceEditor";
 import { FeatureTour } from "./components/FeatureTour";
 import { TerminalPane, type TerminalReply } from "./components/TerminalPane";
 import { IRExplainer } from "./components/IRExplainer";
@@ -32,6 +30,13 @@ import {
 import { formatNano } from "./lib/formatNano";
 import { generateNanoProgram } from "./lib/randomNano";
 import "./styles.css";
+
+const SourceEditor = lazy(async () => ({
+  default: (await import("./components/SourceEditor")).SourceEditor,
+}));
+const GraphPane = lazy(async () => ({
+  default: (await import("./components/GraphPane")).GraphPane,
+}));
 
 const examples: Record<string, string> = {
   Factorial:
@@ -586,20 +591,22 @@ export default function App() {
         </header>
         <div className="source-stack">
           <div className="editor">
-            <SourceEditor
-              value={source}
-              focusLine={focusLine}
-              onCursorLine={(line) => {
-                const related = result?.values.find(
-                  (candidate) => candidate.line === line,
-                );
-                if (related) setSelectedValue(related.value);
-              }}
-              onChange={(next) => {
-                setSource(next);
-                setExampleName("");
-              }}
-            />
+            <Suspense fallback={<div className="editor-loading" role="status">Preparing source editor…</div>}>
+              <SourceEditor
+                value={source}
+                focusLine={focusLine}
+                onCursorLine={(line) => {
+                  const related = result?.values.find(
+                    (candidate) => candidate.line === line,
+                  );
+                  if (related) setSelectedValue(related.value);
+                }}
+                onChange={(next) => {
+                  setSource(next);
+                  setExampleName("");
+                }}
+              />
+            </Suspense>
           </div>
           <TerminalPane compilation={result} run={runResult} onCommand={runTerminalCommand} />
         </div>
@@ -671,15 +678,17 @@ export default function App() {
               ))}
             </select>
           </header>
-          <GraphPane
-            graph={graph}
-            profile={runResult?.runtimeProfile}
-            selectedBlock={selectedBlock}
-            onSelect={(id) => {
-              const match = /bb(\d+)$/.exec(id);
-              setSelectedBlock(match ? Number(match[1]) : undefined);
-            }}
-          />
+          <Suspense fallback={<div className="graph-loading" role="status">Preparing graph explorer…</div>}>
+            <GraphPane
+              graph={graph}
+              profile={runResult?.runtimeProfile}
+              selectedBlock={selectedBlock}
+              onSelect={(id) => {
+                const match = /bb(\d+)$/.exec(id);
+                setSelectedBlock(match ? Number(match[1]) : undefined);
+              }}
+            />
+          </Suspense>
         </div>
         <ValueInspector value={value} />
       </section>
