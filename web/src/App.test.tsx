@@ -72,7 +72,7 @@ describe('compiler lab', () => {
     render(<App />);
     expect(screen.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open compiler lab/i })).toHaveAttribute('href', '/lab');
-    expect(screen.getByRole('figure', { name: /one compiler core\. inspectable at every boundary/i })).toBeInTheDocument();
+    expect(screen.getByRole('figure', { name: /a request becomes a verified representation before it can execute/i })).toBeInTheDocument();
     expect(screen.getByText('nano-server')).toBeInTheDocument();
   });
   it('keeps optimization evidence and verification controls on dedicated routes', async () => {
