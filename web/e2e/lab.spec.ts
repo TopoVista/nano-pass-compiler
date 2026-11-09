@@ -11,6 +11,15 @@ test('uses the public landing page to enter the dashboard workbench', async ({ p
   await expect(page.getByRole('link', { name: 'Workbench' })).toBeVisible();
 });
 
+test('presents the animated guide with inspectable compiler stages and boundaries', async ({ page }) => {
+  await page.goto('/guide');
+  await expect(page.getByRole('heading', { name: /a compiler lab, presented as a system/i })).toBeVisible();
+  await page.getByRole('tab', { name: /CFG show possible paths/i }).click();
+  await expect(page.getByText(/Basic blocks and arrows make every route/i)).toBeVisible();
+  await page.getByRole('button', { name: /Request guard/i }).click();
+  await expect(page.getByText(/Untrusted source never becomes a host command/i)).toBeVisible();
+});
+
 test('keeps verified compiler state available across dedicated lab workflows', async ({ page }) => {
   await page.goto('/lab');
   await expect(page.locator('.compile-status')).toContainText('verified');

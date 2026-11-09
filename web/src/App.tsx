@@ -789,10 +789,10 @@ export default function App() {
             <i />
             <i />
           </span>
-          <span><strong>NanoPass</strong><small>Compiler Lab</small></span>
+          <span><strong>NanoPass</strong><small>Interactive compiler</small></span>
         </a>
         <nav className="rail-nav" aria-label="Lab views">
-          <span className="rail-label">Compiler lab</span>
+          <span className="rail-label">Navigate</span>
           {navigation.map((item) => (
             <span className="rail-link-wrap" key={item.href}>
               <a

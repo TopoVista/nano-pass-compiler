@@ -62,9 +62,18 @@ describe('compiler lab', () => {
   it('serves the field guide from its own route', async () => {
     window.history.pushState({}, '', '/guide');
     render(<App />);
-    expect(screen.getByText(/A compiler lab, not a black box/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /A compiler lab, presented as a system/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: /control flow/i }));
     expect(screen.getByRole('button', { name: 'Open CFG' })).toBeInTheDocument();
+    window.history.pushState({}, '', '/lab');
+  });
+  it('lets the guide inspect compiler stages and architecture boundaries', () => {
+    window.history.pushState({}, '', '/guide');
+    render(<App />);
+    fireEvent.click(screen.getByRole('tab', { name: /CFG show possible paths/i }));
+    expect(screen.getByText(/Basic blocks and arrows make every route/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Request guard/i }));
+    expect(screen.getByText(/Untrusted source never becomes a host command/i)).toBeInTheDocument();
     window.history.pushState({}, '', '/lab');
   });
   it('serves a dedicated public landing route', () => {
