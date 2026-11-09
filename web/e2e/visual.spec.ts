@@ -7,6 +7,9 @@ test.describe('visual baselines', () => {
     await expect(page).toHaveScreenshot('landing-desktop.png', {
       animations: 'disabled',
       fullPage: false,
+      // Windows and Linux rasterize the system UI stack differently. Keep the
+      // tolerance bounded while still catching composition-level regressions.
+      maxDiffPixelRatio: 0.04,
     });
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -14,6 +17,7 @@ test.describe('visual baselines', () => {
     await expect(page).toHaveScreenshot('landing-mobile.png', {
       animations: 'disabled',
       fullPage: false,
+      maxDiffPixelRatio: 0.04,
     });
   });
 
@@ -26,6 +30,7 @@ test.describe('visual baselines', () => {
     await expect(page).toHaveScreenshot('workbench-desktop.png', {
       animations: 'disabled',
       fullPage: false,
+      maxDiffPixelRatio: 0.04,
     });
   });
 });

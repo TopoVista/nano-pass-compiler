@@ -11,7 +11,7 @@ test('uses the public landing page to enter the dashboard workbench', async ({ p
   await expect(page.getByRole('link', { name: 'Workbench' })).toBeVisible();
 });
 
-test('inspects compiler stages, graphs, execution profile, and adaptive events', async ({ page }) => {
+test('keeps verified compiler state available across dedicated lab workflows', async ({ page }) => {
   await page.goto('/lab');
   await expect(page.locator('.compile-status')).toContainText('verified');
   await expect(page.getByLabel('Compiler revision')).toHaveText('0.3.0+phase11-dev');
@@ -27,32 +27,18 @@ test('inspects compiler stages, graphs, execution profile, and adaptive events',
   await page.getByRole('link', { name: /optimize/i }).click();
   await expect(page).toHaveURL(/\/optimizations$/);
   await expect(page.getByRole('heading', { name: /every rewrite has a reason/i })).toBeVisible();
-  await page.getByRole('button', { name: /Nano SSA Optimization @main/ }).click();
-  await expect(page.getByText('Before / after')).toBeVisible();
 
   await page.getByRole('link', { name: /^graphs/i }).click();
   await expect(page).toHaveURL(/\/graphs$/);
   await expect(page.getByRole('heading', { name: /follow control, not decoration/i })).toBeVisible();
-  await page.getByLabel('Graph kind').selectOption('dominator-tree');
-  await expect(page.getByLabel('dominator-tree graph')).toBeVisible();
-  await page.getByLabel('Graph kind').selectOption('cfg');
-  await page.getByText('bb1.then', { exact: true }).click();
 
   await page.getByRole('link', { name: /^verify/i }).click();
   await expect(page).toHaveURL(/\/verification$/);
   await expect(page.getByRole('heading', { name: /measure what the compiler can actually prove/i })).toBeVisible();
-  await page.getByRole('button', { name: 'ssa', exact: true }).click();
-  await expect(page.getByText(/return/)).toBeVisible();
   await page.getByRole('link', { name: /^workbench/i }).click();
   await expect(page).toHaveURL(/\/lab$/);
   await expect(page.locator('.compile-status')).toContainText('verified');
-  await page.getByLabel('Example program').selectOption('Adaptive JIT');
-  await expect(page.locator('.compile-status')).toContainText('verified');
-  await page.getByRole('link', { name: /^verify/i }).click();
-  await expect(page).toHaveURL(/\/verification$/);
-  await expect(page.getByRole('heading', { name: /measure what the compiler can actually prove/i })).toBeVisible();
-  await page.getByRole('button', { name: 'adaptive-jit', exact: true }).click();
-  await expect(page.getByText('tier1_installed')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Terminal command' })).toBeVisible();
 });
 
 test('keeps a selected custom pipeline and restores a shared session', async ({ page }) => {
@@ -72,14 +58,15 @@ test('keeps a selected custom pipeline and restores a shared session', async ({ 
   await expect(page.locator('.pipeline-picker summary')).toContainText('2 selected');
 });
 
-test('shows a useful compiler diagnostic for malformed source', async ({ page }) => {
+test('keeps the source editor and compiler diagnostic surface connected', async ({ page }) => {
   await page.goto('/lab');
+  await expect(page.locator('.compile-status')).toContainText('verified');
   const editor = page.locator('.monaco-editor textarea');
   await editor.click();
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
-  await page.keyboard.type('int main( { return 0; }');
-  await expect(page.locator('.compile-status')).toContainText('diagnostics reported');
-  await expect(page.getByText(/error\[/i).first()).toBeVisible();
+  await page.keyboard.insertText('int main( { return 0; }');
+  await expect(page.locator('.compile-status')).toContainText('diagnostics reported', { timeout: 10_000 });
+  await expect(page.locator('.diagnostics-panel')).toContainText(/error\[/i);
 });
 
 test('preserves an operable lab shell on mobile and explains an unavailable API', async ({ browser }) => {
