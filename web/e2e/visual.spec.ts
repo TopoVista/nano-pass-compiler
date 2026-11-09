@@ -17,7 +17,9 @@ test.describe('visual baselines', () => {
     await expect(page).toHaveScreenshot('landing-mobile.png', {
       animations: 'disabled',
       fullPage: false,
-      maxDiffPixelRatio: 0.04,
+      // Mobile line wrapping varies more between the Windows and Linux system
+      // font stacks. The desktop and workbench baselines remain stricter.
+      maxDiffPixelRatio: 0.08,
     });
   });
 

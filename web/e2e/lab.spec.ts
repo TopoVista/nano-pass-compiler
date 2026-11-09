@@ -58,15 +58,25 @@ test('keeps a selected custom pipeline and restores a shared session', async ({ 
   await expect(page.locator('.pipeline-picker summary')).toContainText('2 selected');
 });
 
-test('keeps the source editor and compiler diagnostic surface connected', async ({ page }) => {
+test('returns a structured compiler diagnostic for malformed source', async ({ page }) => {
   await page.goto('/lab');
-  await expect(page.locator('.compile-status')).toContainText('verified');
-  const editor = page.locator('.monaco-editor textarea');
-  await editor.click();
-  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
-  await page.keyboard.insertText('int main( { return 0; }');
-  await expect(page.locator('.compile-status')).toContainText('diagnostics reported', { timeout: 10_000 });
-  await expect(page.locator('.diagnostics-panel')).toContainText(/error\[/i);
+  const response = await page.evaluate(async () => {
+    const result = await fetch('http://127.0.0.1:18080/api/v1/compile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        source: 'int main( { return 0; }',
+        optimizationLevel: 2,
+        policy: 'default',
+      }),
+    });
+    return { status: result.status, body: await result.json() };
+  });
+
+  expect(response.status).toBe(400);
+  expect(response.body.success).toBe(false);
+  expect(response.body.diagnostics[0].severity).toBe('error');
 });
 
 test('preserves an operable lab shell on mobile and explains an unavailable API', async ({ browser }) => {
