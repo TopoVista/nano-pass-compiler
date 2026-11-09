@@ -7,10 +7,11 @@ NanoPass has two deployable concerns: a static React client and a bounded C++ co
 `web/vercel.json` provides an SPA fallback for `/lab`, `/guide`, `/graphs`, and `/optimizations` and caches fingerprinted Vite assets. Set the frontend environment variable before building:
 
 ```sh
+VITE_SITE_URL=https://your-frontend.example.com
 VITE_NANO_SERVER_URL=https://your-api.example.com
 ```
 
-The client has no secret environment variables. It sends source text only to that configured API URL.
+`VITE_SITE_URL` sets the built canonical, OpenGraph, `robots.txt`, and sitemap URLs. It must be the actual HTTPS frontend origin; it is intentionally not hard-coded in the repository. The client has no secret environment variables. It sends source text only to that configured API URL.
 
 ## API: Render or a compatible Docker host
 

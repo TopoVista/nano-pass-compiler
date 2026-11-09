@@ -32,6 +32,7 @@
 | Source tools | Workbench source header | deterministic local formatter / Nano generator | format source, generate program | unit + browser |
 | Focus mode | Workbench source header | local workbench state | expand/restore source + terminal | unit + browser |
 | Compiler terminal | `TerminalPane` | compile/run response | verifier, diagnostics, program output | unit + browser |
+| Form | `TerminalPane` | `web/src/components/TerminalPane.tsx` | safe in-app compiler command input only; never an operating-system shell | allowlist unit/browser coverage and `noValidate` form ownership |
 | Terminal command reference | `TerminalPane` tabs | documented CLI surface + compile response | verify, emit SSA, explain, optimize, learned policy | unit + browser |
 | Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph | unit + E2E |
 | Diagnostics/remarks | `Panels.tsx` | compiler response | applied/missed/analysis | unit |

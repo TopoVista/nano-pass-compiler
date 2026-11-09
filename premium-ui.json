@@ -2,9 +2,10 @@
   "profile": "product-admin",
   "sourceRoots": ["web/src"],
   "canonicalMap": "UX-CONTRACT.md",
-  "requiredCapabilities": ["Select/Listbox", "Scrollbar"],
+  "requiredCapabilities": ["Select/Listbox", "Scrollbar", "Form"],
   "ownership": {
-    "Select/Listbox": "native"
+    "Select/Listbox": "native",
+    "Form": "TerminalPane"
   },
   "commands": {
     "typecheck": "cd web && npm run typecheck",
@@ -12,6 +13,7 @@
     "build": "cd web && npm run build",
     "e2e": "cd web && npm run test:e2e"
   },
+  "requiredCommands": ["typecheck", "unit", "build", "e2e"],
   "evidence": {
     "browserJourney": "web/e2e/lab.spec.ts",
     "unitStates": "web/src/App.test.tsx"

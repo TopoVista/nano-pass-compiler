@@ -13,19 +13,19 @@ colors:
   danger: "#ff7f91"
 typography:
   display:
-    fontFamily: "Iowan Old Style, Baskerville, Georgia, serif"
+    fontFamily: "DM Serif Display, Georgia, serif"
     fontSize: "108px"
     fontWeight: 600
     lineHeight: 0.92
     letterSpacing: "-0.07em"
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Manrope Variable, Manrope, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "76px"
     fontWeight: 600
     lineHeight: 0.98
     letterSpacing: "-0.065em"
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Manrope Variable, Manrope, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.65
@@ -92,9 +92,9 @@ The palette is a restrained neutral field with one high-contrast signal color.
 
 ## Typography
 
-**Display Font:** Iowan Old Style with Baskerville/Georgia fallback.
+**Display Font:** locally bundled DM Serif Display with a Georgia fallback.
 
-**Body Font:** Native Apple/system sans with Segoe UI fallback.
+**Body Font:** locally bundled Manrope Variable with an Apple/system fallback. This prevents the public hierarchy from changing with the visitor's installed font set and keeps snapshots stable across supported browsers.
 **Label/Mono Font:** SFMono/Cascadia Code with platform monospace fallback.
 
 The editorial serif earns attention on the public site; the workbench prioritizes fast technical scanning with sans and monospaced facts.

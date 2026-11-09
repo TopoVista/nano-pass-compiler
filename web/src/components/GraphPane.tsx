@@ -43,6 +43,8 @@ export function GraphPane({ graph, profile, selectedBlock, onSelect }: Props) {
   const edges: Edge[] = graph.edges.map((edge, index) => { const from = /:bb(\d+)$/.exec(edge.from)?.[1]; const to = /:bb(\d+)$/.exec(edge.to)?.[1]; const count = from && to ? functionProfile?.edge_counts.find((item) => item.from === Number(from) && item.to === Number(to))?.count : undefined; return { id: `${edge.from}-${edge.to}-${index}`, source: edge.from, target: edge.to, label: count ? `${count}` : edge.kind === 'cfg' ? undefined : edge.kind, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, animated: false }; });
   return <section className="graph-canvas" aria-label={`${graph.kind} graph`}>
     <div className="graph-facts"><span><b>{graph.nodes.length}</b> blocks</span><span><b>{graph.edges.length}</b> edges</span><span className="graph-legend"><i /> selected <i className="hot" /> hot path</span></div>
-    <ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{ padding: .22 }} onNodeClick={(_, node) => onSelect(node.id)} nodesDraggable={false} nodesConnectable={false} elementsSelectable><Background gap={20} size={1} /><Controls showInteractive={false} /></ReactFlow>
+    <div className="graph-flow-viewport">
+      <ReactFlow nodes={nodes} edges={edges} fitView fitViewOptions={{ padding: .22 }} onNodeClick={(_, node) => onSelect(node.id)} nodesDraggable={false} nodesConnectable={false} elementsSelectable><Background gap={20} size={1} /><Controls showInteractive={false} /></ReactFlow>
+    </div>
   </section>;
 }

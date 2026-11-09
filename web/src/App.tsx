@@ -399,7 +399,13 @@ export default function App() {
       .replace(/\//g, "_")
       .replace(/=+$/, "");
     window.location.hash = `session=${encoded}`;
-    await navigator.clipboard?.writeText(window.location.href);
+    // Persisting to the URL is the source of truth. Clipboard access is a
+    // convenience and can be denied in embedded or headless environments.
+    try {
+      await navigator.clipboard?.writeText(window.location.href);
+    } catch {
+      // The session remains shareable through the updated URL.
+    }
   };
   const movePass = (index: number, direction: -1 | 1) =>
     setCustom((current) => {

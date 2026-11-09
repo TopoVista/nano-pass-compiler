@@ -42,6 +42,8 @@ test('keeps verified compiler state available across dedicated lab workflows', a
 });
 
 test('keeps a selected custom pipeline and restores a shared session', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/lab');
   await expect(page.locator('.compile-status')).toContainText('verified');
 
@@ -56,6 +58,21 @@ test('keeps a selected custom pipeline and restores a shared session', async ({ 
   await expect(page).toHaveURL(/#session=/);
   await page.reload();
   await expect(page.locator('.pipeline-picker summary')).toContainText('2 selected');
+  expect(pageErrors).toEqual([]);
+});
+
+test('renders the graph viewport without React Flow sizing warnings', async ({ page }) => {
+  const graphWarnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && /React Flow/i.test(message.text())) {
+      graphWarnings.push(message.text());
+    }
+  });
+
+  await page.goto('/graphs');
+  await expect(page.getByLabel('cfg graph')).toBeVisible();
+  await expect(page.locator('.graph-flow-viewport .react-flow')).toBeVisible();
+  expect(graphWarnings).toEqual([]);
 });
 
 test('returns a structured compiler diagnostic for malformed source', async ({ page }) => {

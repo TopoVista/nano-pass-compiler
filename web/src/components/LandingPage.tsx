@@ -1,3 +1,5 @@
+import { ArrowDown, ArrowUpRight, Check } from 'lucide-react';
+
 const pipeline = ["Source", "Typed AST", "CoreIR", "ANF", "CFG", "SSA", "Optimizer", "LLVM"];
 
 const source = `int score(int x) {
@@ -20,7 +22,7 @@ bb3:
   return %3`;
 
 function Arrow() {
-  return <span aria-hidden="true" className="landing-arrow">↗</span>;
+  return <ArrowUpRight aria-hidden="true" className="landing-arrow" strokeWidth={1.8} />;
 }
 
 function Mark() {
@@ -42,12 +44,12 @@ export function LandingPage() {
 
       <section className="public-hero" aria-labelledby="public-title">
         <div className="public-hero-copy">
-          <p className="public-kicker">NanoPass Compiler Lab</p>
           <h1 id="public-title">A compiler you can <em>interrogate.</em></h1>
           <p className="public-intro">Trace a small C-like language through typed representations, SSA construction, verification, optimization, LLVM, and execution, without treating the middle as a black box.</p>
+          <p className="public-status-line">C++20 <span>·</span> LLVM 18 <span>·</span> SSA <span>·</span> ORC JIT</p>
           <div className="public-actions">
             <a className="public-action primary" href="/lab">Open Compiler Lab <Arrow /></a>
-            <a className="public-action text" href="#method">See the method <span aria-hidden="true">↓</span></a>
+            <a className="public-action text" href="#method">See the method <ArrowDown aria-hidden="true" className="landing-arrow-down" strokeWidth={1.8} /></a>
           </div>
         </div>
         <div className="hero-artifact" aria-label="Compiler transformation from source to verified SSA">
@@ -57,7 +59,7 @@ export function LandingPage() {
             <div className="artifact-transfer" aria-hidden="true"><i>Parse</i><span>↓</span><i>Lower</i><span>↓</span><i>Verify</i></div>
             <article className="artifact-code output"><header><span>06</span> SSA / @score</header><pre>{ssa}</pre></article>
           </div>
-          <footer><span><b>✓</b> value definitions are unique</span><span><b>✓</b> control flow is explicit</span></footer>
+          <footer><span><Check aria-hidden="true" strokeWidth={2} /> value definitions are unique</span><span><Check aria-hidden="true" strokeWidth={2} /> control flow is explicit</span></footer>
         </div>
       </section>
 
