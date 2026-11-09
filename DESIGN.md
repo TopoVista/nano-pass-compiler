@@ -1,16 +1,16 @@
 ---
 name: "NanoPass: Monochrome Editorial Instrument"
-description: "A monochrome editorial public site paired with a deep-navy compiler workbench."
+description: "A single monochrome editorial instrument across the public site and compiler workbench."
 colors:
-  primary: "#67e8f9"
-  neutral-canvas: "#060a10"
-  neutral-surface: "#0b1521"
-  neutral-raised: "#0f1d2b"
-  neutral-ink: "#edf5ff"
-  neutral-muted: "#8ba0b5"
-  neutral-line: "#1c3448"
-  warning: "#ffc76d"
-  danger: "#ff7f91"
+  primary: "#f5f5f1"
+  neutral-canvas: "#050505"
+  neutral-surface: "#0a0a0a"
+  neutral-raised: "#111111"
+  neutral-ink: "#f5f5f1"
+  neutral-muted: "#9c9b94"
+  neutral-line: "#282825"
+  warning: "#ddd28f"
+  danger: "#e5a8b2"
 typography:
   display:
     fontFamily: "DM Serif Display, Georgia, serif"
@@ -60,12 +60,12 @@ components:
 
 **Creative North Star: “The Black Editorial Instrument.”**
 
-NanoPass is a calm black research artifact in public and a focused deep-navy technical instrument in the lab. The public route uses intentional negative space, a limited serif voice, and one compiler representation artifact; the workbench is dense only where the compiler creates facts.
+NanoPass is one calm black research instrument. The public route uses intentional negative space, a limited serif voice, and one compiler representation artifact; the workbench carries the same graphite-and-off-white material system while becoming denser only where the compiler creates facts.
 
 Key characteristics:
 
-- Public canvas is near-black and monochrome with off-white content and thin structural rules.
-- The lab uses a restrained cyan action signal, mint for verified state, and amber for caution.
+- Public canvas and lab canvas are near-black and monochrome with off-white content and thin structural rules.
+- The lab reserves muted mint for compiler-reported success, amber for caution, and rose for errors; ordinary navigation and code inspection stay neutral.
 - Editorial serif only for a few public-heading words; UI and prose remain system-sans.
 - No rounded SaaS cards, decorative gradients, stock visuals, or invented performance claims.
 
@@ -75,20 +75,20 @@ The palette is a restrained neutral field with one high-contrast signal color.
 
 ### Primary
 
-- **Inspection cyan** (#67e8f9): active navigation, inspectable values, and explicit user action in the lab.
-- **Verification mint** (#61e6b0): compiler-reported success only.
+- **Editorial white** (#f5f5f1): navigation, inspection, and explicit user action.
+- **Verification mint** (#b6e3c8): compiler-reported success only.
 
 ### Neutral
 
 - **Public black** (#050505): editorial landing ground.
-- **Lab canvas** (#060a10): application ground.
-- **Instrument surface** (#0b1521): panels and terminals.
-- **Raised surface** (#0f1d2b): headers and selected controls.
-- **Lab ink** (#edf5ff): high-priority text.
-- **Muted blue-grey** (#8ba0b5): secondary explanation and metadata.
-- **Structure line** (#1c3448): all lab panel and grid boundaries.
+- **Lab canvas** (#050505): application ground.
+- **Instrument surface** (#0a0a0a): panels and terminals.
+- **Raised surface** (#111111): headers and selected controls.
+- **Lab ink** (#f5f5f1): high-priority text.
+- **Muted graphite** (#9c9b94): secondary explanation and metadata.
+- **Structure line** (#282825): all lab panel and grid boundaries.
 
-**The Signal Rarity Rule.** Cyan is never decorative. Mint appears only when a compiler-reported check has succeeded.
+**The Signal Rarity Rule.** White carries interaction and inspection. Mint appears only when a compiler-reported check has succeeded.
 
 ## Typography
 
@@ -122,7 +122,7 @@ The instrument uses square corners, thin one-pixel borders, and compact controls
 
 ## Components
 
-- **Primary button:** verification lime with near-black text; reserved for “Open Compiler Lab” and “Run SSA.”
+- **Primary button:** editorial white with near-black text; reserved for “Open Compiler Lab” and “Run SSA.”
 - **Secondary button:** dark surface with a structural border; used for non-destructive workbench actions.
 - **Terminal:** visible state lights, compiler prompt, bounded command input, suggestions, output history, and shell-free command handling.
 - **Panel:** thin border, compact header, no drop shadow, explicit artifact label.
