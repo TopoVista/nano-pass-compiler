@@ -1,10 +1,19 @@
 # Production deployment
 
+For the exact Render + Vercel launch sequence, configuration values, CORS
+validation, preview policy, and rollback guidance, see
+[Deploy NanoPass on Render and Vercel](deploy-render-vercel.md).
+
 NanoPass has two deployable concerns: a static React client and a bounded C++ compiler API. They may be deployed separately. A deployment configuration in this repository is not evidence of a live hosted service.
 
 ## Frontend: Vercel
 
-`web/vercel.json` provides an SPA fallback for `/lab`, `/guide`, `/graphs`, and `/optimizations` and caches fingerprinted Vite assets. Set the frontend environment variable before building:
+The root `vercel.json` supports importing this repository directly into Vercel;
+`web/vercel.json` provides the equivalent setup if `web` is selected as the
+Vercel project root. Both provide an SPA fallback for `/lab`, `/guide`,
+`/graphs`, and `/optimizations`, cache fingerprinted Vite assets, and set
+baseline browser security headers. Set the frontend environment variables
+before building:
 
 ```sh
 VITE_SITE_URL=https://your-frontend.example.com
@@ -19,11 +28,11 @@ depend on a third-party CDN at runtime.
 
 ## API: Render or a compatible Docker host
 
-`render.yaml` and `docker/server.Dockerfile` build `nano-server` with LLVM 18, then run the non-root runtime image. The service binds `0.0.0.0` only because the platform routes requests to it; set:
+`render.yaml` and `docker/server.Dockerfile` build `nano-server` with LLVM 18, then run the non-root runtime image. The service binds `0.0.0.0` only because the platform routes requests to it; the Render blueprint uses its conventional `PORT=10000`. Set:
 
 ```sh
 NANOPASS_ENV=production
-PORT=8080
+PORT=10000
 NANOPASS_ALLOWED_ORIGINS=https://your-frontend.example.com
 NANOPASS_EXECUTION_POLICY=interpreter-only
 NANOPASS_MAX_SOURCE_BYTES=262144

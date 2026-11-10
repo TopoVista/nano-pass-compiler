@@ -94,6 +94,7 @@ web/test-results/
 web/playwright-report/
 web/.env
 web/.env.*
+!web/.env.example
 web/*.log
 web/*.tsbuildinfo
 .env

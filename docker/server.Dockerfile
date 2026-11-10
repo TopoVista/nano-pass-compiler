@@ -24,6 +24,7 @@ RUN cmake -S . -B build -G Ninja \
 
 FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PORT=8080
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates wget libllvm18 llvm-18-runtime && \
     rm -rf /var/lib/apt/lists/*
@@ -32,5 +33,5 @@ COPY --from=build /opt/nanopass /opt/nanopass
 USER nanopass
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD /bin/sh -c "wget -q -O - http://127.0.0.1:8080/api/v1/readiness | grep -q '\"ready\":true'"
+  CMD /bin/sh -c "wget -q -O - http://127.0.0.1:${PORT}/api/v1/readiness | grep -q '\"ready\":true'"
 ENTRYPOINT ["/opt/nanopass/bin/nano-server", "--bind=all"]

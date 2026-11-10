@@ -16,7 +16,10 @@ export type RunResult = { success: boolean; errorKind: string; status: string; s
 export type RuntimeProfile = { functions?: Record<string, { calls: number; blocks_executed: number; block_counts: Record<string, number>; edge_counts: { from: number; to: number; count: number }[]; loops: Record<string, { entries: number; backedges: number; exits: number }> }> };
 
 export type CompileOptions = { source: string; optimizationLevel: number; policy?: 'default' | 'heuristic' | 'learned'; passes?: string[]; includeSource?: boolean; includeSsa?: boolean; includeOptimizedSsa?: boolean; includeLLVM?: boolean; includeGraphs?: boolean; includeRemarks?: boolean; includeTelemetry?: boolean; includeProvenance?: boolean; includeCore?: boolean; includeAnf?: boolean; includeCfg?: boolean; includeAst?: boolean; includeDesugaredAst?: boolean };
-const base = import.meta.env.VITE_NANO_SERVER_URL ?? 'http://127.0.0.1:8080';
+// Vercel variables are injected at build time. Normalize the configured origin
+// so that a common dashboard value such as `https://api.example.com/` never
+// becomes a double-slash API request.
+const base = (import.meta.env.VITE_NANO_SERVER_URL ?? 'http://127.0.0.1:8080').replace(/\/+$/, '');
 const cache = new Map<string, Compilation>();
 export class CompilerServiceError extends Error {
   constructor(message: string, readonly status?: number) {

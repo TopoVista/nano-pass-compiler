@@ -18,7 +18,8 @@ The landing page introduces the actual compiler architecture; `/lab` is where
 source, typed representations, graphs, verification evidence, and bounded
 execution are inspected. See [the lab guide](docs/web-lab.md),
 [security boundary](docs/web-security.md), and
-[production deployment guide](docs/deployment-production.md).
+[production deployment guide](docs/deployment-production.md). The repository
+also includes an exact [Render + Vercel deployment runbook](docs/deploy-render-vercel.md).
 
 ```
 Source → Lex → Parse → Resolve → TypeCheck
