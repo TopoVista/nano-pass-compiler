@@ -1,509 +1,361 @@
 # NanoPass Compiler Lab
 
-A transparent compiler laboratory that lowers a small C-like language through
-explicit typed intermediate representations, verifies compiler invariants, and
-visually explains every transformation.
-
-> Every pass is small, named, inspectable, measurable, verifiable, and
-> observable.  A developer should always be able to answer:
-> "What happened to my program?"
+> A transparent C++20 and LLVM compiler laboratory where every important
+> transformation is named, inspectable, measurable, and verifier-gated.
 
 ![NanoPass Compiler Lab inspecting a verified SSA transformation](docs/images/compiler-lab.png)
 
-## The public compiler lab
+NanoPass is not an editor that prints a little LLVM at the end. It is a
+compiler engineering platform for following a small C-like program from source
+through typed intermediate representations, control-flow analysis, SSA,
+optimization, verification, LLVM lowering, and bounded execution.
 
-The project includes an editorial public site and a React workbench that consume
-the versioned compiler JSON API—never terminal scraping or fabricated results.
-The landing page introduces the actual compiler architecture; `/lab` is where
-source, typed representations, graphs, verification evidence, and bounded
-execution are inspected. See [the lab guide](docs/web-lab.md),
-[security boundary](docs/web-security.md), and
-[production deployment guide](docs/deployment-production.md). The repository
-also includes an exact [Render + Vercel deployment runbook](docs/deploy-render-vercel.md).
+The deterministic compiler is the source of truth. The web lab displays
+compiler-produced diagnostics, snapshots, graphs, pass telemetry, optimization
+remarks, and verifier results; it does not fabricate explanations or execution
+results.
 
-```
-Source → Lex → Parse → Resolve → TypeCheck
-       → PassManager[ DesugarFor | DesugarIncDec | DesugarPlusAssign ]
-       → [CoreIR] → [ANF] → [CFG] → [SSA] → [Optimizer]
-       → LLVM IR → Host object / ORC JIT            (SSA backend optional)
-```
+## Why NanoPass?
 
-The pipeline is implemented incrementally; optional LLVM/JIT and local web
-service capabilities are explicitly build-gated rather than simulated.
+Most compiler demos make the middle end disappear. NanoPass makes it the
+product.
 
-The CFG/SSA pipeline powers verified middle-end analysis and inspection. The
-AST LLVM backend remains the compatibility default, while the explicit
-`--backend=ssa` path lowers verified optimized SSA through LLVM, can emit a
-host object file, and powers the optional ORC JIT.
+| Question | NanoPass answer |
+| --- | --- |
+| What happened to my source? | Inspect AST, CoreIR, ANF, CFG, SSA, optimized SSA, and LLVM snapshots. |
+| Why did an optimization happen? | Read structured pass telemetry and compiler-recorded applied remarks. |
+| Why did it not happen? | Inspect recorded missed-optimization reasons, not a generated guess. |
+| How is correctness checked? | Run stage verifiers, LLVM verification, bounded differential testing, and fuzzing. |
+| Can I see control flow? | Explore CFG, dominator, loop, and call graphs as deterministic text or DOT/JSON. |
 
-The inspected SSA optimizer includes deterministic CFG-cloning direct-call
-inlining: multi-block, loop, phi, multi-return, and void callees are expanded
-only after cost, growth, recursion, and verifier checks succeed.
+## The pipeline
 
-The project also includes a compact, portable learned **heuristic-imitation**
-inline policy. It selects only `inline` or `do-not-inline` after the compiler
-has established legality and budget compliance; deterministic compiler code
-performs the clone and the SSA verifier still gates the result. It is neither
-an LLM nor a runtime-performance claim. See [the learned-policy design](docs/learned-policy.md),
-[benchmark methodology](docs/benchmarks.md), and [the threat model](docs/threat-model.md).
-
-The source-controlled project identity is **0.3.0+phase11-dev**. It appears
-in `nano --version`, service readiness, the Compiler Lab, runtime profiles,
-and compiler-generated policy datasets. It is intentionally not tagged as a
-final release until the Docker and hosted-CI gates in
-[the roadmap](docs/ROADMAP.md) have passed.
-
-NanoPass also differentially tests supported programs: CoreIR execution is
-compared with independently executed SSA O0–O3 programs. This is empirical
-semantic testing, not formal proof. LLVM execution is optional and requires a
-healthy CMake-discoverable LLVM development package.
-
-## Differential correctness testing
-
-The LLVM-independent correctness tool executes CoreIR against fresh SSA O0–O3
-copies, rather than comparing textual IR. It is useful even when the LLVM CMake
-package is unavailable:
-
-```sh
-g++ -std=c++20 -Icompiler tools/nano-correctness.cpp -o nano-correctness
-./nano-correctness differential examples/factorial.nano
-./nano-correctness differential-custom examples/optimizer.nano sccp,dce
-./nano-correctness fuzz --seed=42 --cases=1000 --save-failures=tests/regressions/generated
-./nano-correctness malformed-fuzz --seed=8128 --cases=256
+```mermaid
+flowchart LR
+  S[NanoPass C source] --> L[Lexer]
+  L --> P[Parser]
+  P --> A[Typed AST]
+  A --> D[Desugaring passes]
+  D --> C[CoreIR]
+  C --> N[ANF]
+  N --> G[CFG]
+  G --> DA[Dominators · loops · call graph]
+  DA --> SSA[SSA + verifier]
+  SSA --> O[Nano SSA optimizer]
+  O --> V[SSA verifier]
+  V --> LL[LLVM IR]
+  LL --> LV[LLVM verifier]
+  LV --> X[Object / AOT / optional ORC JIT]
 ```
 
-The generator is seed- and case-index-reproducible, uses bounded typed source
-generation, and reports measured JSON counts. These commands provide
-differential testing, not formal verification.
+Each representation has a deterministic printer. CoreIR, ANF, CFG, and SSA
+also have machine-checkable invariants; compiler bugs are surfaced as internal
+errors instead of being mislabeled as user-source errors.
 
-When built with `-DNANO_BUILD_JIT=ON`, the native differential runner checks
-the same generated language subset through CoreIR and optimized SSA/LLJIT:
+## What is implemented
 
-```sh
-./build/compiler/nano_jit_correctness fuzz --seed=12648430 --cases=1000
-```
+- **Frontend** — recursive-descent parser, scope resolution, source-aware type
+  checking, C-forward NanoPass syntax, and structured diagnostics.
+- **Explicit middle end** — CoreIR, ANF, CFG, reachability, reverse postorder,
+  dominators, dominance frontiers, natural loops, and an SSA builder with phi
+  placement and renaming.
+- **Verifier-backed optimization** — constant folding, algebraic simplification,
+  SCCP, copy/trivial-phi propagation, DCE, CSE, CFG cleanup, LICM, strength
+  reduction, and deterministic direct CFG-cloning inlining.
+- **Interprocedural work** — scoped analysis caching, direct call graph and
+  recursive-SCC detection, multi-block/multi-return/void inline continuations,
+  and explicit cost, growth, and depth limits.
+- **Execution and reliability** — CoreIR and SSA interpreters, differential
+  comparison, grammar-aware generation, minimization support, runtime profiles,
+  optional ORC JIT, and SSA-to-LLVM object/AOT lowering.
+- **Observability** — `nano explain`, `nano verify`, IR snapshots, graphs,
+  telemetry, optimization remarks, source/value provenance, and JSON API
+  responses.
+- **Compiler Lab** — Vite + React + TypeScript workbench with Monaco, live
+  compiler snapshots, graph exploration, terminal-style commands, examples,
+  and an animated interactive guide.
 
-This is a measured comparison, not a formal proof. It currently covers the
-in-bounds scalar/fixed-array subset; native bounds traps and sandboxing are
-intentionally not claimed.
-
----
+See [the precise project status](docs/STATUS.md) for stable, experimental, and
+known-limitation boundaries.
 
 ## Quick start
 
-Install a C++20 compiler and a CMake-discoverable LLVM 14+ development package,
-then:
+NanoPass needs CMake 3.20+, a C++20 compiler, and a CMake-discoverable LLVM
+development installation (LLVM 14+; LLVM 18 is the tested Linux target).
 
 ```sh
-git clone https://github.com/TopoVista/nano-pass-compiler
+git clone https://github.com/TopoVista/nano-pass-compiler.git
 cd nano-pass-compiler
-cmake -S . -B build -G Ninja -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
-cmake --build build -j
-ctest --test-dir build
-```
 
-On WSL with the system LLVM:
-```sh
-cmake -S . -B build -G Ninja -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm
-```
-
-The produced binary is `build/compiler/nano`.
-
----
-
-## Interactive Compiler Lab
-
-The local web lab uses the same C++ compiler pipeline through a versioned JSON
-service. Start the optional service with a healthy LLVM package:
-
-```sh
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
-  -DNANO_BUILD_JIT=ON -DNANO_BUILD_WEB_SERVER=ON
-cmake --build build --target nano-server
-./build/compiler/nano-server --port=8080
+  -DNANO_BUILD_WEB_SERVER=ON
+cmake --build build --parallel
 
+./build/compiler/nano explain examples/factorial.nano
+```
+
+On Windows, set `LLVM_DIR` to the directory containing `LLVMConfig.cmake`.
+NanoPass fails clearly for an incomplete LLVM package rather than silently
+working around it.
+
+### Your first inspection
+
+```sh
+# Run front/middle-end invariant checks.
+./build/compiler/nano verify examples/optimizer.nano
+
+# Compare unoptimized and optimized SSA.
+./build/compiler/nano emit examples/optimizer.nano --format=ssa -O0
+./build/compiler/nano emit examples/optimizer.nano --format=optimized -O3
+
+# Explain transformations, timing, and verifier gates.
+./build/compiler/nano explain examples/loops.nano --verbose
+
+# Produce a CFG source file for Graphviz.
+./build/compiler/nano graph examples/loops.nano --cfg -o cfg.dot
+dot -Tsvg cfg.dot -o cfg.svg
+```
+
+## NanoPass C in 30 seconds
+
+NanoPass uses a familiar C-shaped surface syntax. Canonical type spellings are
+`i32`, `truth`, and `unit`; `int`, `bool`, and `void` compatibility spellings
+remain accepted.
+
+```c
+i32 score(i32 value) {
+  i32 bias = 4;
+  if (value > 0) {
+    return value * bias;
+  }
+  return bias;
+}
+
+i32 main() {
+  i32 result = score(7);
+  print(result);
+  return result;
+}
+```
+
+```sh
+./build/compiler/nano run examples/factorial.nano -O2
+./build/compiler/nano emit examples/factorial.nano --format=anf
+./build/compiler/nano emit examples/loops.nano --format=ssa
+./build/compiler/nano optimize examples/optimizer.nano --passes=sccp,dce,cse
+```
+
+Read the actual language contract in [docs/language.md](docs/language.md).
+The [examples](examples/) directory includes factorial, Fibonacci, fizzbuzz,
+arrays, LICM, CSE, SCCP, PGO, and a bounded Dijkstra demonstration.
+
+## CLI guide
+
+```text
+nano --help
+nano --version
+
+nano emit <file> --format=tokens|ast|desugar|core|anf|cfg|ssa|optimized|llvm
+nano graph <file> --cfg|--dominator-tree -o output.dot
+nano verify <file> [--format=json]
+nano explain <file> [--verbose]
+nano optimize <file> -O0|-O1|-O2|-O3 [--passes=sccp,dce]
+nano run <file> -O2
+nano profile <file> -o program.nprof
+nano features <file>
+nano jit <file>                         # requires NANO_BUILD_JIT=ON
+```
+
+Useful inspection switches include `--debug-pass-manager`, `--debug-analyses`,
+`--print-pipeline`, `--remarks`, `--why-not-optimized`, and `--telemetry`.
+The compiler only accepts its finite pass allowlist; custom pass text is never
+executed as a shell command.
+
+## Optimization, with evidence
+
+NanoPass optimization levels are Nano pipelines, not aliases for LLVM’s
+optimization level. The middle end keeps the optimizer understandable:
+
+| Area | Implemented techniques |
+| --- | --- |
+| Scalar simplification | Folding, algebraic rules, copies, trivial phis, DCE |
+| Sparse data flow | SCCP with executable-edge tracking |
+| Value reuse | Dominance-aware CSE |
+| Control flow | Branch folding, unreachable/trivial-block cleanup, phi repair |
+| Loops | Natural-loop analysis, canonical preheaders, conservative LICM, selected strength reduction |
+| Calls | Call graph/SCC recursion checks and verifier-gated direct CFG cloning |
+
+Every optimizer pass records factual applied, missed, or analysis remarks.
+Inlining is bounded by cost, code-growth, recursion, and inline-depth policies;
+successful transformations are checked by the SSA verifier before the next
+candidate is considered.
+
+The optional learned policy is intentionally narrow: it chooses between known
+legal inline decisions after deterministic legality and budget checks. It does
+not produce IR, bypass verifiers, or make compiler correctness depend on an
+LLM. See [the policy design](docs/optimization-policy.md).
+
+## Verification and testing
+
+NanoPass treats verification as a pipeline feature, not a release checklist.
+
+```text
+Parse → resolve → type check → desugar → CoreIR → ANF → CFG → SSA → optimize → LLVM
+```
+
+At the relevant stages, it checks structural IR contracts, CFG edge
+consistency, dominance, phi coverage, def-use relationships, type
+compatibility, and LLVM modules. The testing stack adds:
+
+- CoreIR and SSA reference interpreters;
+- differential O0–O3 execution checks;
+- deterministic typed program generation and malformed-input fuzzing;
+- failure reduction and stored reproducers;
+- GitHub Actions for correctness, LLVM/JIT, sanitizers, browser, and container
+  checks.
+
+Run locally:
+
+```sh
+ctest --test-dir build --output-on-failure
+
+# LLVM-independent differential and fuzz driver.
+./build/compiler/nano_correctness differential examples/factorial.nano
+./build/compiler/nano_correctness fuzz --seed=42 --cases=100
+
+# Web checks.
+cd web
+npm ci
+npm run typecheck
+npm test -- --run
+npm run build
+```
+
+Recorded validation evidence and the scope of each campaign live in
+[docs/STATUS.md](docs/STATUS.md). Historical test counts are not claims about
+your machine or configuration.
+
+## Compiler Lab
+
+The web app is an inspector over the versioned `nano-server` API, not a mock
+dashboard.
+
+```sh
+# Terminal 1: start the compiler service.
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/usr/lib/llvm-18/lib/cmake/llvm \
+  -DNANO_BUILD_WEB_SERVER=ON
+cmake --build build --target nano-server --parallel
+./build/compiler/nano-server --port=8080 --execution-policy=local-trusted
+
+# Terminal 2: start the React app.
 cd web
 npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173` (or the Vite URL printed by the client). The lab provides real compiler
-snapshots, pass telemetry, CFG/dominator/loop/call graphs, SSA value
-provenance, verifier-backed optimization remarks, before/after SSA,
-profile heat overlays, adaptive events, bounded differential correctness, and
-compiler policy features. See [the API](docs/compiler-api.md), [lab guide](docs/web-lab.md),
-and [local execution boundary](docs/web-security.md).
+Open `http://127.0.0.1:5173` for the public explanation, `/lab` for the
+workbench, and `/guide` for the animated compiler presentation. The lab lets
+you edit source, format or generate a valid program, run safe compiler
+commands, inspect representations and graphs, select SSA values, compare
+optimization levels, and read verifier-backed explanations.
 
-For an interpreter-only local container demonstration:
+For a containerized local demonstration:
 
 ```sh
 docker compose up --build
+# Lab: http://127.0.0.1:3000
+# API readiness: http://127.0.0.1:8080/api/v1/readiness
 ```
 
-This is deliberately not presented as hostile multi-tenant sandboxing; see
-[deployment](docs/deployment.md).
+The container starts with `interpreter-only` execution. It is a restricted
+public-demo setting, not a claim of multi-tenant sandboxing. Read
+[docs/web-security.md](docs/web-security.md) before exposing it to others.
 
----
+## Deploy the lab
 
-## 30-second example
+The deployment split is intentional:
 
-```sh
-# Tokenize
-./build/compiler/nano emit examples/factorial.nano --format=tokens
-
-# Print AST
-./build/compiler/nano emit examples/factorial.nano --format=ast
-
-# Desugar and print AST (for / ++ / += eliminated)
-./build/compiler/nano emit examples/factorial.nano --format=desugar
-
-# Emit CoreIR — typed tree IR with LocalId disambiguation
-./build/compiler/nano emit examples/factorial.nano --format=core
-
-# Emit ANF — evaluation order explicit, temporaries named
-./build/compiler/nano emit examples/factorial.nano --format=anf
-
-# Emit CFG — basic blocks, explicit jumps, no structured control flow
-./build/compiler/nano emit examples/loops.nano --format=cfg
-
-# Emit CFG as Graphviz DOT
-./build/compiler/nano graph examples/loops.nano --cfg
-
-# Emit SSA and the dominator tree
-./build/compiler/nano emit examples/control_flow.nano --format=ssa
-./build/compiler/nano graph examples/control_flow.nano --dominator-tree
-
-# Inspect Nano's verified SSA optimizer
-./build/compiler/nano optimize examples/optimizer.nano -O2 --show-before-after
-./build/compiler/nano optimize examples/optimizer.nano --passes=sccp,dce
-./build/compiler/nano emit examples/optimizer.nano --format=optimized
-./build/compiler/nano optimize examples/licm.nano -O3 --why-not-optimized
-./build/compiler/nano graph examples/nested_loops.nano --loops
-
-# Explain the full compilation journey
-./build/compiler/nano explain examples/factorial.nano
-
-# Emit LLVM IR
-./build/compiler/nano emit examples/factorial.nano --format=llvm
-
-# Lower verified optimized SSA through LLVM, then execute it in ORC
-./build/compiler/nano emit examples/factorial.nano --format=llvm --backend=ssa -O3
-./build/compiler/nano jit examples/factorial.nano -O3
-./build/compiler/nano run examples/factorial.nano -O3
-
-# `compile -o` links a host executable through the configured C++ driver.
-# Use --emit-llvm to retain textual LLVM output with -o.
-./build/compiler/nano compile examples/factorial.nano --backend=ssa -O2 -o factorial
-
-# Emit a host object, or make the executable choice explicit.
-./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-obj -o factorial.o
-./build/compiler/nano compile examples/factorial.nano --backend=ssa --emit-exe -o factorial
-
-# Package the driver, its host-AOT runtime archive, and the runtime ABI header.
-cmake --install build --prefix "$HOME/.local"
-$HOME/.local/bin/nano compile examples/factorial.nano --backend=ssa -O2 -o factorial
-
-# Collect deterministic interpreter execution facts in versioned JSON.
-./build/compiler/nano profile examples/loops.nano -o loops.nprof
-
-# Feed measured function-call counts into the bounded inliner. This only
-# relaxes a cost choice for hot direct callees; correctness gates remain on.
-./build/compiler/nano emit examples/loops.nano --format=llvm --backend=ssa \
-  --profile=loops.nprof -O2
-
-# Inspect complete SSA block/edge/loop counters and export policy features.
-./build/compiler/nano profile show loops.nprof
-./build/compiler/nano features examples/loops.nano --profile=loops.nprof
-./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
-  --policy=heuristic --remarks
-./build/compiler/nano optimize examples/functions.nano -O2 \
-  --policy=learned --policy-model=models/inline-imitation-v1.json --remarks
-./build/compiler/nano optimize examples/loops.nano --profile=loops.nprof \
-  --policy=heuristic --decision-log=policy-decisions.jsonl
-
-# This profile makes `step` hot at the documented default threshold, so the
-# normal PGO pipeline spends optional loop-optimization effort only there.
-./build/compiler/nano profile examples/pgo_hot_loop.nano -o pgo-hot.nprof.json
-./build/compiler/nano optimize examples/pgo_hot_loop.nano --profile=pgo-hot.nprof.json \
-  -O2 --remarks --why-not-optimized
-
-# Promote deterministic hot calls through LLVM ORC dispatch stubs.
-./build/compiler/nano profile examples/hot_loop.nano -o hot.nprof.json
-./build/compiler/nano optimize examples/hot_loop.nano --profile=hot.nprof.json -O3 --why-not-optimized
-./build/compiler/nano jit examples/hot_loop.nano --adaptive --hot-threshold=2 \
-  --profile-output=hot-native.nprof.json --jit-events=json
-./build/compiler/nano optimize examples/hot_loop.nano --profile=hot-native.nprof.json -O2
-
-# Persist measured desugaring-pass events in a versioned JSON schema.
-./build/compiler/nano emit examples/desugaring.nano --format=core \
-  --telemetry=desugar-telemetry.json
-
-# Verify all available compiler invariants, including SSA
-./build/compiler/nano verify examples/factorial.nano
+```text
+Vercel static React application  ── HTTPS JSON ──>  Render nano-server API
 ```
 
-Run the generated IR with LLVM's interpreter:
-```sh
-./build/compiler/nano emit examples/factorial.nano --format=llvm -o factorial.ll
-lli factorial.ll
+The repository includes both deployment configurations:
+
+- [`vercel.json`](vercel.json) — root-import Vercel build, static output, SPA
+  rewrites, caching, and browser hardening headers;
+- [`render.yaml`](render.yaml) — Dockerized LLVM 18 API, readiness probe,
+  production origin allowlist, bounded source size, and interpreter-only
+  execution.
+
+Use the step-by-step [Render + Vercel deployment runbook](docs/deploy-render-vercel.md).
+It covers environment variables, strict CORS, smoke tests, previews, rollback,
+and the public-execution boundary. `VITE_*` values are browser-visible build
+configuration, never a place for secrets.
+
+## Repository map
+
+```text
+compiler/
+  lexer/ parser/ ast/ sema/          Source language frontend
+  ir/core/ ir/anf/ ir/cfg/ ir/ssa/   Explicit typed representations
+  optimizer/                         Nano SSA optimization and policies
+  backend/llvm/                      LLVM lowering, runtime, optional ORC JIT
+  service/ server/                   Versioned JSON compiler service
+  passes/                            Pass, analysis, telemetry infrastructure
+tests/                               Unit, integration, service, and backend coverage
+tools/                               Correctness, fuzzing, benchmark, and policy tools
+examples/                            Readable NanoPass programs
+docs/                                Architecture, language, IR, testing, deployment
+web/                                 Vite + React Compiler Lab
 ```
-
----
-
-## Compiler passes
-
-NanoPass uses a real `PassManager` that runs each pass **once over the full
-program** and tracks analysis caching and invalidation.
-
-```
-$ nano passes
-
-Available compiler passes
-
-Desugaring
-  desugar-for
-    Unit:  program
-    Lower for-loops to equivalent while-loops.
-
-  desugar-inc-dec
-    Unit:  program
-    Lower ++ and -- operators to explicit additions/subtractions.
-
-  desugar-plus-assign
-    Unit:  program
-    Lower += compound assignment to simple assignment.
-```
-
-```
-$ nano analyses
-
-Available compiler analyses
-
-Ast
-  ast-node-count
-    Unit:  program
-    Count total AST nodes (statements, expressions, functions).
-
-  ast-depth
-    Unit:  program
-    Compute maximum nesting depth of the AST.
-```
-
-### Pass pipeline debugging
-
-```sh
-./build/compiler/nano emit examples/loops.nano --format=desugar \
-    --debug-pass-manager
-```
-
-Output:
-
-```
-[pass-manager] starting pipeline "desugar"
-
-[pass] DesugarFor  (desugar-for)
-  changed:  no
-  duration: 5.0 us
-
-[pass] DesugarIncDec  (desugar-inc-dec)
-  changed:  no
-  duration: 8.6 us
-
-[pass] DesugarPlusAssign  (desugar-plus-assign)
-  changed:  no
-  duration: 7.9 us
-
-[pass-manager] completed "desugar"
-  total duration: 21.5 us
-  any changed:    no
-```
-
-Each pass runs **once** — not once per top-level statement.
-
-### Other pass options
-
-```sh
-# Print the active pass pipeline
---print-pipeline
-
-# Stop after a named pass (by stable ID)
---stop-after=desugar-for
-
-# Skip a named pass
---disable-pass=desugar-inc-dec
-
-# Show analysis cache events
---debug-analyses
-```
-
----
-
-## Current pipeline
-
-| Stage | Status | Command |
-|---|---|---|
-| Lexer | ✅ stable | `--format=tokens` |
-| Parser | ✅ stable | `--format=ast` |
-| Scope resolution | ✅ stable | |
-| Type checking | ✅ stable | |
-| DesugarFor | ✅ stable | `--format=desugar` |
-| DesugarIncDec | ✅ stable | |
-| DesugarPlusAssign | ✅ stable | |
-| PassManager + AnalysisManager | ✅ stable | |
-| PassRegistry + PipelineBuilder | ✅ stable | `nano passes` |
-| **CoreIR** | ✅ **stable** | `--format=core` |
-| **ANFIR** | ✅ **stable** | `--format=anf` |
-| **CFG IR + Graphviz** | ✅ **stable** | `--format=cfg`, `nano graph --cfg` |
-| **`nano explain`** | ✅ **stable** | `nano explain` |
-| **`nano verify` (10 stages)** | ✅ **stable** | `nano verify` |
-| LLVM IR emission | ✅ stable | `--format=llvm`, `--backend=ssa` |
-| **SSA IR + verifier** | ✅ **stable** | `--format=ssa`, `nano verify` |
-| Optimizer | ✅ stable | `nano optimize`, `-O0`–`-O3` |
-| ORC JIT | 🧪 optional | `nano jit`, `nano run` with `NANO_BUILD_JIT=ON` |
-| Host AOT emission | 🧪 optional | `nano compile --backend=ssa -o file` |
-| Web compiler lab | ✅ local service | `nano-server` + `web/` |
-
----
-
-## Sample programs
-
-| File | Demonstrates |
-|---|---|
-| `examples/hello.nano` | Basic function, print, string literal |
-| `examples/factorial.nano` | Recursion, conditionals |
-| `examples/fibonacci.nano` | Forward calls, while loop |
-| `examples/fizzbuzz.nano` | Modulo, nested conditionals |
-| `examples/loops.nano` | Nested while loops, accumulator patterns |
-| `examples/branching.nano` | Boolean expressions, logical `&&`/`||` |
-| `examples/functions.nano` | Multiple functions, parameter passing |
-| `examples/desugaring.nano` | For/++/+= desugaring demonstration |
-
----
-
-## Language reference
-
-NanoPass is deliberately **C-forward**: declarations, functions, braces, and
-control flow stay familiar, while a compact type vocabulary makes NanoPass
-programs immediately recognizable. The spelling is a parser-level design
-choice, not a macro preprocessor or a second compiler path.
-
-```nano
-i32 path_cost(i32 origin, i32 target) {
-  i32 cost = origin + target;
-  if (cost > 0) { print(cost); } else { print(0); }
-  return cost;
-}
-```
-
-| NanoPass C spelling | Compatibility spelling | Meaning |
-|---|---|---|
-| `i32`, `truth`, `unit` | `int`, `bool`, `void` | Canonical NanoPass types |
-| `i32 values[8]` | `int[8] values` | Fixed-size array, C declarator position |
-| `if`, `while`, `return` | same | Familiar structured control flow |
-| `print(expr)` | `print expr` | Parenthesized output form |
-
-See [the full language reference](docs/language.md), including exact grammar
-and current limitations. Existing code and the optional `fn`/`let` aliases
-remain supported, but the C-forward style is used in new examples.
-
-Current supported constructs:
-
-```
-// Types
-int  float  double  bool  char  void
-int[N]  (fixed-size arrays)
-
-// Declarations
-int x = 42;
-int arr[5];
-
-// Functions
-int add(int a, int b) { return a + b; }
-
-// Control flow
-if (cond) { ... } else { ... }
-while (cond) { ... }
-
-// Print
-print expr;
-
-// Operators
-+  -  *  /  %
-<  <=  >  >=  ==  !=
-&&  ||  !
-=
-```
-
----
-
-## Pass infrastructure architecture
-
-The pass infrastructure lives in `compiler/passes/` and uses the `nanopass`
-namespace (not `nano`, which collides with `std::nano` from `<ratio>`).
-
-Key types:
-
-| Type | Purpose |
-|---|---|
-| `nanopass::Pass` | Abstract base; `PassInfo info()` + `run(Program&, PassContext&)` |
-| `nanopass::PassManager` | Sequential pipeline; once-per-program execution |
-| `nanopass::AnalysisManager` | Type-safe analysis cache with `get<T>()` |
-| `nanopass::PreservedAnalyses` | Declares which analyses a pass leaves valid |
-| `nanopass::PassResult` | `changed` + `preserved` + `PassStatistics` |
-| `nanopass::PassInstrumentation` | Observer hooks around pass/analysis lifecycle |
-| `nanopass::PassRegistry` | Static registry of known passes and analyses |
-| `nanopass::PipelineBuilder` | Pipeline factory; registry initialisation |
-
-See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the full
-architecture description including the pass lifecycle diagram.
-
----
 
 ## Build options
 
-| Option | Default | Description |
-|---|---|---|
-| `NANO_BUILD_TESTS` | `ON` | Build the test suite |
-| `NANO_BUILD_JIT` | `OFF` | Build ORCv2 JIT, native backend tests, and `nano_jit_correctness` |
-| `NANO_BUILD_WEB_SERVER` | `OFF` | Build JSON API server (planned) |
-| `NANO_ENABLE_SANITIZERS` | `OFF` | AddressSanitizer + UBSan |
-| `NANO_ENABLE_FUZZING` | `OFF` | libFuzzer targets (planned) |
-| `NANO_ENABLE_ALIVE2` | `OFF` | Alive2 integration (planned) |
+| CMake option | Default | Purpose |
+| --- | --- | --- |
+| `NANO_BUILD_TESTS` | `ON` | Build unit and integration tests |
+| `NANO_BUILD_WEB_SERVER` | `OFF` | Build the `nano-server` JSON API |
+| `NANO_BUILD_JIT` | `OFF` | Enable optional ORCv2 JIT support |
+| `NANO_ENABLE_SANITIZERS` | `OFF` | Enable AddressSanitizer and UBSan where supported |
+| `NANO_ENABLE_FUZZING` | `OFF` | Build fuzzing targets |
+| `NANO_ENABLE_ALIVE2` | `OFF` | Enable optional Alive2 integration |
+
+## Documentation
+
+| Topic | Where to start |
+| --- | --- |
+| System design | [Architecture](docs/architecture.md) and [IR design](docs/ir-design.md) |
+| Language | [NanoPass C language reference](docs/language.md) |
+| SSA and analysis | [SSA design](docs/ssa-design.md), [loops](docs/loops.md), [analysis manager](docs/analysis-manager.md) |
+| Optimizer | [Optimizer](docs/optimizer.md), [LICM](docs/licm.md), [inlining](docs/inlining.md) |
+| Reliability | [Differential testing](docs/differential-testing.md) and [fuzzing](docs/fuzzing.md) |
+| API and web | [Compiler API](docs/compiler-api.md), [Web Lab](docs/web-lab.md), [security](docs/web-security.md) |
+| Deployment | [Render + Vercel runbook](docs/deploy-render-vercel.md) |
+| Project state | [Status](docs/STATUS.md) and [roadmap](docs/ROADMAP.md) |
+
+## Scope and safety
+
+NanoPass is a compiler laboratory and educational/research platform. It is not
+a general-purpose remote code-execution system. In particular:
+
+- use `interpreter-only` for a public demonstration;
+- do not expose local-trusted JIT execution to untrusted users;
+- keep `NANOPASS_ALLOWED_ORIGINS` exact—never `*`;
+- add authentication, rate limits, OS-enforced CPU/memory limits, and a
+  dedicated worker boundary before any multi-user deployment.
+
+## Contributing
+
+Changes should preserve the central promise: transformations must be observable
+and machine-checkable. Before opening a pull request, run the relevant C++ and
+web suites, update docs for user-visible behavior, and avoid turning
+experimental claims into stable ones.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for the active direction and
+[docs/STATUS.md](docs/STATUS.md) for what is already complete.
 
 ---
 
-## Testing
-
-```sh
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-The LLVM-independent suites always build; JIT/backend tests are added only
-when `NANO_BUILD_JIT=ON` and a healthy LLVM SDK is found.
-
-Test categories:
-- CLI smoke (`nano_help`, `nano_version`, `nano_passes_command`, `nano_analyses_command`)
-- Frontend unit (`nano_frontend_smoke`: forward calls, errors, source locations)
-- Pass manager unit (`nano_pass_manager_unit`: 22 tests covering PassManager,
-  AnalysisManager, analysis cache/invalidation, rewrite counts, stop-after,
-  disable-pass, registry lookups, PreservedAnalyses semantics)
-- Per-example integration (`emit_*`, `desugar_*`, `verify_*` for 8 examples)
-- CLI pass-manager smoke (`debug_pass_manager_smoke`, `print_pipeline_smoke`,
-  `stop_after_smoke`, `disable_pass_smoke`, `stop_after_invalid_pass`)
-
----
-
-## Architecture
-
-See [docs/architecture.md](docs/architecture.md) for component descriptions.
-See [docs/pass-manager-design.md](docs/pass-manager-design.md) for the pass
-infrastructure design and lifecycle.
-See [docs/analysis-manager.md](docs/analysis-manager.md) for AST/SSA analysis
-cache scopes and invalidation.
-See [docs/interpreter.md](docs/interpreter.md),
-[docs/differential-testing.md](docs/differential-testing.md), and
-[docs/fuzzing.md](docs/fuzzing.md) for execution and reliability testing.
-See [docs/STATUS.md](docs/STATUS.md) for an accurate feature inventory.
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the phased development plan.
+**NanoPass Compiler Lab** — a compiler you can interrogate.
