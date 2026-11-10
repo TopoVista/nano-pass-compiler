@@ -16,8 +16,10 @@ arbitrary optimization implementation.
 ## Before you start
 
 - Push the desired `main` commit to GitHub.
-- Decide the production frontend hostname, such as
-  `https://nanopass.example.com` or the Vercel `*.vercel.app` URL.
+- Reserve the production frontend hostname before the API’s first boot. Use a
+  custom hostname such as `https://nanopass.example.com`, or decide the Vercel
+  project slug so its stable origin is known as
+  `https://YOUR_PROJECT.vercel.app`.
 - Deploy the Render API **before** the Vercel frontend. Its HTTPS URL is a
   build-time input to Vite.
 - Treat the hosted API as a bounded demonstration service, not a multi-tenant
@@ -44,9 +46,9 @@ arbitrary optimization implementation.
    | Deploys | commits to `main` |
 
 4. When Render prompts for `NANOPASS_ALLOWED_ORIGINS`, enter the exact Vercel
-   production origin—for example `https://nanopass.vercel.app`. Do not add a
-   trailing slash, do not use `*`, and do not paste a preview URL unless that
-   preview is intended to access the API.
+   production origin reserved above—for example `https://nanopass.vercel.app`.
+   Do not add a trailing slash, do not use `*`, and do not paste a preview URL
+   unless that preview is intended to access the API.
 5. Deploy. Copy the public URL Render assigns, such as
    `https://nanopass-compiler-api.onrender.com`.
 
