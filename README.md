@@ -52,6 +52,8 @@ Each representation has a deterministic printer. CoreIR, ANF, CFG, and SSA
 also have machine-checkable invariants; compiler bugs are surfaced as internal
 errors instead of being mislabeled as user-source errors.
 
+![NanoPass architecture: browser workbench, bounded compiler service, explicit middle end, and feature-gated backend](docs/images/compiler-architecture.png)
+
 ## What is implemented
 
 - **Frontend** — recursive-descent parser, scope resolution, source-aware type
@@ -260,6 +262,8 @@ workbench, and `/guide` for the animated compiler presentation. The lab lets
 you edit source, format or generate a valid program, run safe compiler
 commands, inspect representations and graphs, select SSA values, compare
 optimization levels, and read verifier-backed explanations.
+
+![NanoPass animated guide showing the source-to-representation walkthrough](docs/images/compiler-guide.png)
 
 For a containerized local demonstration:
 
