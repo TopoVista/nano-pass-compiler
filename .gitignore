@@ -4,6 +4,7 @@
 
 # CMake build trees (root and per-subproject)
 /build/
+/build-native/
 /compiler/build/
 /_audit_build/
 **/CMakeFiles/
@@ -71,6 +72,7 @@ crash-*
 minimized-*
 *.profraw
 *.profdata
+premium-audit.json
 
 # Profile data
 *.nprof
@@ -106,3 +108,4 @@ __pycache__/
 *.pyo
 .DS_Store
 Thumbs.db
+

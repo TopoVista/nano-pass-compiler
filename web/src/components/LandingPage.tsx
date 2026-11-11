@@ -65,7 +65,7 @@ export function LandingPage() {
           </div>
         </div>
         <div className="hero-artifact" aria-label="Compiler transformation from source to verified SSA">
-          <div className="artifact-topline"><span>REPRESENTATION EXAMPLE</span><b>verified pipeline</b></div>
+          <div className="artifact-topline"><span>REPRESENTATION EXAMPLE</span><b>compiler pipeline</b></div>
           <div className="artifact-columns">
             <article className="artifact-code source"><header><span>01</span> Source / NanoPass C</header><pre><code className="hero-code-typing hero-source-typing">{source}</code></pre></article>
             <div className="artifact-transfer" aria-label="Parse, lower, and verify the program">
@@ -73,7 +73,7 @@ export function LandingPage() {
             </div>
             <article className="artifact-code output"><header><span>06</span> SSA / @score</header><pre><code className="hero-code-typing hero-ssa-typing">{ssa}</code></pre></article>
           </div>
-          <footer><span><Check aria-hidden="true" strokeWidth={2} /> value definitions are unique</span><span><Check aria-hidden="true" strokeWidth={2} /> control flow is explicit</span></footer>
+          <footer><span><Check aria-hidden="true" strokeWidth={2} /> SSA checks unique value definitions</span><span><Check aria-hidden="true" strokeWidth={2} /> CFG makes control flow explicit</span></footer>
         </div>
       </section>
 
@@ -96,7 +96,7 @@ export function LandingPage() {
       <section className="public-section public-method" id="method">
         <div className="section-title"><p>Every layer has a job.</p><h2>Not one tree.<br />A chain of <em>contracts.</em></h2></div>
         <div className="method-copy">
-          <p>Surface syntax is convenient for people. SSA is useful for optimization. LLVM is useful for the machine. NanoPass gives each of those states its own representation, printer, verifier, and public view.</p>
+          <p>Surface syntax is convenient for people. SSA supports data-flow optimization. LLVM is the backend representation. NanoPass gives each state its own representation, printer, verifier where applicable, and public view.</p>
           <a href="/guide">Take the interactive guided tour <Arrow /></a>
         </div>
         <ol className="pipeline-list" aria-label="NanoPass pipeline">
@@ -141,3 +141,4 @@ export function LandingPage() {
     </main>
   );
 }
+

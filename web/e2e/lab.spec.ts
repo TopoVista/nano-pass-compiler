@@ -146,3 +146,40 @@ test('keeps the public and lab shells inside the viewport at supported breakpoin
     expect(labBounds.scrollWidth <= labBounds.viewport, `lab at ${viewport.width}px: ${JSON.stringify(labBounds)}`).toBe(true);
   }
 });
+
+test('keeps public information readable when browser zoom changes the effective viewport', async ({ page }) => {
+  // Browser zoom changes the effective CSS viewport. Exercise those widths
+  // directly instead of using CSS `zoom`, which would scale content without
+  // engaging the responsive media queries used by real browsers.
+  for (const { zoom, width } of [
+    { zoom: '80%', width: 1800 },
+    { zoom: '100%', width: 1440 },
+    { zoom: '125%', width: 1152 },
+    { zoom: '150%', width: 960 },
+  ]) {
+    await page.setViewportSize({ width, height: 980 });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /how nanopass is built/i })).toBeVisible();
+    const landingLayout = await page.evaluate(() => ({
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(landingLayout.scrollWidth <= landingLayout.width, `landing at ${zoom}: ${JSON.stringify(landingLayout)}`).toBe(true);
+
+    await page.goto('/guide');
+    await expect(page.getByRole('heading', { name: /a compiler lab, presented as a system/i })).toBeVisible();
+    const guideLayout = await page.evaluate(() => {
+      const width = window.innerWidth;
+      const overflowing = [...document.querySelectorAll<HTMLElement>('*')]
+        .map((element) => ({
+          name: typeof element.className === 'string' && element.className ? element.className : element.tagName,
+          right: Math.round(element.getBoundingClientRect().right),
+        }))
+        .filter((element) => element.right > width + 1)
+        .slice(0, 5);
+      return { width, scrollWidth: document.documentElement.scrollWidth, overflowing };
+    });
+    expect(guideLayout.scrollWidth <= guideLayout.width, `guide at ${zoom}: ${JSON.stringify(guideLayout)}`).toBe(true);
+  }
+});
+

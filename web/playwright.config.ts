@@ -28,9 +28,12 @@ export default defineConfig({
     {
       command: 'npm run dev -- --host 127.0.0.1 --port=15173',
       url: 'http://127.0.0.1:15173',
-      reuseExistingServer: !process.env.CI,
+      // The app must start with the compiler URL declared in `env`. Set
+      // PLAYWRIGHT_REUSE_EXISTING_SERVER=1 only for deliberate local reuse.
+      reuseExistingServer: process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === '1',
       timeout: 30_000,
       env: { VITE_NANO_SERVER_URL: compilerUrl },
     },
   ],
 });
+

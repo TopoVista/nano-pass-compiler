@@ -143,7 +143,7 @@ export function BuildAtlas({ mode }: { mode: AtlasMode }) {
     return <section className="build-blueprint" aria-labelledby="build-blueprint-title">
       <header className="blueprint-navline"><span>CODEBASE / EXPLICIT REPRESENTATIONS / VERIFIER GATES</span><a href="/guide">Explore the build tour <ChevronRight aria-hidden="true" /></a></header>
       <div className="blueprint-hero">
-        <div><h2 id="build-blueprint-title">How NanoPass<br />is <em>built.</em></h2><p>Source becomes evidence.</p></div>
+        <div><h2 id="build-blueprint-title">How NanoPass<br />is <em>built.</em></h2><p>A map of the implementation.</p></div>
         <div className="blueprint-stack" aria-label="Layered compiler architecture">
           <div className="blueprint-slab syntax"><i /><b>Syntax / typed AST</b></div>
           <div className="blueprint-slab ir"><i /><b>Explicit representations</b></div>
@@ -154,7 +154,7 @@ export function BuildAtlas({ mode }: { mode: AtlasMode }) {
       <div className="blueprint-board">
         <aside className="blueprint-tree"><header><FolderTree aria-hidden="true" /><b>Codebase</b></header><div className="tree-root">nano-pass-compiler/</div><ul>{layers.map((layer) => <li key={layer.id}><button type="button" className={selected.id === layer.id ? 'selected' : ''} onClick={() => setSelectedId(layer.id)}><span>{layer.number}</span><b>{layer.title}</b><small>{layer.files[0].replace('compiler/', '')}</small></button></li>)}</ul><p>Click a subsystem to inspect its implementation surface.</p></aside>
         <section className="blueprint-pipeline" aria-label="NanoPass compilation pipeline"><header><h3>Compiler pipeline</h3><span>small passes / explicit contracts</span></header><div className="blueprint-artifacts">{pipelineArtifacts.map((artifact, index) => <div className="blueprint-artifact" key={`${artifact.label}-${index}`}><button type="button" className={selected.id === artifact.id ? 'selected' : ''} onClick={() => setSelectedId(artifact.id)}><b>{artifact.label}</b><i className={`artifact-glyph ${artifact.kind}`} aria-hidden="true"><span /><span /><span /></i><small>{artifact.id === 'frontend' ? 'read + type' : artifact.id === 'ir' ? 'normalize' : artifact.id === 'proof' ? 'analyze' : artifact.id === 'ssa' ? 'construct' : 'emit'}</small></button>{index < pipelineArtifacts.length - 1 ? <ArrowRight aria-hidden="true" /> : null}</div>)}</div><footer><div><b>Front-end</b><span>parse + elaborate</span></div><div><b>Middle-end</b><span>represent + transform</span></div><div><b>Back-end</b><span>lower + emit</span></div></footer></section>
-        <aside className="blueprint-proof"><header><ShieldCheck aria-hidden="true" /><b>Proof / verifier</b></header><ol><li>Well-typed IR</li><li>CFG well-formed</li><li>SSA dominance</li><li>Pass preservation</li><li>LLVM verification</li></ol><strong><Check aria-hidden="true" /> Verified compilation</strong></aside>
+        <aside className="blueprint-proof"><header><ShieldCheck aria-hidden="true" /><b>Verifier gates</b></header><ol><li>Typed-IR checks</li><li>CFG consistency</li><li>SSA dominance</li><li>Pass preservation</li><li>LLVM module checks</li></ol><strong><Check aria-hidden="true" /> Checks run per pipeline stage</strong></aside>
       </div>
       <section className="blueprint-inspector" aria-live="polite"><header><span>SELECTED IMPLEMENTATION</span><b>{selected.title}</b><code>{selected.files[0]}</code></header><pre><code>{selected.code}</code></pre><aside><span>ACCEPTS</span><b>{selected.input}</b><ArrowRight aria-hidden="true" /><span>EMITS</span><b>{selected.output}</b><p>{selected.contract}</p></aside></section>
     </section>;
@@ -205,3 +205,4 @@ export function BuildAtlas({ mode }: { mode: AtlasMode }) {
     </div>
   </section>;
 }
+
