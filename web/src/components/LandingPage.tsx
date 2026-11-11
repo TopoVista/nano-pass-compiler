@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUpRight, Check } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { ArchitectureDiagram } from './ArchitectureDiagram';
+import { BuildAtlas } from './BuildAtlas';
 
 const pipeline = [
   { name: "Source", action: "read", explanation: "The C-like program as a developer wrote it." },
@@ -102,6 +103,8 @@ export function LandingPage() {
           {pipeline.map((stage, index) => <li key={stage.name} tabIndex={0} aria-label={`${stage.name}: ${stage.explanation}`}><span>{String(index + 1).padStart(2, "0")}</span><b>{stage.name}</b><i>{stage.action}</i><small className="pipeline-explanation"><span>{stage.explanation}</span></small></li>)}
         </ol>
       </section>
+
+      <BuildAtlas mode="brief" />
 
       <section className="public-feature public-feature-optimizer" id="optimizer">
         <div className="feature-number">A</div>

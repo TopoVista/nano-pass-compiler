@@ -76,6 +76,22 @@ describe('compiler lab', () => {
     expect(screen.getByText(/Untrusted source never becomes a host command/i)).toBeInTheDocument();
     window.history.pushState({}, '', '/lab');
   });
+  it('makes the codebase build tour inspectable from both public surfaces', () => {
+    window.history.pushState({}, '', '/');
+    const { unmount } = render(<App />);
+    expect(screen.getByRole('heading', { name: /a pipeline is not a picture/i })).toBeInTheDocument();
+    expect(screen.getByText('compiler/ir/ssa/ssa_builder.h')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Optimizer rewrite with evidence/i }));
+    expect(screen.getByText('compiler/optimizer/ssa_optimizer.h')).toBeInTheDocument();
+    unmount();
+
+    window.history.pushState({}, '', '/guide');
+    render(<App />);
+    expect(screen.getByRole('heading', { name: /trace the compiler through its actual modules/i })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /Backend \+ service lower or explain/i })[0]);
+    expect(screen.getByText('compiler/server/nano_server.cpp')).toBeInTheDocument();
+    window.history.pushState({}, '', '/lab');
+  });
   it('serves a dedicated public landing route', () => {
     window.history.pushState({}, '', '/');
     render(<App />);

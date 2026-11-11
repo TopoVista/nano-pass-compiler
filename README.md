@@ -258,10 +258,13 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173` for the public explanation, `/lab` for the
-workbench, and `/guide` for the animated compiler presentation. The lab lets
-you edit source, format or generate a valid program, run safe compiler
-commands, inspect representations and graphs, select SSA values, compare
-optimization levels, and read verifier-backed explanations.
+workbench, and `/guide` for the animated compiler presentation. The landing
+page includes a codebase architecture brief; the guide expands it into an
+interactive build tour that connects each compiler layer to concrete C++
+modules, its input/output artifact, and its invariant. The lab lets you edit
+source, format or generate a valid program, run safe compiler commands, inspect
+representations and graphs, select SSA values, compare optimization levels, and
+read verifier-backed explanations.
 
 ![NanoPass animated guide showing the source-to-representation walkthrough](docs/images/compiler-guide.png)
 

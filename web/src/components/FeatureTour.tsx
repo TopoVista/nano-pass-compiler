@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Braces, Check, GitBranch, Network, Pause, Play, RotateCcw, ShieldCheck, Workflow } from 'lucide-react';
+import { BuildAtlas } from './BuildAtlas';
 
 type Lens = 'pipeline' | 'graphs' | 'evidence';
 type Props = { onExample: (name: string) => void; onStage: (stage: string) => void; onGraph: (kind: string) => void; };
@@ -85,13 +86,15 @@ export function FeatureTour({ onExample, onStage, onGraph }: Props) {
       <ol className="guide-contract-list"><li><span>01</span><b>Input contract</b><p>Source is data, never a host command.</p></li><li><span>02</span><b>IR contract</b><p>Each representation has an explicit invariant.</p></li><li><span>03</span><b>Proof contract</b><p>Remarks are recorded compiler decisions.</p></li><li><span>04</span><b>Execution contract</b><p>Capabilities report their real availability.</p></li></ol>
     </section>
 
+    <BuildAtlas mode="tour" />
+
     <section className="guide-proof-board" aria-labelledby="guide-proof-title">
-      <header className="guide-section-header"><div><span>03 / optimization evidence</span><h3 id="guide-proof-title">A rewrite is a claim with receipts.</h3></div></header>
+      <header className="guide-section-header"><div><span>04 / optimization evidence</span><h3 id="guide-proof-title">A rewrite is a claim with receipts.</h3></div></header>
       <div className="guide-proof-layout"><article className="guide-rewrite-card"><header><span>BEFORE</span><b>constant-fold</b></header><pre>%4 = mul 2, 3\n%5 = add %x, 0\nbranch true, bb1, bb2</pre></article><div className="guide-rewrite-arrow"><ArrowRight aria-hidden="true" /><span>pass runs</span></div><article className="guide-rewrite-card approved"><header><span>AFTER</span><b>SSA preserved</b></header><pre>%4 = const 6\njump bb1</pre><footer><Check aria-hidden="true" />CFG simplified · values still valid</footer></article><aside className="guide-proof-notes"><span>HOW TO EXPLAIN THIS</span><p>“The compiler saw arithmetic with known inputs and a branch that can only go one way. It rewrote both, then checked that the remaining graph and SSA values still obey their rules.”</p><button type="button" onClick={() => { setLens('evidence'); document.querySelector('.guide-deep-dive')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Show me a recorded remark <ArrowRight aria-hidden="true" /></button></aside></div>
     </section>
 
     <section className="guide-deep-dive" aria-labelledby="guide-deep-dive-title">
-      <header className="guide-section-header"><div><span>04 / choose a live lens</span><h3 id="guide-deep-dive-title">Move from explanation to evidence.</h3></div></header>
+      <header className="guide-section-header"><div><span>05 / choose a live lens</span><h3 id="guide-deep-dive-title">Move from explanation to evidence.</h3></div></header>
       <div className="feature-console"><div className="feature-tabs" role="tablist" aria-label="Compiler lab features">{(Object.keys(lenses) as Lens[]).map((key) => <button type="button" key={key} role="tab" aria-selected={lens === key} className={lens === key ? 'selected' : ''} onClick={() => setLens(key)}>{lenses[key].eyebrow}</button>)}</div><article className="feature-detail" aria-live="polite"><span className="feature-index">{selected.eyebrow}</span><h3>{selected.title}</h3><p>{selected.body}</p><button type="button" className="feature-action" onClick={open}>{selected.action}<ArrowRight aria-hidden="true" /></button></article><div className="feature-trace" aria-label="Compiler pipeline overview">{['Source', 'Typed AST', 'CoreIR', 'ANF', 'CFG', 'SSA', 'Optimized SSA', 'LLVM'].map((stageName, index) => <div key={stageName} className={index === 5 || index === 6 ? 'trace-node active' : 'trace-node'}><span>{String(index + 1).padStart(2, '0')}</span><b>{stageName}</b></div>)}</div></div>
     </section>
   </section>;

@@ -18,6 +18,8 @@ test('presents the animated guide with inspectable compiler stages and boundarie
   await expect(page.getByText(/Basic blocks and arrows make every route/i)).toBeVisible();
   await page.getByRole('button', { name: /Request guard/i }).click();
   await expect(page.getByText(/Untrusted source never becomes a host command/i)).toBeVisible();
+  await page.getByRole('button', { name: /Optimizer rewrite with evidence/i }).click();
+  await expect(page.getByText('compiler/optimizer/ssa_optimizer.h')).toBeVisible();
 });
 
 test('keeps verified compiler state available across dedicated lab workflows', async ({ page }) => {
