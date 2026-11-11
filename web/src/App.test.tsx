@@ -79,9 +79,9 @@ describe('compiler lab', () => {
   it('makes the codebase build tour inspectable from both public surfaces', () => {
     window.history.pushState({}, '', '/');
     const { unmount } = render(<App />);
-    expect(screen.getByRole('heading', { name: /a pipeline is not a picture/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /how nanopass is built/i })).toBeInTheDocument();
     expect(screen.getByText('compiler/ir/ssa/ssa_builder.h')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Optimizer rewrite with evidence/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Optimizer optimizer\/ssa_optimizer\.h/i }));
     expect(screen.getByText('compiler/optimizer/ssa_optimizer.h')).toBeInTheDocument();
     unmount();
 
