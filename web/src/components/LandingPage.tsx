@@ -79,7 +79,7 @@ export function LandingPage() {
 
       <section className="public-section public-architecture" id="architecture">
         <div className="section-title"><p>Architecture</p><h2>Compiler first.<br />Interface <em>second.</em></h2></div>
-        <div className="architecture-copy"><p>The browser consumes a versioned, bounded JSON compiler API. It does not scrape terminal output or invent a compiler. The deterministic C++ compiler remains the source of truth; optional policies can only choose from known legal decisions and are always verifier-gated.</p><a href="https://github.com/TopoVista/nano-pass-compiler">Read the source on GitHub <Arrow /></a></div>
+        <div className="architecture-copy"><p>The browser consumes a versioned, bounded JSON compiler API. It does not scrape terminal output or invent a compiler. The deterministic C++ compiler remains the source of truth; optional policies can only choose known compiler decisions, and the pipeline checks their resulting IR.</p><a href="https://github.com/TopoVista/nano-pass-compiler">Read the source on GitHub <Arrow /></a></div>
         <ArchitectureDiagram />
       </section>
 
@@ -141,4 +141,5 @@ export function LandingPage() {
     </main>
   );
 }
+
 

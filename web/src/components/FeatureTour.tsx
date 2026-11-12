@@ -25,8 +25,8 @@ const architectureNodes = [
   { id: 'browser', label: 'Browser workbench', detail: 'The editor sends source plus allowlisted options. It only displays structured compiler facts.', emits: 'POST /compile · source text · optimization options', guarantee: 'No shell command is constructed from source text.' },
   { id: 'gateway', label: 'Request guard', detail: 'The local service bounds input, output, timeout and the option set before the compiler sees a request.', emits: 'bounded request · explicit capability state', guarantee: 'Untrusted source never becomes a host command.' },
   { id: 'frontend', label: 'Frontend + typed IR', detail: 'Lexer, parser, resolver and type checker turn syntax into a meaningful, typed program.', emits: 'AST · typed AST · diagnostics', guarantee: 'Names and types are checked before middle-end lowering.' },
-  { id: 'middle', label: 'Middle end', detail: 'CoreIR, ANF, CFG, analyses and SSA make control flow and values explicit.', emits: 'CFG · dominators · SSA · remarks', guarantee: 'Each stage has a verifier and a stable textual form.' },
-  { id: 'backend', label: 'Backend boundary', detail: 'Verified LLVM lowering is handed to AOT/JIT only where the local build supports it.', emits: 'LLVM IR · execution result · profile', guarantee: 'Unavailable engines report unavailable; they are never simulated.' },
+  { id: 'middle', label: 'Middle end', detail: 'CoreIR, ANF, CFG, analyses and SSA make control flow and values explicit.', emits: 'CFG · dominators · SSA · remarks', guarantee: 'Implemented stages expose explicit invariants and stable textual forms.' },
+  { id: 'backend', label: 'Backend boundary', detail: 'LLVM lowering is available to AOT/JIT only when the current build enables it.', emits: 'LLVM IR · execution result · profile', guarantee: 'Unavailable engines report unavailable; they are never simulated.' },
 ] as const;
 
 export function FeatureTour({ onExample, onStage, onGraph }: Props) {
@@ -79,7 +79,7 @@ export function FeatureTour({ onExample, onStage, onGraph }: Props) {
         <div className="guide-system-map" aria-label="Detailed NanoPass request and execution architecture">
           <div className="guide-system-lane browser"><span>DEVELOPER SPACE</span><button type="button" className={architectureFocus === 'browser' ? 'selected' : ''} onClick={() => setArchitectureFocus('browser')}><Braces aria-hidden="true" /><b>Browser workbench</b><small>source · controls · inspection</small></button><i className="guide-system-arrow">allowlisted request <ArrowRight aria-hidden="true" /></i></div>
           <div className="guide-system-lane service"><span>COMPILER SERVICE</span><button type="button" className={architectureFocus === 'gateway' ? 'selected' : ''} onClick={() => setArchitectureFocus('gateway')}><ShieldCheck aria-hidden="true" /><b>Request guard</b><small>limits · timeout · options</small></button><i className="guide-system-arrow"><ArrowRight aria-hidden="true" /></i><button type="button" className={architectureFocus === 'frontend' ? 'selected' : ''} onClick={() => setArchitectureFocus('frontend')}><Network aria-hidden="true" /><b>Frontend + typed IR</b><small>parse · resolve · type</small></button><i className="guide-system-arrow"><ArrowRight aria-hidden="true" /></i><button type="button" className={architectureFocus === 'middle' ? 'selected' : ''} onClick={() => setArchitectureFocus('middle')}><Workflow aria-hidden="true" /><b>Middle end</b><small>Core · ANF · CFG · SSA</small></button></div>
-          <div className="guide-system-lane execution"><span>BACKEND / RUNTIME</span><button type="button" className={architectureFocus === 'backend' ? 'selected' : ''} onClick={() => setArchitectureFocus('backend')}><GitBranch aria-hidden="true" /><b>LLVM + execution</b><small>verified lowering · AOT / ORC</small></button><i className="guide-return-path">diagnostics · graphs · remarks · telemetry <ArrowRight aria-hidden="true" /></i></div>
+          <div className="guide-system-lane execution"><span>BACKEND / RUNTIME</span><button type="button" className={architectureFocus === 'backend' ? 'selected' : ''} onClick={() => setArchitectureFocus('backend')}><GitBranch aria-hidden="true" /><b>LLVM + execution</b><small>lowering · AOT / ORC when enabled</small></button><i className="guide-return-path">diagnostics · graphs · remarks · telemetry <ArrowRight aria-hidden="true" /></i></div>
         </div>
         <aside className="guide-architecture-inspector" aria-live="polite"><span>SELECTED BOUNDARY</span><h4>{focusedArchitecture.label}</h4><p>{focusedArchitecture.detail}</p><dl><div><dt>EMITS</dt><dd>{focusedArchitecture.emits}</dd></div><div><dt>GUARANTEE</dt><dd>{focusedArchitecture.guarantee}</dd></div></dl></aside>
       </div>
@@ -99,3 +99,4 @@ export function FeatureTour({ onExample, onStage, onGraph }: Props) {
     </section>
   </section>;
 }
+
