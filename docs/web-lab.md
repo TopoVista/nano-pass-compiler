@@ -36,10 +36,15 @@ The lab is intentionally an inspector rather than a mock dashboard:
 - The readiness response controls execution affordances. CoreIR and SSA are
   available in interpreter-only deployments; JIT and adaptive-JIT are enabled
   only when the connected build and execution policy advertise them. Disabled
-  modes are unavailable, not failed runs.
+  modes are unavailable, not failed runs. A failed initial readiness request
+  leaves the editor and its selections intact; **Retry service** makes one
+  guarded request and the UI shows connecting, recovering, ready, or
+  unavailable rather than guessing.
 - CoreIR, SSA interpreter, JIT, and adaptive-JIT controls show actual output,
   bounded runtime profile data, and adaptive events where the build supports
-  them.
+  them. A run result labels the backend-acknowledged execution mode. Legacy
+  responses that omit that field are labelled as requested, not as an
+  acknowledgement.
 - The correctness pane calls the bounded `/api/v1/correctness` service route;
   it reports CoreIR versus SSA O0–O3 and includes native/adaptive checks only
   in a JIT-capable service build. Each check is explicitly passed, failed,
@@ -65,6 +70,13 @@ ambiguous. The comparison table reports final compiler telemetry rather than
 summing intermediate pass snapshots.
 The fragment remains client-side; source is only sent to the configured local
 service for compilation.
+
+The benchmark panel keeps one compile result, an untimed warmup, and timed SSA
+samples separate. It reports real sample count, median, p25, p75, and a chart
+scaled only to execution durations. A client cache hit is labelled as such;
+the panel never presents it as a fresh compilation measurement. Compilation,
+warmup, measurement, and service failures each remain visible with a scoped
+retry action.
 
 The shipped public surface and the lab share a black-and-off-white editorial
 system. Mint is reserved for real compiler-confirmed success; neutral states

@@ -13,16 +13,30 @@ and the small deterministic adaptive fuzz smoke; the larger campaigns remain
 explicit local evidence rather than CI claims.
 
 ### Current focused validation (2026-11-17)
-- **Compiler-service contract** — Windows MinGW `compiler_service_tests`:
-  **89/89 assertions passed**. This includes readiness capability reporting,
-  final instruction telemetry, and explicit `passed`/`failed`/`skipped`/
+- **Compiler-service contract** — a current Windows MinGW build of
+  `compiler_service_tests` passed **91/91 assertions**. It includes readiness
+  capability reporting, the acknowledged run `executionMode`, final
+  instruction telemetry, and explicit `passed`/`failed`/`skipped`/
   `unavailable` correctness statuses.
-- **Web client** — `npm run typecheck`, `npm run test -- --run` (**16/16**),
+- **Current interpreter-only HTTP server** — a Windows MinGW build of
+  `nano-server` passed `--help`, returned a schema-v1 readiness document with
+  LLVM/JIT explicitly unavailable, and executed a real SSA run of
+  `print(7)`/`return 7` with `executionMode: "ssa"`.
+- **Web client** — `npm run typecheck`, `npm run test -- --run` (**23/23**),
   and `npm run build` passed. The strict UI audit reports zero findings.
-- **Real-server browser suite** — not rerun on this Windows host: Playwright
-  cannot start `nano-server.exe` because the local LLVM CMake package remains
-  incomplete (`C:\llvm\bin\llvm-tblgen.exe` is missing). This is a tooling
-  limitation, not a passing browser claim.
+- **Real-server browser suite** — all **11/11** Playwright checks passed
+  against that current local server, including recovery UI, mobile layout,
+  routing, graphs, malformed-source diagnostics, visual baselines, supported
+  breakpoints, and zoom-effective viewports.
+- **Broader local regression executables** — existing Linux build artifacts
+  completed the IR pipeline (**5,540/5,540**) and PassManager (**90/90**)
+  suites; frontend smoke exited successfully. Those compiler areas were not
+  modified during this UI/service-contract pass.
+- **LLVM-backed CMake, CTest, and sanitizers** — blocked on this Windows host.
+  `C:\llvm\lib\cmake\llvm\LLVMConfig.cmake` references the missing
+  `C:\llvm\bin\llvm-tblgen.exe`; no replacement executable or imported-target
+  workaround was created. `docker compose config` validates, but a fresh
+  Docker build/run was not repeated in this pass.
 
 ---
 

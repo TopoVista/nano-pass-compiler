@@ -12,13 +12,27 @@
 #include <string>
 #include <string_view>
 
-#include "service/compiler_service.h"
-#include <llvm/Config/llvm-config.h>
-
 #ifdef _WIN32
+// winnt.h exports an unscoped `TokenType` enumerator. NanoPass uses the same
+// identifier for its scoped lexer enum, so isolate the Windows-only spelling
+// while its headers are parsed.
+#define TokenType NanoPassWin32TokenType
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#undef TokenType
 #pragma comment(lib, "ws2_32.lib")
+// The NanoPass lexer deliberately uses these spelling-level token names.
+// Win32 defines them as macros, so remove the preprocessor aliases before
+// including compiler headers.
+#ifdef TRUE
+#undef TRUE
+#endif
+#ifdef FALSE
+#undef FALSE
+#endif
+#ifdef VOID
+#undef VOID
+#endif
 using Socket = SOCKET;
 constexpr Socket kInvalidSocket = INVALID_SOCKET;
 inline void closeSocket(Socket socket) { closesocket(socket); }
@@ -30,6 +44,19 @@ inline void closeSocket(Socket socket) { closesocket(socket); }
 using Socket = int;
 constexpr Socket kInvalidSocket = -1;
 inline void closeSocket(Socket socket) { close(socket); }
+#endif
+
+// Several established compiler headers use `using namespace std;`. On Windows
+// the platform networking declarations must therefore arrive first, otherwise
+// their historic `byte` typedef collides with `std::byte`.
+#include "service/compiler_service.h"
+#if defined(NANO_SERVICE_HAS_LLVM)
+#include <llvm/Config/llvm-config.h>
+#else
+// The HTTP service can still expose the interpreter-only compiler pipeline in
+// development builds where LLVM is intentionally not linked. Keep readiness
+// truthful rather than making the server itself impossible to build.
+#define LLVM_VERSION_STRING "unavailable"
 #endif
 
 namespace {

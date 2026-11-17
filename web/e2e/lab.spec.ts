@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+const compilerUrl = process.env.NANOPASS_SERVER_URL ?? 'http://127.0.0.1:18080';
+
 test('uses the public landing page to enter the dashboard workbench', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeVisible();
@@ -88,8 +90,8 @@ test('renders the graph viewport without React Flow sizing warnings', async ({ p
 
 test('returns a structured compiler diagnostic for malformed source', async ({ page }) => {
   await page.goto('/lab');
-  const response = await page.evaluate(async () => {
-    const result = await fetch('http://127.0.0.1:18080/api/v1/compile', {
+  const response = await page.evaluate(async (serviceUrl) => {
+      const result = await fetch(`${serviceUrl}/api/v1/compile`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -100,7 +102,7 @@ test('returns a structured compiler diagnostic for malformed source', async ({ p
       }),
     });
     return { status: result.status, body: await result.json() };
-  });
+  }, compilerUrl);
 
   expect(response.status).toBe(400);
   expect(response.body.success).toBe(false);
@@ -113,7 +115,7 @@ test('preserves an operable lab shell on mobile and explains an unavailable API'
   await page.route('**/api/v1/**', (route) => route.abort());
   await page.goto('/lab');
   await expect(page.getByRole('navigation', { name: 'Lab views' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Retry compiler service' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry service' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Terminal command' })).toBeVisible();
   await mobile.close();
 });

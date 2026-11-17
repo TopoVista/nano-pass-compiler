@@ -1,17 +1,20 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, vi } from 'vitest';
 import App from './App';
-import { getCapabilities, type Compilation, type RunResult } from './lib/api';
+import { compile, getCapabilities, run, type Compilation, type RunResult } from './lib/api';
 
 vi.mock('./components/SourceEditor', () => ({ SourceEditor: ({ value, onChange }: { value: string; onChange: (text: string) => void }) => <textarea className="resize-none" aria-label="Nano source editor" value={value} onChange={(event) => onChange(event.target.value)} /> }));
 vi.mock('./components/GraphPane', () => ({ GraphPane: ({ graph, onSelect }: { graph?: { nodes: { id: string; label: string }[] }; onSelect: (id: string) => void }) => <div aria-label="CFG graph">{graph?.nodes.map((node) => <button key={node.id} onClick={() => onSelect(node.id)}>{node.label}</button>)}</div> }));
 
 const response: Compilation = { schemaVersion: 1, success: true, compilerRevision: 'test', diagnostics: [], snapshots: [{ stageId: 'ssa', displayName: 'SSA', text: 'bb0:\n  %7 = const 1\n  return %7' }, { stageId: 'optimized-ssa', displayName: 'Optimized SSA', text: 'bb0:\n  return 1' }], transformations: [{ passId: 'sccp', before: 'bb0:\n  %7 = const 1', after: 'bb0:\n  return 1' }], passes: [{ id: 'sccp', displayName: 'SCCP', category: 'optimization', changed: true, durationUs: 12, instructionsBefore: 3, instructionsAfter: 1, blocksBefore: 1, blocksAfter: 1, valuesBefore: 1, valuesAfter: 0, verified: true }], remarks: [{ kind: 'missed', passId: 'licm', message: 'UNSAFE_TO_SPECULATE: division may trap' }], graphs: [{ kind: 'cfg', function: 'main', nodes: [{ id: 'main:bb0', label: 'bb0' }], edges: [] }, { kind: 'dominator-tree', function: 'main', nodes: [{ id: 'main:bb0', label: 'bb0' }], edges: [] }, { kind: 'loops', function: 'main', nodes: [], edges: [] }, { kind: 'call-graph', function: 'program', nodes: [], edges: [] }], values: [{ value: 7, function: 'main', kind: 'instruction', type: 'int', definingBlock: 0, line: 1, column: 1 }], policyFeatures: [{ function: 'main', instructions: 1, blocks: 1, loops: 0, callers: 0, callees: 0, dynamicCalls: 1, dynamicBlocks: 1, dynamicLoopBackedges: 0, hotness: 'cold', hotnessReason: 'COLD_FUNCTION' }], policyRecords: [{ record_kind: 'inline-imitation', caller: 'main', callee: 'helper', features: { instruction_count: 2, block_count: 1, dynamic_call_count: 0, callee_count: 0 }, estimated_inline_cost: 4, caller_instruction_count: 5, heuristic_action: 'inline', legality: 'pass', policy_type: 'learned', model_version: 'inline-imitation-v1', model_action: 'inline', confidence: 0.812 }], telemetry: { totalCompileUs: 55, functions: 1, blocks: 1, values: 1, instructions: 1 } };
-const runResponse: RunResult = { success: true, errorKind: 'none', status: 'success', stdout: '1\n', stderr: '', returnValue: '1', stepsExecuted: 3, executionDurationUs: 42, runtimeProfile: { functions: { main: { calls: 1, blocks_executed: 1, block_counts: { '0': 1 }, edge_counts: [], loops: {} } } }, compilation: response };
+const runResponse: RunResult = { success: true, executionMode: 'ssa', errorKind: 'none', status: 'success', stdout: '1\n', stderr: '', returnValue: '1', stepsExecuted: 3, executionDurationUs: 42, runtimeProfile: { functions: { main: { calls: 1, blocks_executed: 1, block_counts: { '0': 1 }, edge_counts: [], loops: {} } } }, compilation: response };
 vi.mock('./lib/api', async (original) => { const actual = await original<typeof import('./lib/api')>(); return { ...actual, compile: vi.fn(async () => response), run: vi.fn(async (_options, mode) => ({ ...runResponse, adaptiveEvents: mode === 'adaptive-jit' ? [{ kind: 'tier1_installed', function: 'main', calls: 2, detail: 'installed' }] : [] })), checkCorrectness: vi.fn(async () => ({ schemaVersion: 1, success: true, equivalent: true, checks: [{ stage: 'CoreIR', passed: true, status: 'passed', detail: 'reference execution completed' }], compilation: response })), getCapabilities: vi.fn(async () => ({ schemaVersion: 1, status: 'ok', ready: true, compilerRevision: 'test', executionPolicy: 'interpreter-only', capabilities: { llvmSupport: false, llvmIREmission: false, jitBuild: false, adaptiveJitBuild: false, allowedExecutionModes: ['core', 'ssa'] } })) }; });
 
 describe('compiler lab', () => {
-  beforeEach(() => window.history.pushState({}, '', '/lab'));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.pushState({}, '', '/lab');
+  });
 
   it('keeps code, IR, and the compiler timeline in the focused workbench', async () => {
     render(<App />);
@@ -120,10 +123,32 @@ describe('compiler lab', () => {
     window.history.pushState({}, '', '/verification');
     render(<App />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Compare O-levels' })).toBeDisabled());
+    expect(screen.getAllByRole('button', { name: 'Retry service' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'check correctness' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Measure this program' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Run correctness check' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Run SSA' })).toBeDisabled();
+  });
+  it('recovers capabilities through Retry service without losing the current view', async () => {
+    vi.mocked(getCapabilities).mockRejectedValueOnce(new Error('service offline'));
+    window.history.pushState({}, '', '/verification');
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Retry service' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Retry service' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'ssa' })).toBeEnabled());
+    expect(getCapabilities).toHaveBeenCalledTimes(2);
+  });
+  it('keeps benchmark failures visible and retryable', async () => {
+    window.history.pushState({}, '', '/verification');
+    vi.mocked(run)
+      .mockResolvedValueOnce({ ...runResponse, executionMode: 'ssa' })
+      .mockResolvedValueOnce({ ...runResponse, success: false, status: 'runtime_error', stderr: 'sample exceeded the configured step limit', errorKind: 'resource_limit', executionMode: 'ssa' });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Benchmark' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Benchmark' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Measurement failed'));
+    expect(screen.getByRole('button', { name: 'Retry benchmark' })).toBeEnabled();
+    expect(compile).toHaveBeenCalled();
   });
   it('runs only supported execution engines, correctness, and comparison from verification', async () => {
     window.history.pushState({}, '', '/verification');
@@ -131,7 +156,7 @@ describe('compiler lab', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'ssa' })).toBeEnabled());
     expect(screen.getByRole('button', { name: 'adaptive-jit' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'ssa' }));
-    await waitFor(() => expect(screen.getByText(/status: success/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Execution mode: SSA interpreter/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'check correctness' }));
     await waitFor(() => expect(screen.getByText('CoreIR')).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Compare O-levels' }));

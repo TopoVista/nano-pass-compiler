@@ -56,6 +56,16 @@ enum class ExecutionMode { CoreInterpreter, SSAInterpreter, JIT, AdaptiveJIT };
 enum class ExecutionPolicy { Disabled, InterpreterOnly, LocalTrusted };
 enum class CorrectnessCheckStatus { Passed, Failed, Skipped, Unavailable };
 
+inline const char *executionModeName(ExecutionMode mode) {
+  switch (mode) {
+  case ExecutionMode::CoreInterpreter: return "core";
+  case ExecutionMode::SSAInterpreter: return "ssa";
+  case ExecutionMode::JIT: return "jit";
+  case ExecutionMode::AdaptiveJIT: return "adaptive-jit";
+  }
+  return "ssa";
+}
+
 inline const char *executionPolicyName(ExecutionPolicy policy) {
   switch (policy) {
   case ExecutionPolicy::Disabled: return "disabled";
@@ -203,6 +213,10 @@ struct AdaptiveEvent {
 struct RunResponseV1 {
   uint32_t schemaVersion = kCompilerServiceSchemaVersion;
   bool success = false;
+  // The service echoes the mode it attempted. This remains present for denied
+  // and failed requests, so clients never have to infer an engine from an
+  // error category or status string.
+  ExecutionMode executionMode = ExecutionMode::SSAInterpreter;
   ErrorKind errorKind = ErrorKind::None;
   std::string stdoutText, stderrText, returnValue, status;
   uint64_t stepsExecuted = 0;
@@ -560,7 +574,7 @@ public:
   }
 
   RunResponseV1 run(const RunRequestV1 &request) const {
-    RunResponseV1 response; response.compilation=compile(request.compile); if (!response.compilation.success) { response.errorKind=response.compilation.diagnostics.empty()?ErrorKind::Internal:response.compilation.diagnostics.front().kind; response.status="compile_error"; return response; }
+    RunResponseV1 response; response.executionMode=request.mode; response.compilation=compile(request.compile); if (!response.compilation.success) { response.errorKind=response.compilation.diagnostics.empty()?ErrorKind::Internal:response.compilation.diagnostics.front().kind; response.status="compile_error"; return response; }
     if (!allows(request.mode)) {
       response.errorKind = ErrorKind::Runtime;
       response.status = "execution_policy_denied";
@@ -729,7 +743,7 @@ inline std::string compileResponseJson(const CompileResponseV1 &response) {
   for(size_t i=0;i<response.graphs.size();++i){if(i)out<<',';const auto&g=response.graphs[i];out<<"{\"kind\":\""<<g.kind<<"\",\"function\":\""<<jsonEscape(g.function)<<"\",\"nodes\":[";for(size_t j=0;j<g.nodes.size();++j){if(j)out<<',';const auto&node=g.nodes[j];out<<"{\"id\":\""<<jsonEscape(node.id)<<"\",\"label\":\""<<jsonEscape(node.label)<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:node.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"],\"edges\":[";for(size_t j=0;j<g.edges.size();++j){if(j)out<<',';const auto&edge=g.edges[j];out<<"{\"from\":\""<<jsonEscape(edge.from)<<"\",\"to\":\""<<jsonEscape(edge.to)<<"\",\"kind\":\""<<edge.kind<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:edge.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"]}";} out<<"],\"values\":[";
   for(size_t i=0;i<response.values.size();++i){if(i)out<<',';const auto&v=response.values[i];out<<"{\"value\":"<<v.value<<",\"function\":\""<<jsonEscape(v.function)<<"\",\"kind\":\""<<v.kind<<"\",\"type\":\""<<v.type<<"\",\"definingBlock\":"<<v.definingBlock<<",\"line\":"<<v.line<<",\"column\":"<<v.column<<",\"uses\":[";for(size_t j=0;j<v.uses.size();++j){if(j)out<<',';const auto&use=v.uses[j];out<<"{\"kind\":\""<<use.kind<<"\",\"block\":"<<use.block<<",\"detail\":\""<<jsonEscape(use.detail)<<"\"}";}out<<"]}";} out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"policyRecords\":[";for(size_t i=0;i<response.policyRecords.size();++i){if(i)out<<',';out<<response.policyRecords[i];}out<<"],\"telemetry\":{\"totalCompileUs\":"<<response.totalCompileUs<<",\"functions\":"<<response.functions<<",\"blocks\":"<<response.blocks<<",\"values\":"<<response.valuesCount<<",\"instructions\":"<<response.instructions<<"}}"; return out.str();
 }
-inline std::string runResponseJson(const RunResponseV1 &response) { std::ostringstream out; out<<"{\"schemaVersion\":"<<response.schemaVersion<<",\"success\":"<<(response.success?"true":"false")<<",\"errorKind\":\""<<errorKindName(response.errorKind)<<"\",\"status\":\""<<jsonEscape(response.status)<<"\",\"stdout\":\""<<jsonEscape(response.stdoutText)<<"\",\"stderr\":\""<<jsonEscape(response.stderrText)<<"\",\"returnValue\":\""<<jsonEscape(response.returnValue)<<"\",\"stepsExecuted\":"<<response.stepsExecuted<<",\"executionDurationUs\":"<<response.executionDurationUs<<",\"runtimeProfile\":"<< (response.runtimeProfileJson.empty()?"null":response.runtimeProfileJson) <<",\"adaptiveEvents\":[";for(size_t i=0;i<response.adaptiveEvents.size();++i){if(i)out<<',';const auto&event=response.adaptiveEvents[i];out<<"{\"kind\":\""<<jsonEscape(event.kind)<<"\",\"function\":\""<<jsonEscape(event.function)<<"\",\"calls\":"<<event.calls<<",\"detail\":\""<<jsonEscape(event.detail)<<"\"}";}out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"compilation\":"<<compileResponseJson(response.compilation)<<"}";return out.str(); }
+inline std::string runResponseJson(const RunResponseV1 &response) { std::ostringstream out; out<<"{\"schemaVersion\":"<<response.schemaVersion<<",\"success\":"<<(response.success?"true":"false")<<",\"executionMode\":\""<<executionModeName(response.executionMode)<<"\",\"errorKind\":\""<<errorKindName(response.errorKind)<<"\",\"status\":\""<<jsonEscape(response.status)<<"\",\"stdout\":\""<<jsonEscape(response.stdoutText)<<"\",\"stderr\":\""<<jsonEscape(response.stderrText)<<"\",\"returnValue\":\""<<jsonEscape(response.returnValue)<<"\",\"stepsExecuted\":"<<response.stepsExecuted<<",\"executionDurationUs\":"<<response.executionDurationUs<<",\"runtimeProfile\":"<< (response.runtimeProfileJson.empty()?"null":response.runtimeProfileJson) <<",\"adaptiveEvents\":[";for(size_t i=0;i<response.adaptiveEvents.size();++i){if(i)out<<',';const auto&event=response.adaptiveEvents[i];out<<"{\"kind\":\""<<jsonEscape(event.kind)<<"\",\"function\":\""<<jsonEscape(event.function)<<"\",\"calls\":"<<event.calls<<",\"detail\":\""<<jsonEscape(event.detail)<<"\"}";}out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"compilation\":"<<compileResponseJson(response.compilation)<<"}";return out.str(); }
 inline std::string correctnessResponseJson(const CorrectnessResponseV1 &response) { std::ostringstream out; out << "{\"schemaVersion\":" << response.schemaVersion << ",\"success\":" << (response.success ? "true" : "false") << ",\"equivalent\":" << (response.equivalent ? "true" : "false") << ",\"checks\":["; for (size_t index = 0; index < response.checks.size(); ++index) { if (index) out << ','; const auto &check = response.checks[index]; out << "{\"stage\":\"" << jsonEscape(check.stage) << "\",\"passed\":" << (check.passed ? "true" : "false") << ",\"status\":\"" << correctnessCheckStatusName(check.status) << "\",\"detail\":\"" << jsonEscape(check.detail) << "\"}"; } out << "],\"compilation\":" << compileResponseJson(response.compilation) << '}'; return out.str(); }
 
 } // namespace nanopass::service

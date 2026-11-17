@@ -63,9 +63,12 @@ A successful compile response includes structured diagnostics, named IR
 snapshots (including source when requested), transformation before/after
 snapshots, pass events, optimization remarks, graph nodes/edges, SSA value
 provenance, policy feature vectors, and aggregate telemetry. A run response
-additionally reports stdout, stderr, return value, resource/runtime status,
+additionally reports the acknowledged `executionMode` (`core`, `ssa`, `jit`,
+or `adaptive-jit`), stdout, stderr, return value, resource/runtime status,
 optional runtime profile, structured adaptive-JIT events, and dynamic policy
-features.
+features. Clients show the acknowledged mode as the execution engine. An
+older schema-v1 service that omits the field is labelled as the requested mode
+with an explicit compatibility note, not as a backend acknowledgement.
 
 Learned/heuristic inline requests additionally expose `policyRecords`: factual
 candidate features, heuristic action, policy type/model version, confidence
@@ -105,6 +108,12 @@ interpreter-only deployment therefore presents JIT modes as unavailable; it
 does not send a request and display a made-up failed execution. A local-trusted
 JIT build can advertise `jit` and `adaptive-jit` only when both the build and
 execution policy permit them.
+
+The browser validates the complete readiness shape before enabling execution.
+An invalid or incomplete response is treated as unavailable. The retry control
+makes one replacement request, aborts an older pending readiness request, and
+ignores stale responses, so a cold service can recover without a reload or
+uncontrolled polling.
 
 `telemetry.instructions` is the final verified program instruction count for
 the requested compilation. Individual pass events retain their own before and

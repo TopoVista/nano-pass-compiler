@@ -9,15 +9,16 @@ export type Remark = { kind: 'applied' | 'missed' | 'analysis'; passId: string; 
 export type ValueInfo = { value: number; function: string; kind: string; type: string; definingBlock: number; line: number; column: number; uses?: { kind: string; block: number; detail: string }[] };
 export type PolicyFeature = { function: string; instructions: number; blocks: number; loops: number; callers: number; callees: number; dynamicCalls: number; dynamicBlocks: number; dynamicLoopBackedges: number; hotness: string; hotnessReason: string };
 export type InlinePolicyRecord = { record_kind: 'inline-imitation'; caller: string; callee: string; features: { instruction_count: number; block_count: number; dynamic_call_count: number; callee_count: number }; estimated_inline_cost: number; caller_instruction_count: number; heuristic_action: 'inline' | 'do-not-inline'; legality: 'pass' | string; policy_type: 'heuristic' | 'learned'; model_version?: string; model_action?: 'inline' | 'do-not-inline'; confidence?: number };
-export type Compilation = { schemaVersion: number; success: boolean; compilerRevision: string; diagnostics: Diagnostic[]; snapshots: Snapshot[]; transformations: Transformation[]; passes: PassEvent[]; remarks: Remark[]; graphs: Graph[]; values: ValueInfo[]; policyFeatures: PolicyFeature[]; policyRecords?: InlinePolicyRecord[]; telemetry: { totalCompileUs: number; functions: number; blocks: number; values: number; instructions: number } };
+export type Compilation = { schemaVersion: number; success: boolean; compilerRevision: string; diagnostics: Diagnostic[]; snapshots: Snapshot[]; transformations: Transformation[]; passes: PassEvent[]; remarks: Remark[]; graphs: Graph[]; values: ValueInfo[]; policyFeatures: PolicyFeature[]; policyRecords?: InlinePolicyRecord[]; telemetry: { totalCompileUs: number; functions: number; blocks: number; values: number; instructions: number }; clientCached?: boolean };
 export type AdaptiveEvent = { kind: string; function: string; calls: number; detail: string };
 export type CorrectnessCheckStatus = 'passed' | 'failed' | 'skipped' | 'unavailable';
 export type CorrectnessResult = { schemaVersion: number; success: boolean; equivalent: boolean; checks: { stage: string; passed: boolean; status: CorrectnessCheckStatus; detail: string }[]; compilation: Compilation };
-export type RunResult = { success: boolean; errorKind: string; status: string; stdout: string; stderr: string; returnValue: string; stepsExecuted: number; executionDurationUs?: number; runtimeProfile: RuntimeProfile | null; adaptiveEvents?: AdaptiveEvent[]; policyFeatures?: PolicyFeature[]; compilation: Compilation };
+export type RunMode = 'core' | 'ssa' | 'jit' | 'adaptive-jit';
+export type RunResult = { success: boolean; executionMode: RunMode; executionModeReported?: boolean; errorKind: string; status: string; stdout: string; stderr: string; returnValue: string; stepsExecuted: number; executionDurationUs?: number; runtimeProfile: RuntimeProfile | null; adaptiveEvents?: AdaptiveEvent[]; policyFeatures?: PolicyFeature[]; compilation: Compilation };
 export type RuntimeProfile = { functions?: Record<string, { calls: number; blocks_executed: number; block_counts: Record<string, number>; edge_counts: { from: number; to: number; count: number }[]; loops: Record<string, { entries: number; backedges: number; exits: number }> }> };
 
 export type CompileOptions = { source: string; optimizationLevel: number; policy?: 'default' | 'heuristic' | 'learned'; passes?: string[]; includeSource?: boolean; includeSsa?: boolean; includeOptimizedSsa?: boolean; includeLLVM?: boolean; includeGraphs?: boolean; includeRemarks?: boolean; includeTelemetry?: boolean; includeProvenance?: boolean; includeCore?: boolean; includeAnf?: boolean; includeCfg?: boolean; includeAst?: boolean; includeDesugaredAst?: boolean };
-export type ServiceCapabilities = { schemaVersion: number; status: 'ok'; ready: boolean; compilerRevision: string; llvmVersion?: string; executionPolicy: 'disabled' | 'interpreter-only' | 'local-trusted'; capabilities: { llvmSupport: boolean; llvmIREmission: boolean; jitBuild: boolean; adaptiveJitBuild: boolean; allowedExecutionModes: Array<'core' | 'ssa' | 'jit' | 'adaptive-jit'> } };
+export type ServiceCapabilities = { schemaVersion: number; status: 'ok'; ready: boolean; compilerRevision: string; llvmVersion?: string; executionPolicy: 'disabled' | 'interpreter-only' | 'local-trusted'; capabilities: { llvmSupport: boolean; llvmIREmission: boolean; jitBuild: boolean; adaptiveJitBuild: boolean; allowedExecutionModes: RunMode[] } };
 // Vercel variables are injected at build time. Normalize the configured origin
 // so that a common dashboard value such as `https://api.example.com/` never
 // becomes a double-slash API request.
@@ -58,15 +59,30 @@ const request = async <T>(path: string, body: unknown, signal?: AbortSignal): Pr
   }
   return data;
 };
-export async function compile(options: CompileOptions, path = '/api/v1/compile', signal?: AbortSignal): Promise<Compilation> { const key = `${path}:${JSON.stringify(options)}`; const existing = cache.get(key); if (existing) { cache.delete(key); cache.set(key, existing); return existing; } const result = await request<Compilation>(path, { schemaVersion: 1, ...options }, signal); if (result.success) { cache.set(key, result); if (cache.size > maxCachedCompilations) cache.delete(cache.keys().next().value!); } return result; }
-export async function run(options: CompileOptions, mode: 'core' | 'ssa' | 'jit' | 'adaptive-jit', signal?: AbortSignal): Promise<RunResult> { return request<RunResult>('/api/v1/run', { schemaVersion: 1, ...options, mode }, signal); }
+export async function compile(options: CompileOptions, path = '/api/v1/compile', signal?: AbortSignal): Promise<Compilation> { const key = `${path}:${JSON.stringify(options)}`; const existing = cache.get(key); if (existing) { cache.delete(key); cache.set(key, existing); return { ...existing, clientCached: true }; } const result = await request<Compilation>(path, { schemaVersion: 1, ...options }, signal); if (result.success) { const canonical = { ...result, clientCached: false }; cache.set(key, canonical); if (cache.size > maxCachedCompilations) cache.delete(cache.keys().next().value!); return canonical; } return { ...result, clientCached: false }; }
+export async function run(options: CompileOptions, mode: RunMode, signal?: AbortSignal): Promise<RunResult> {
+  const response = await request<Partial<RunResult>>('/api/v1/run', { schemaVersion: 1, ...options, mode }, signal);
+  const reported = response.executionMode;
+  const executionMode = reported && ['core', 'ssa', 'jit', 'adaptive-jit'].includes(reported) ? reported : mode;
+  return { ...response, executionMode, executionModeReported: executionMode === reported } as RunResult;
+}
 export async function checkCorrectness(options: CompileOptions, signal?: AbortSignal): Promise<CorrectnessResult> { return request<CorrectnessResult>('/api/v1/correctness', { schemaVersion: 1, ...options }, signal); }
 export async function getCapabilities(signal?: AbortSignal): Promise<ServiceCapabilities> {
   let response: Response;
   try { response = await fetch(`${base}/api/v1/readiness`, { signal }); }
   catch (error) { if (error instanceof DOMException && error.name === 'AbortError') throw error; throw new CompilerServiceError('The compiler service could not be reached.'); }
-  const data = await response.json() as ServiceCapabilities;
-  if (!response.ok || data.schemaVersion !== 1) throw new CompilerServiceError('The compiler service readiness response is unsupported.', response.status);
+  let data: ServiceCapabilities;
+  try { data = await response.json() as ServiceCapabilities; }
+  catch { throw new CompilerServiceError('The compiler service readiness response is invalid.', response.status); }
+  const validMode = (mode: unknown): mode is RunMode => typeof mode === 'string' && ['core', 'ssa', 'jit', 'adaptive-jit'].includes(mode);
+  const validCapabilities = data.capabilities
+    && typeof data.capabilities.llvmSupport === 'boolean'
+    && typeof data.capabilities.llvmIREmission === 'boolean'
+    && typeof data.capabilities.jitBuild === 'boolean'
+    && typeof data.capabilities.adaptiveJitBuild === 'boolean'
+    && Array.isArray(data.capabilities.allowedExecutionModes)
+    && data.capabilities.allowedExecutionModes.every(validMode);
+  if (!response.ok || data.schemaVersion !== 1 || data.status !== 'ok' || typeof data.ready !== 'boolean' || typeof data.compilerRevision !== 'string' || !['disabled', 'interpreter-only', 'local-trusted'].includes(data.executionPolicy) || !validCapabilities) throw new CompilerServiceError('The compiler service readiness response is unsupported.', response.status);
   return data;
 }
 export const allowedPasses = ['sccp', 'simplify-cfg', 'constant-fold', 'algebraic-simplify', 'copy-prop', 'trivial-phi', 'cse', 'dce'];

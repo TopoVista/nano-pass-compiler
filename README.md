@@ -239,10 +239,12 @@ Recorded validation evidence and the scope of each campaign live in
 your machine or configuration.
 
 The current focused service/UI repair validation is recorded separately in the
-status document: the non-JIT service contract has **89/89** passing assertions,
-and the web type/unit/build checks pass with **16/16** unit tests. The real
-server-backed Playwright suite needs a healthy local LLVM-enabled
-`nano-server`; it is not inferred from a static frontend build.
+status document: the current interpreter-only service contract has **91/91**
+passing assertions, and the web type/unit/build checks pass with **23/23**
+unit tests. All **11/11** Playwright checks also passed against a current local
+interpreter-only `nano-server`; this is not inferred from a static frontend
+build. LLVM-backed CMake/CTest remains subject to the separately documented
+local LLVM installation health.
 
 ## Compiler Lab
 

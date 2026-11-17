@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeView } from "./components/CodeView";
 import {
   Diagnostics,
@@ -10,6 +10,7 @@ import { Correctness } from "./components/Correctness";
 import { OptimizationComparison } from "./components/Comparison";
 import {
   BenchmarkPanel,
+  type BenchmarkFailure,
   type BenchmarkMeasurement,
 } from "./components/BenchmarkPanel";
 import { PolicyFeatures } from "./components/PolicyFeatures";
@@ -26,6 +27,7 @@ import {
   run,
   type Compilation,
   type CorrectnessResult,
+  type RunMode,
   type RunResult,
   type ServiceCapabilities,
 } from "./lib/api";
@@ -126,7 +128,13 @@ const allArtifacts = {
   includeTelemetry: true,
   includeProvenance: true,
 };
-type RunMode = "core" | "ssa" | "jit" | "adaptive-jit";
+type ConnectionState = "connecting" | "ready" | "unavailable" | "recovering";
+const executionModeLabel: Record<RunMode, string> = {
+  core: "CoreIR interpreter",
+  ssa: "SSA interpreter",
+  jit: "LLVM ORC JIT",
+  "adaptive-jit": "Adaptive JIT",
+};
 type SharedSession = {
   source?: string;
   level?: number;
@@ -195,13 +203,18 @@ export default function App() {
   const [correctness, setCorrectness] = useState<CorrectnessResult>();
   const [comparison, setComparison] = useState<Compilation[]>();
   const [benchmark, setBenchmark] = useState<BenchmarkMeasurement>();
+  const [benchmarkError, setBenchmarkError] = useState<BenchmarkFailure>();
   const [busy, setBusy] = useState(false);
   const [serviceError, setServiceError] = useState<string>();
   const [capabilities, setCapabilities] = useState<ServiceCapabilities>();
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
   const [executionStep, setExecutionStep] = useState(0);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const latestCompile = useRef(0);
   const compileController = useRef<AbortController>();
+  const capabilityController = useRef<AbortController>();
+  const capabilityRequest = useRef<Promise<boolean>>();
+  const latestCapabilityRequest = useRef(0);
   const options = useMemo(
     () => ({
       source,
@@ -215,15 +228,52 @@ export default function App() {
   const optionsKey = JSON.stringify(options);
   const latestOptionsKey = useRef(optionsKey);
   latestOptionsKey.current = optionsKey;
-  useEffect(() => {
-    const controller = new AbortController();
-    void getCapabilities(controller.signal)
-      .then(setCapabilities)
-      .catch((error) => {
-        if (!controller.signal.aborted) setServiceError(error instanceof Error ? error.message : "The compiler service could not be reached.");
-      });
-    return () => controller.abort();
+  const serviceReady = connectionState === "ready" && capabilities?.ready === true;
+  const supportsMode = (mode: RunMode) => serviceReady && Boolean(capabilities?.capabilities.allowedExecutionModes.includes(mode));
+  const executionCapabilityNote = !serviceReady
+    ? "Compiler service unavailable. Execution controls remain disabled until readiness succeeds."
+    : `Available modes: ${capabilities?.capabilities.allowedExecutionModes.map((mode) => executionModeLabel[mode]).join(", ") ?? "none"}. Disabled modes are not provided by this service policy.`;
+  const unavailableModeMessage = (mode: RunMode) => capabilities
+    ? `${mode} is unavailable under ${capabilities.executionPolicy}.`
+    : "The compiler service is unavailable. Retry after it finishes starting.";
+  const markServiceUnavailable = useCallback((message: string) => {
+    setCapabilities(undefined);
+    setConnectionState("unavailable");
+    setServiceError(message);
   }, []);
+  const refreshCapabilities = useCallback((recovering = false, replace = false): Promise<boolean> => {
+    if (capabilityRequest.current && !replace) return capabilityRequest.current;
+    if (replace) capabilityController.current?.abort();
+    const requestId = ++latestCapabilityRequest.current;
+    const controller = new AbortController();
+    capabilityController.current = controller;
+    setConnectionState(recovering ? "recovering" : "connecting");
+    const request = getCapabilities(controller.signal)
+      .then((next) => {
+        if (requestId !== latestCapabilityRequest.current || controller.signal.aborted) return false;
+        setCapabilities(next);
+        setConnectionState(next.ready ? "ready" : "unavailable");
+        setServiceError(undefined);
+        return next.ready;
+      })
+      .catch((error) => {
+        if (requestId !== latestCapabilityRequest.current || controller.signal.aborted) return false;
+        markServiceUnavailable(error instanceof Error ? error.message : "The compiler service could not be reached.");
+        return false;
+      })
+      .finally(() => {
+        if (requestId === latestCapabilityRequest.current) capabilityRequest.current = undefined;
+      });
+    capabilityRequest.current = request;
+    return request;
+  }, [markServiceUnavailable]);
+  useEffect(() => {
+    void refreshCapabilities();
+    return () => {
+      ++latestCapabilityRequest.current;
+      capabilityController.current?.abort();
+    };
+  }, [refreshCapabilities]);
   const doCompile = async () => {
     const requestId = ++latestCompile.current;
     compileController.current?.abort();
@@ -235,6 +285,7 @@ export default function App() {
     setCorrectness(undefined);
     setComparison(undefined);
     setBenchmark(undefined);
+    setBenchmarkError(undefined);
     setServiceError(undefined);
     try {
       const response = await compile(options, "/api/v1/compile", controller.signal);
@@ -247,7 +298,7 @@ export default function App() {
         setSelectedStage(response.snapshots.at(-1)!.stageId);
     } catch (error) {
       if (controller.signal.aborted || requestId !== latestCompile.current) return;
-      setServiceError(error instanceof Error ? error.message : "The compiler service could not be reached.");
+      markServiceUnavailable(error instanceof Error ? error.message : "The compiler service could not be reached.");
     } finally {
       if (requestId === latestCompile.current) setBusy(false);
     }
@@ -263,8 +314,8 @@ export default function App() {
   }, [source, level, policy, custom.join(",")]);
   const doRun = async (mode: RunMode) => {
     const requestKey = optionsKey;
-    if (!capabilities?.capabilities.allowedExecutionModes.includes(mode)) {
-      setServiceError(`${mode} is unavailable for the connected compiler service.`);
+    if (!supportsMode(mode)) {
+      setServiceError(unavailableModeMessage(mode));
       return;
     }
     setBusy(true);
@@ -280,7 +331,7 @@ export default function App() {
     } catch {
       if (requestKey !== latestOptionsKey.current) return;
       setExecutionStep(0);
-      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+      markServiceUnavailable('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
     }
@@ -295,7 +346,7 @@ export default function App() {
       setCorrectness(response);
     } catch {
       if (requestKey !== latestOptionsKey.current) return;
-      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+      markServiceUnavailable('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
     }
@@ -314,7 +365,7 @@ export default function App() {
       setComparison(results);
     } catch {
       if (requestKey !== latestOptionsKey.current) return;
-      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+      markServiceUnavailable('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
     }
@@ -323,24 +374,31 @@ export default function App() {
     const requestKey = optionsKey;
     setBusy(true);
     setBenchmark(undefined);
+    setBenchmarkError(undefined);
     setServiceError(undefined);
     try {
       const compilation = await compile(options);
+      if (requestKey !== latestOptionsKey.current) return;
+      if (!compilation.success) {
+        setBenchmarkError({ phase: "compilation", message: compilation.diagnostics[0]?.message ?? "The compiler could not prepare this program for measurement." });
+        return;
+      }
       const warmup = await run(options, "ssa");
+      if (requestKey !== latestOptionsKey.current) return;
       if (!warmup.success) {
-        setServiceError(warmup.stderr || warmup.errorKind || "Benchmark warmup failed.");
+        setBenchmarkError({ phase: "warmup", message: warmup.stderr || warmup.errorKind || "The SSA interpreter could not complete the warmup." });
         return;
       }
       const samples: number[] = [];
       for (let index = 0; index < 5; ++index) {
         const measured = await run(options, "ssa");
+        if (requestKey !== latestOptionsKey.current) return;
         if (!measured.success || measured.executionDurationUs === undefined) {
-          setServiceError(measured.stderr || measured.errorKind || "Benchmark sample failed.");
+          setBenchmarkError({ phase: "measurement", message: measured.stderr || measured.errorKind || `Sample ${index + 1} did not produce an execution duration.` });
           return;
         }
         samples.push(measured.executionDurationUs);
       }
-      if (requestKey !== latestOptionsKey.current) return;
       const ordered = [...samples].sort((left, right) => left - right);
       const percentile = (fraction: number) =>
         ordered[Math.round((ordered.length - 1) * fraction)];
@@ -350,12 +408,14 @@ export default function App() {
         medianUs: percentile(0.5),
         p25Us: percentile(0.25),
         p75Us: percentile(0.75),
+        compilationCached: compilation.clientCached === true,
       });
     } catch {
       if (requestKey !== latestOptionsKey.current) return;
-      setServiceError('Compiler service unavailable. Retry after it finishes starting.');
+      setBenchmarkError({ phase: "service", message: "The compiler service could not complete the benchmark request." });
+      markServiceUnavailable('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
-      setBusy(false);
+      if (requestKey === latestOptionsKey.current) setBusy(false);
     }
   };
   const runTerminalCommand = async (rawCommand: string): Promise<TerminalReply> => {
@@ -400,7 +460,7 @@ export default function App() {
       if (verb === "run") {
         const mode = (argument || "ssa") as RunMode;
         if (!(["core", "ssa", "jit", "adaptive-jit"] as string[]).includes(mode)) return { tone: "error", lines: ["run expects: core, ssa, jit, or adaptive-jit"] };
-        if (!capabilities?.capabilities.allowedExecutionModes.includes(mode)) return { tone: "error", lines: [`${mode} is unavailable for the connected compiler service.`] };
+        if (!supportsMode(mode)) return { tone: "error", lines: [unavailableModeMessage(mode)] };
         setExecutionStep(1);
         const response = await run(options, mode);
         setRunResult(response);
@@ -442,7 +502,7 @@ export default function App() {
           samples.push(measured.executionDurationUs);
         }
         const ordered = [...samples].sort((left, right) => left - right);
-        const measurement = { compileUs: compilation.telemetry.totalCompileUs, samplesUs: samples, medianUs: ordered[Math.round((ordered.length - 1) * .5)], p25Us: ordered[Math.round((ordered.length - 1) * .25)], p75Us: ordered[Math.round((ordered.length - 1) * .75)] };
+        const measurement = { compileUs: compilation.telemetry.totalCompileUs, samplesUs: samples, medianUs: ordered[Math.round((ordered.length - 1) * .5)], p25Us: ordered[Math.round((ordered.length - 1) * .25)], p75Us: ordered[Math.round((ordered.length - 1) * .75)], compilationCached: compilation.clientCached === true };
         setBenchmark(measurement);
         return { tone: "success", lines: [`compile ${measurement.compileUs} μs`, `samples ${samples.join(", ")} μs`, `median ${measurement.medianUs} μs · p25/p75 ${measurement.p25Us}/${measurement.p75Us} μs`] };
       }
@@ -614,7 +674,11 @@ export default function App() {
       <span
         className={result?.success ? "compile-status good" : "compile-status"}
       >
-        {busy
+        {connectionState === "recovering"
+          ? "recovering compiler service…"
+          : connectionState === "unavailable"
+          ? "compiler service unavailable"
+          : busy
           ? result
             ? "updating compiler facts…"
             : "starting compiler service…"
@@ -626,7 +690,6 @@ export default function App() {
           ? "ready to compile"
           : "waiting for service"}
       </span>
-      {serviceError && <button className="service-retry" onClick={() => void doCompile()}>Retry compiler service</button>}
       <span className="compiler-revision" aria-label="Compiler revision">
         {result?.compilerRevision ?? "waiting"}
       </span>
@@ -822,14 +885,15 @@ export default function App() {
         <div>
           <strong>Run current source</strong>
           <span>Each mode uses the compiler service; unavailable engines report their real state.</span>
+          <span className="execution-capability-note" id="execution-capability-note">{executionCapabilityNote}</span>
         </div>
         <div>
           {(["core", "ssa", "jit", "adaptive-jit"] as RunMode[]).map((mode) => (
-            <button key={mode} disabled={busy || !capabilities?.capabilities.allowedExecutionModes.includes(mode)} title={capabilities && !capabilities.capabilities.allowedExecutionModes.includes(mode) ? `Unavailable under ${capabilities.executionPolicy}` : undefined} onClick={() => void doRun(mode)}>{mode}</button>
+            <button key={mode} aria-describedby="execution-capability-note" disabled={busy || !supportsMode(mode)} title={!supportsMode(mode) ? unavailableModeMessage(mode) : undefined} onClick={() => void doRun(mode)}>{mode}</button>
           ))}
-          <button disabled={busy || !capabilities?.ready} onClick={() => void doCompare()}>Compare O-levels</button>
-          <button disabled={busy || !capabilities?.ready} onClick={() => void doBenchmark()}>Benchmark</button>
-          <button className="verification-primary" disabled={busy || !capabilities?.ready} onClick={() => void doCorrectness()}>check correctness</button>
+          <button disabled={busy || !serviceReady} onClick={() => void doCompare()}>Compare O-levels</button>
+          <button disabled={busy || !serviceReady} onClick={() => void doBenchmark()}>Benchmark</button>
+          <button className="verification-primary" disabled={busy || !serviceReady} onClick={() => void doCorrectness()}>check correctness</button>
         </div>
       </section>
       <section className="verification-grid">
@@ -841,12 +905,12 @@ export default function App() {
                 <span key={label} className={executionStep > index ? "complete" : executionStep === index ? "active" : ""}><i>{index + 1}</i>{label}</span>
               ))}
             </div>
-            {runResult ? <pre className="output">{[`status: ${runResult.status}`, `engine: ${runResult.errorKind === "none" ? "completed request" : runResult.errorKind}`, runResult.stdout || "(no stdout)", runResult.stderr ? `stderr: ${runResult.stderr}` : "", runResult.returnValue ? `return ${runResult.returnValue}` : "", ...((runResult.adaptiveEvents ?? []).map((event) => `${event.kind} @${event.function}${event.detail ? ` · ${event.detail}` : ""}`))].filter(Boolean).join("\n")}</pre> : <p className="quiet">Use the terminal command <code>run ssa</code>, or choose an available engine above. Execution details appear after a real run.</p>}
+            {runResult ? <pre className="output">{[`Execution mode: ${executionModeLabel[runResult.executionMode]}${runResult.executionModeReported === false ? ' (requested; legacy service did not echo mode)' : ''}`, `Status: ${runResult.status}`, runResult.executionDurationUs !== undefined ? `Execution duration: ${runResult.executionDurationUs} μs` : "", runResult.stdout ? `Standard output:\n${runResult.stdout.trimEnd()}` : "Standard output: (no output)", runResult.stderr ? `Diagnostic: ${runResult.stderr}` : "", runResult.errorKind !== "none" ? `Error category: ${runResult.errorKind}` : "", runResult.returnValue ? `Return value: ${runResult.returnValue}` : "", ...((runResult.adaptiveEvents ?? []).map((event) => `${event.kind} @${event.function}${event.detail ? ` · ${event.detail}` : ""}`))].filter(Boolean).join("\n\n")}</pre> : <p className="quiet">Use the terminal command <code>run ssa</code>, or choose an available engine above. Execution details appear after a real run.</p>}
           </div>
         </div>
-        <Correctness result={correctness} disabled={busy || !capabilities?.ready} onRun={() => void doCorrectness()} />
+        <Correctness result={correctness} disabled={busy || !serviceReady} onRun={() => void doCorrectness()} />
         <OptimizationComparison results={comparison} />
-        <BenchmarkPanel result={benchmark} disabled={busy || !capabilities?.ready} onMeasure={() => void doBenchmark()} />
+        <BenchmarkPanel result={benchmark} error={benchmarkError} disabled={busy || !serviceReady} onMeasure={() => void doBenchmark()} />
       </section>
       <section className="panel verification-diagnostics"><Diagnostics diagnostics={result?.diagnostics ?? []} onSelect={setFocusLine} /></section>
     </section>
@@ -908,10 +972,11 @@ export default function App() {
             </select>
           </label>
           <button onClick={share}>Share session</button>
+          {connectionState === "unavailable" && <button className="service-retry topbar-retry" onClick={() => void refreshCapabilities(true, true)}>Retry service</button>}
           <button
             className="run"
-            disabled={busy || !capabilities?.capabilities.allowedExecutionModes.includes("ssa")}
-            title={capabilities && !capabilities.capabilities.allowedExecutionModes.includes("ssa") ? `SSA execution is unavailable under ${capabilities.executionPolicy}` : undefined}
+            disabled={busy || !supportsMode("ssa")}
+            title={!supportsMode("ssa") ? unavailableModeMessage("ssa") : undefined}
             onClick={() => void doRun("ssa")}
           >
             {busy ? "Compiling…" : "Run SSA"}
