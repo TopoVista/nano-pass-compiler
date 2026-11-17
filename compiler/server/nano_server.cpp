@@ -129,11 +129,22 @@ std::optional<ExecutionMode> decodeRunMode(const std::string &body, std::string 
 
 std::string errorJson(int status,std::string_view code,std::string_view message){std::ostringstream out;out<<"{\"schemaVersion\":1,\"success\":false,\"status\":"<<status;if(activeRequest)out<<",\"requestId\":\"req-"<<activeRequest->id<<"\"";out<<",\"error\":{\"code\":\""<<jsonEscape(code)<<"\",\"message\":\""<<jsonEscape(message)<<"\"}}";return out.str();}
 std::string healthJson(const CompilerService &service) {
+  const auto capabilities = service.capabilities();
   std::ostringstream out;
-  out << "{\"schemaVersion\":1,\"status\":\"ok\",\"ready\":true"
-      << ",\"compilerRevision\":\"" << nanopass::build::kCompilerRevision << "\""
+  out << "{\"schemaVersion\":" << capabilities.schemaVersion << ",\"status\":\"ok\",\"ready\":" << (capabilities.ready ? "true" : "false")
+      << ",\"compilerRevision\":\"" << jsonEscape(capabilities.compilerRevision) << "\""
       << ",\"llvmVersion\":\"" LLVM_VERSION_STRING "\""
-      << ",\"executionPolicy\":\"" << executionPolicyName(service.executionPolicy()) << "\"}";
+      << ",\"executionPolicy\":\"" << executionPolicyName(capabilities.executionPolicy) << "\""
+      << ",\"capabilities\":{\"llvmSupport\":" << (capabilities.llvmSupport ? "true" : "false")
+      << ",\"llvmIREmission\":" << (capabilities.llvmIREmission ? "true" : "false")
+      << ",\"jitBuild\":" << (capabilities.jitBuild ? "true" : "false")
+      << ",\"adaptiveJitBuild\":" << (capabilities.adaptiveJitBuild ? "true" : "false")
+      << ",\"allowedExecutionModes\":[";
+  for (size_t index = 0; index < capabilities.allowedExecutionModes.size(); ++index) {
+    if (index) out << ',';
+    out << "\"" << jsonEscape(capabilities.allowedExecutionModes[index]) << "\"";
+  }
+  out << "]}}";
   return out.str();
 }
 std::optional<std::string> requestHeader(std::string_view request, std::string_view name) {

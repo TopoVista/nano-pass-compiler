@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { CodeView } from "./components/CodeView";
 import {
   Diagnostics,
@@ -22,10 +22,12 @@ import {
   allowedPasses,
   checkCorrectness,
   compile,
+  getCapabilities,
   run,
   type Compilation,
   type CorrectnessResult,
   type RunResult,
+  type ServiceCapabilities,
 } from "./lib/api";
 import { formatNano } from "./lib/formatNano";
 import { generateNanoProgram } from "./lib/randomNano";
@@ -133,20 +135,37 @@ type SharedSession = {
   passes?: string[];
   graph?: string;
 };
+const policies = ["default", "heuristic", "learned"] as const;
+const stages = ["source", "ast", "desugared-ast", "core", "anf", "cfg", "ssa", "optimized-ssa", "llvm"];
+const graphs = ["cfg", "dominator-tree", "loops", "call-graph"];
+const maxSharedSourceBytes = 256 * 1024;
 const sessionFromHash = (): SharedSession => {
   try {
     const raw = window.location.hash.replace(/^#session=/, "");
-    return raw
-      ? (JSON.parse(
-          decodeURIComponent(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))),
-        ) as SharedSession)
-      : {};
+    if (!raw || raw.length > maxSharedSourceBytes * 2) return {};
+    const candidate = JSON.parse(
+      decodeURIComponent(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))),
+    ) as SharedSession;
+    const source = typeof candidate.source === "string" && candidate.source.length <= maxSharedSourceBytes ? candidate.source : undefined;
+    const level = Number.isInteger(candidate.level) && candidate.level! >= 0 && candidate.level! <= 3 ? candidate.level : undefined;
+    const passes = Array.isArray(candidate.passes) ? candidate.passes.filter((pass): pass is string => typeof pass === "string" && allowedPasses.includes(pass)).filter((pass, index, values) => values.indexOf(pass) === index) : undefined;
+    const policy = policies.includes(candidate.policy as typeof policies[number]) ? candidate.policy : undefined;
+    return {
+      source,
+      level,
+      // A custom pipeline always takes precedence when restoring a share. It
+      // is the only representation the service accepts for this combination.
+      policy: passes?.length ? "default" : policy,
+      passes,
+      stage: stages.includes(candidate.stage ?? "") ? candidate.stage : undefined,
+      graph: graphs.includes(candidate.graph ?? "") ? candidate.graph : undefined,
+    };
   } catch {
     return {};
   }
 };
 export default function App() {
-  const session = sessionFromHash();
+  const [session] = useState(sessionFromHash);
   const [route, setRoute] = useState(() => window.location.pathname);
   // Start with a small executable optimization example so the first-run
   // profile view demonstrates a complete compiler/runtime round trip.
@@ -178,8 +197,11 @@ export default function App() {
   const [benchmark, setBenchmark] = useState<BenchmarkMeasurement>();
   const [busy, setBusy] = useState(false);
   const [serviceError, setServiceError] = useState<string>();
+  const [capabilities, setCapabilities] = useState<ServiceCapabilities>();
   const [executionStep, setExecutionStep] = useState(0);
   const [editorExpanded, setEditorExpanded] = useState(false);
+  const latestCompile = useRef(0);
+  const compileController = useRef<AbortController>();
   const options = useMemo(
     () => ({
       source,
@@ -190,42 +212,73 @@ export default function App() {
     }),
     [source, level, policy, custom],
   );
+  const optionsKey = JSON.stringify(options);
+  const latestOptionsKey = useRef(optionsKey);
+  latestOptionsKey.current = optionsKey;
+  useEffect(() => {
+    const controller = new AbortController();
+    void getCapabilities(controller.signal)
+      .then(setCapabilities)
+      .catch((error) => {
+        if (!controller.signal.aborted) setServiceError(error instanceof Error ? error.message : "The compiler service could not be reached.");
+      });
+    return () => controller.abort();
+  }, []);
   const doCompile = async () => {
+    const requestId = ++latestCompile.current;
+    compileController.current?.abort();
+    const controller = new AbortController();
+    compileController.current = controller;
     setBusy(true);
+    setResult(undefined);
     setRunResult(undefined);
     setCorrectness(undefined);
+    setComparison(undefined);
+    setBenchmark(undefined);
     setServiceError(undefined);
     try {
-      const response = await compile(options);
+      const response = await compile(options, "/api/v1/compile", controller.signal);
+      if (requestId !== latestCompile.current) return;
       setResult(response);
       if (
         response.snapshots.length &&
         !response.snapshots.some((snapshot) => snapshot.stageId === selectedStage)
       )
         setSelectedStage(response.snapshots.at(-1)!.stageId);
-    } catch {
-      setServiceError("The compiler service is waking up or unavailable. Check its URL, then retry.");
+    } catch (error) {
+      if (controller.signal.aborted || requestId !== latestCompile.current) return;
+      setServiceError(error instanceof Error ? error.message : "The compiler service could not be reached.");
     } finally {
-      setBusy(false);
+      if (requestId === latestCompile.current) setBusy(false);
     }
   };
   useEffect(() => {
     const handle = window.setTimeout(() => {
       void doCompile();
     }, 450);
-    return () => window.clearTimeout(handle);
+    return () => {
+      window.clearTimeout(handle);
+      compileController.current?.abort();
+    };
   }, [source, level, policy, custom.join(",")]);
   const doRun = async (mode: RunMode) => {
+    const requestKey = optionsKey;
+    if (!capabilities?.capabilities.allowedExecutionModes.includes(mode)) {
+      setServiceError(`${mode} is unavailable for the connected compiler service.`);
+      return;
+    }
     setBusy(true);
     setExecutionStep(1);
     setServiceError(undefined);
     try {
       const response = await run(options, mode);
+      if (requestKey !== latestOptionsKey.current) return;
       setRunResult(response);
       [2, 3, 4].forEach((step, index) =>
         window.setTimeout(() => setExecutionStep(step), 260 * (index + 1)),
       );
     } catch {
+      if (requestKey !== latestOptionsKey.current) return;
       setExecutionStep(0);
       setServiceError('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
@@ -233,46 +286,61 @@ export default function App() {
     }
   };
   const doCorrectness = async () => {
+    const requestKey = optionsKey;
     setBusy(true);
     setServiceError(undefined);
     try {
-      setCorrectness(await checkCorrectness(options));
+      const response = await checkCorrectness(options);
+      if (requestKey !== latestOptionsKey.current) return;
+      setCorrectness(response);
     } catch {
+      if (requestKey !== latestOptionsKey.current) return;
       setServiceError('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
     }
   };
   const doCompare = async () => {
+    const requestKey = optionsKey;
     setBusy(true);
     setServiceError(undefined);
     try {
-      setComparison(
-        await Promise.all(
+      const results = await Promise.all(
           [0, 1, 2, 3].map((optimizationLevel) =>
             compile({ ...options, optimizationLevel }),
           ),
-        ),
-      );
+        );
+      if (requestKey !== latestOptionsKey.current) return;
+      setComparison(results);
     } catch {
+      if (requestKey !== latestOptionsKey.current) return;
       setServiceError('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
     }
   };
   const doBenchmark = async () => {
+    const requestKey = optionsKey;
     setBusy(true);
     setBenchmark(undefined);
     setServiceError(undefined);
     try {
       const compilation = await compile(options);
-      await run(options, "ssa");
+      const warmup = await run(options, "ssa");
+      if (!warmup.success) {
+        setServiceError(warmup.stderr || warmup.errorKind || "Benchmark warmup failed.");
+        return;
+      }
       const samples: number[] = [];
       for (let index = 0; index < 5; ++index) {
         const measured = await run(options, "ssa");
-        if (!measured.success || measured.executionDurationUs === undefined) return;
+        if (!measured.success || measured.executionDurationUs === undefined) {
+          setServiceError(measured.stderr || measured.errorKind || "Benchmark sample failed.");
+          return;
+        }
         samples.push(measured.executionDurationUs);
       }
+      if (requestKey !== latestOptionsKey.current) return;
       const ordered = [...samples].sort((left, right) => left - right);
       const percentile = (fraction: number) =>
         ordered[Math.round((ordered.length - 1) * fraction)];
@@ -284,6 +352,7 @@ export default function App() {
         p75Us: percentile(0.75),
       });
     } catch {
+      if (requestKey !== latestOptionsKey.current) return;
       setServiceError('Compiler service unavailable. Retry after it finishes starting.');
     } finally {
       setBusy(false);
@@ -309,8 +378,8 @@ export default function App() {
     if (verb === "clear") return { lines: [], clear: true };
     if (verb === "policy") {
       if (argument === "default" || argument === "heuristic" || argument === "learned") {
-        setPolicy(argument);
-        return { tone: "success", lines: [`Selected ${argument} policy. The compiler will re-evaluate the current source.`, argument === "learned" ? "Scope is bounded to reviewed inline profitability decisions; the verifier remains mandatory." : ""] .filter(Boolean) };
+        selectPolicy(argument);
+        return { tone: "success", lines: [`Selected ${argument} policy. ${argument === "default" ? "The compiler will re-evaluate the current source." : "Custom passes were cleared before the compiler re-evaluates the current source."}`, argument === "learned" ? "Scope is bounded to reviewed inline profitability decisions; the verifier remains mandatory." : ""] .filter(Boolean) };
       }
       return { tone: "error", lines: ["policy expects: default, heuristic, or learned"] };
     }
@@ -331,6 +400,7 @@ export default function App() {
       if (verb === "run") {
         const mode = (argument || "ssa") as RunMode;
         if (!(["core", "ssa", "jit", "adaptive-jit"] as string[]).includes(mode)) return { tone: "error", lines: ["run expects: core, ssa, jit, or adaptive-jit"] };
+        if (!capabilities?.capabilities.allowedExecutionModes.includes(mode)) return { tone: "error", lines: [`${mode} is unavailable for the connected compiler service.`] };
         setExecutionStep(1);
         const response = await run(options, mode);
         setRunResult(response);
@@ -361,7 +431,7 @@ export default function App() {
       if (verb === "correctness") {
         const response = await checkCorrectness(options);
         setCorrectness(response);
-        return { tone: response.equivalent ? "success" : "error", lines: response.checks.map((check) => `${check.passed ? "✓" : "×"} ${check.stage}: ${check.detail}`) };
+        return { tone: response.equivalent ? "success" : "error", lines: response.checks.map((check) => `${check.status === "passed" ? "✓" : check.status === "failed" ? "×" : "-"} ${check.stage} [${check.status}]: ${check.detail}`) };
       }
       if (verb === "benchmark") {
         const compilation = await compile(options);
@@ -420,6 +490,14 @@ export default function App() {
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  const selectPolicy = (next: "default" | "heuristic" | "learned") => {
+    if (next !== "default") setCustom([]);
+    setPolicy(next);
+  };
+  const toggleCustomPass = (pass: string) => {
+    if (!custom.includes(pass)) setPolicy("default");
+    setCustom((current) => current.includes(pass) ? current.filter((item) => item !== pass) : [...current, pass]);
+  };
   const snapshot =
     result?.snapshots.find((item) => item.stageId === selectedStage) ??
     result?.snapshots.at(-1);
@@ -482,8 +560,7 @@ export default function App() {
         <select
           aria-label="Inline policy"
           value={policy}
-          disabled={custom.length > 0}
-          onChange={(event) => setPolicy(event.target.value as typeof policy)}
+          onChange={(event) => selectPolicy(event.target.value as typeof policy)}
         >
           <option value="default">Default pipeline</option>
           <option value="heuristic">Heuristic</option>
@@ -503,13 +580,7 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={custom.includes(pass)}
-                onChange={() =>
-                  setCustom((current) =>
-                    current.includes(pass)
-                      ? current.filter((item) => item !== pass)
-                      : [...current, pass],
-                  )
-                }
+                onChange={() => toggleCustomPass(pass)}
               />
               {pass}
             </label>
@@ -551,7 +622,9 @@ export default function App() {
           ? result.success
             ? `verified · ${result.telemetry.totalCompileUs} μs`
             : "diagnostics reported"
-          : "waiting"}
+          : capabilities?.ready
+          ? "ready to compile"
+          : "waiting for service"}
       </span>
       {serviceError && <button className="service-retry" onClick={() => void doCompile()}>Retry compiler service</button>}
       <span className="compiler-revision" aria-label="Compiler revision">
@@ -752,11 +825,11 @@ export default function App() {
         </div>
         <div>
           {(["core", "ssa", "jit", "adaptive-jit"] as RunMode[]).map((mode) => (
-            <button key={mode} disabled={busy} onClick={() => void doRun(mode)}>{mode}</button>
+            <button key={mode} disabled={busy || !capabilities?.capabilities.allowedExecutionModes.includes(mode)} title={capabilities && !capabilities.capabilities.allowedExecutionModes.includes(mode) ? `Unavailable under ${capabilities.executionPolicy}` : undefined} onClick={() => void doRun(mode)}>{mode}</button>
           ))}
-          <button disabled={busy} onClick={() => void doCompare()}>Compare O-levels</button>
-          <button disabled={busy} onClick={() => void doBenchmark()}>Benchmark</button>
-          <button className="verification-primary" disabled={busy} onClick={() => void doCorrectness()}>check correctness</button>
+          <button disabled={busy || !capabilities?.ready} onClick={() => void doCompare()}>Compare O-levels</button>
+          <button disabled={busy || !capabilities?.ready} onClick={() => void doBenchmark()}>Benchmark</button>
+          <button className="verification-primary" disabled={busy || !capabilities?.ready} onClick={() => void doCorrectness()}>check correctness</button>
         </div>
       </section>
       <section className="verification-grid">
@@ -768,12 +841,12 @@ export default function App() {
                 <span key={label} className={executionStep > index ? "complete" : executionStep === index ? "active" : ""}><i>{index + 1}</i>{label}</span>
               ))}
             </div>
-            {runResult ? <pre className="output">{[runResult.stdout || "(no output)", runResult.returnValue ? `return ${runResult.returnValue}` : "", ...((runResult.adaptiveEvents ?? []).map((event) => `${event.kind} @${event.function}${event.detail ? ` · ${event.detail}` : ""}`))].filter(Boolean).join("\n")}</pre> : <p className="quiet">Use the terminal command <code>run ssa</code>, or choose an engine above. Execution traces appear here after a real run.</p>}
+            {runResult ? <pre className="output">{[`status: ${runResult.status}`, `engine: ${runResult.errorKind === "none" ? "completed request" : runResult.errorKind}`, runResult.stdout || "(no stdout)", runResult.stderr ? `stderr: ${runResult.stderr}` : "", runResult.returnValue ? `return ${runResult.returnValue}` : "", ...((runResult.adaptiveEvents ?? []).map((event) => `${event.kind} @${event.function}${event.detail ? ` · ${event.detail}` : ""}`))].filter(Boolean).join("\n")}</pre> : <p className="quiet">Use the terminal command <code>run ssa</code>, or choose an available engine above. Execution details appear after a real run.</p>}
           </div>
         </div>
-        <Correctness result={correctness} onRun={() => void doCorrectness()} />
+        <Correctness result={correctness} disabled={busy || !capabilities?.ready} onRun={() => void doCorrectness()} />
         <OptimizationComparison results={comparison} />
-        <BenchmarkPanel result={benchmark} onMeasure={() => void doBenchmark()} />
+        <BenchmarkPanel result={benchmark} disabled={busy || !capabilities?.ready} onMeasure={() => void doBenchmark()} />
       </section>
       <section className="panel verification-diagnostics"><Diagnostics diagnostics={result?.diagnostics ?? []} onSelect={setFocusLine} /></section>
     </section>
@@ -809,8 +882,8 @@ export default function App() {
         </nav>
         <div className="rail-status">
           <span>LOCAL COMPILER</span>
-          <b><i /> {result?.success ? "Verifier passed" : "Compiler ready"}</b>
-          <small>{result ? `${result.telemetry.functions} function${result.telemetry.functions === 1 ? "" : "s"} · ${result.telemetry.blocks} blocks` : "Awaiting source"}</small>
+          <b><i /> {result?.success ? "Verifier passed" : serviceError ? "Service disconnected" : capabilities?.ready ? "Compiler ready" : "Connecting"}</b>
+          <small>{result ? `${result.telemetry.functions} function${result.telemetry.functions === 1 ? "" : "s"} · ${result.telemetry.blocks} blocks` : capabilities?.executionPolicy ? capabilities.executionPolicy : "Awaiting service"}</small>
         </div>
       </aside>
       <section className="app-main">
@@ -837,7 +910,8 @@ export default function App() {
           <button onClick={share}>Share session</button>
           <button
             className="run"
-            disabled={busy}
+            disabled={busy || !capabilities?.capabilities.allowedExecutionModes.includes("ssa")}
+            title={capabilities && !capabilities.capabilities.allowedExecutionModes.includes("ssa") ? `SSA execution is unavailable under ${capabilities.executionPolicy}` : undefined}
             onClick={() => void doRun("ssa")}
           >
             {busy ? "Compiling…" : "Run SSA"}

@@ -51,7 +51,7 @@ cheap.
 | Method | Route | Result |
 | --- | --- | --- |
 | `GET` | `/api/v1/health` | local service and schema status |
-| `GET` | `/api/v1/readiness` | initialized compiler runtime, LLVM version, and execution policy |
+| `GET` | `/api/v1/readiness` | initialized compiler runtime, LLVM version, execution policy, and the actual enabled execution modes |
 | `POST` | `/api/v1/compile` | checked pipeline and requested artifacts |
 | `POST` | `/api/v1/analyze` | compile plus CFG, dominator, loop, call-graph, and provenance artifacts |
 | `POST` | `/api/v1/optimize` | compile plus optimized SSA, telemetry, and optimization remarks |
@@ -78,6 +78,38 @@ lowering event and the actual desugaring/optimization events. The service does
 not synthesize a per-pass result when the compiler only exposes a pipeline-wide
 measurement.
 
+## Readiness and feature gating
+
+`GET /api/v1/readiness` is the source of truth for what a particular service
+can execute. In addition to `ready`, `compilerRevision`, `llvmVersion`, and
+`executionPolicy`, it returns a `capabilities` object:
+
+```json
+{
+  "schemaVersion": 1,
+  "status": "ok",
+  "ready": true,
+  "executionPolicy": "interpreter-only",
+  "capabilities": {
+    "llvmSupport": false,
+    "llvmIREmission": false,
+    "jitBuild": false,
+    "adaptiveJitBuild": false,
+    "allowedExecutionModes": ["core", "ssa"]
+  }
+}
+```
+
+The frontend must use `allowedExecutionModes` to enable run controls. An
+interpreter-only deployment therefore presents JIT modes as unavailable; it
+does not send a request and display a made-up failed execution. A local-trusted
+JIT build can advertise `jit` and `adaptive-jit` only when both the build and
+execution policy permit them.
+
+`telemetry.instructions` is the final verified program instruction count for
+the requested compilation. Individual pass events retain their own before and
+after counts and must not be summed to create an artificial final metric.
+
 Graph IDs are stable strings such as `main:bb3`; they are not memory
 addresses. SSA value records include definition function/block, type, all
 uses, source location when retained by the compiler, and are emitted in
@@ -91,6 +123,11 @@ LLVM textual IR is available whenever `nano-server` is built with a healthy
 LLVM package. `jit` and `adaptive-jit` additionally require
 `NANO_BUILD_JIT=ON`. If unavailable, execution returns an explicit
 `capability_unavailable` result; it does not pretend to have run native code.
+
+The bounded correctness route has a separate status per check: `passed`,
+`failed`, `skipped`, or `unavailable`. `passed` means an executed comparison
+matched; `unavailable` and `skipped` communicate why a build or policy did not
+run a check and must never be rendered as a correctness failure.
 
 ## Error model
 

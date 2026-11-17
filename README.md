@@ -238,6 +238,12 @@ Recorded validation evidence and the scope of each campaign live in
 [docs/STATUS.md](docs/STATUS.md). Historical test counts are not claims about
 your machine or configuration.
 
+The current focused service/UI repair validation is recorded separately in the
+status document: the non-JIT service contract has **89/89** passing assertions,
+and the web type/unit/build checks pass with **16/16** unit tests. The real
+server-backed Playwright suite needs a healthy local LLVM-enabled
+`nano-server`; it is not inferred from a static frontend build.
+
 ## Compiler Lab
 
 The web app is an inspector over the versioned `nano-server` API, not a mock

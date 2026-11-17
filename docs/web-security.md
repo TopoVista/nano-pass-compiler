@@ -22,6 +22,9 @@ is deliberately narrow:
 - Native JIT/adaptive execution is controlled by `--execution-policy`:
   `disabled`, `interpreter-only`, or `local-trusted`. The default server binds
   loopback; `--bind=all` is an explicit container/deployment choice.
+- The readiness endpoint exposes the build/policy-derived execution modes to
+  clients. The UI disables modes that are not advertised rather than probing
+  them or presenting an unavailable JIT as a failed execution.
 
 This is not a hardened remote execution service. Compilation remains in-process
 and its timeout is cooperative rather than preemptive; local-trusted JIT has

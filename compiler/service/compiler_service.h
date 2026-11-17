@@ -54,6 +54,7 @@ inline constexpr uint32_t kCompilerServiceSchemaVersion = 1;
 
 enum class ExecutionMode { CoreInterpreter, SSAInterpreter, JIT, AdaptiveJIT };
 enum class ExecutionPolicy { Disabled, InterpreterOnly, LocalTrusted };
+enum class CorrectnessCheckStatus { Passed, Failed, Skipped, Unavailable };
 
 inline const char *executionPolicyName(ExecutionPolicy policy) {
   switch (policy) {
@@ -62,6 +63,16 @@ inline const char *executionPolicyName(ExecutionPolicy policy) {
   case ExecutionPolicy::LocalTrusted: return "local-trusted";
   }
   return "disabled";
+}
+
+inline const char *correctnessCheckStatusName(CorrectnessCheckStatus status) {
+  switch (status) {
+  case CorrectnessCheckStatus::Passed: return "passed";
+  case CorrectnessCheckStatus::Failed: return "failed";
+  case CorrectnessCheckStatus::Skipped: return "skipped";
+  case CorrectnessCheckStatus::Unavailable: return "unavailable";
+  }
+  return "failed";
 }
 
 struct ArtifactSelection {
@@ -179,7 +190,7 @@ struct CompileResponseV1 {
   // pretending that model confidence is a correctness proof.
   std::vector<std::string> policyRecords;
   uint64_t totalCompileUs = 0;
-  size_t functions = 0, blocks = 0, valuesCount = 0;
+  size_t functions = 0, blocks = 0, valuesCount = 0, instructions = 0;
 };
 
 struct RunRequestV1 { CompileRequestV1 compile; ExecutionMode mode = ExecutionMode::SSAInterpreter; };
@@ -203,8 +214,29 @@ struct RunResponseV1 {
 };
 struct CorrectnessCheck {
   std::string stage;
+  // `passed` remains for v1 clients. Consumers that understand the richer
+  // state must use `status`, so unavailable native engines never read as a
+  // semantic failure or an executed success.
   bool passed = false;
   std::string detail;
+  CorrectnessCheckStatus status = CorrectnessCheckStatus::Failed;
+};
+inline CorrectnessCheck correctnessCheck(std::string stage,
+                                         CorrectnessCheckStatus status,
+                                         std::string detail) {
+  return {std::move(stage), status == CorrectnessCheckStatus::Passed,
+          std::move(detail), status};
+}
+struct ServiceCapabilitiesV1 {
+  uint32_t schemaVersion = kCompilerServiceSchemaVersion;
+  bool ready = true;
+  std::string compilerRevision = std::string(build::kCompilerRevision);
+  bool llvmSupport = false;
+  bool llvmIREmission = false;
+  bool jitBuild = false;
+  bool adaptiveJitBuild = false;
+  ExecutionPolicy executionPolicy = ExecutionPolicy::InterpreterOnly;
+  std::vector<std::string> allowedExecutionModes;
 };
 struct CorrectnessResponseV1 {
   uint32_t schemaVersion = kCompilerServiceSchemaVersion;
@@ -327,6 +359,28 @@ public:
       : limits_(limits), executionPolicy_(executionPolicy) {}
   const ServiceLimits &limits() const noexcept { return limits_; }
   ExecutionPolicy executionPolicy() const noexcept { return executionPolicy_; }
+  ServiceCapabilitiesV1 capabilities() const {
+    ServiceCapabilitiesV1 result;
+    result.executionPolicy = executionPolicy_;
+#if defined(NANO_SERVICE_HAS_LLVM)
+    result.llvmSupport = true;
+    result.llvmIREmission = true;
+#endif
+#if defined(NANO_SERVICE_HAS_JIT)
+    result.jitBuild = true;
+    result.adaptiveJitBuild = true;
+#endif
+    if (executionPolicy_ != ExecutionPolicy::Disabled) {
+      result.allowedExecutionModes = {"core", "ssa"};
+#if defined(NANO_SERVICE_HAS_JIT)
+      if (executionPolicy_ == ExecutionPolicy::LocalTrusted) {
+        result.allowedExecutionModes.push_back("jit");
+        result.allowedExecutionModes.push_back("adaptive-jit");
+      }
+#endif
+    }
+    return result;
+  }
 
   CompileResponseV1 compile(const CompileRequestV1 &request) const {
     CompileResponseV1 response; const auto started = std::chrono::steady_clock::now();
@@ -490,7 +544,7 @@ public:
       }
 #endif
       if (compileTimedOut()) return fail(response, ErrorKind::ResourceLimit, "COMPILE_TIMEOUT", "compile wall-clock limit exceeded", 0, 0, started);
-      response.functions=optimized.functions.size(); response.blocks=programBlocks(optimized); response.valuesCount=programValues(optimized); response.success=true;
+      response.functions=optimized.functions.size(); response.blocks=programBlocks(optimized); response.valuesCount=programValues(optimized); response.instructions=programInstructions(optimized); response.success=true;
     } catch (const CompileError &error) { return fail(response, ErrorKind::User, "E1000", error.message, error.line, error.col, started); }
     catch (const std::exception &error) {
       // A few legacy frontend branches still throw std::runtime_error rather
@@ -584,15 +638,15 @@ public:
     try {
       const auto differential = DifferentialRunner{}.run(request.source, {0, 1, 2, 3}, limits);
       if (!differential.compiled) {
-        response.checks.push_back({"compiler", false, differential.diagnostic});
+        response.checks.push_back(correctnessCheck("compiler", CorrectnessCheckStatus::Failed, differential.diagnostic));
         return response;
       }
       const bool corePassed = differential.reference.status == ExecutionStatus::Success;
-      response.checks.push_back({"CoreIR", corePassed, corePassed ? "reference execution completed" : "reference execution failed"});
+      response.checks.push_back(correctnessCheck("CoreIR", corePassed ? CorrectnessCheckStatus::Passed : CorrectnessCheckStatus::Failed, corePassed ? "reference execution completed" : "reference execution failed"));
       bool equivalent = corePassed;
       for (const auto &level : differential.levels) {
-        response.checks.push_back({"SSA O" + std::to_string(level.level), level.equivalent,
-          level.equivalent ? "observable output matches CoreIR" : "observable output differs from CoreIR"});
+        response.checks.push_back(correctnessCheck("SSA O" + std::to_string(level.level), level.equivalent ? CorrectnessCheckStatus::Passed : CorrectnessCheckStatus::Failed,
+          level.equivalent ? "observable output matches CoreIR" : "observable output differs from CoreIR"));
         equivalent = equivalent && level.equivalent;
       }
 #if defined(NANO_SERVICE_HAS_JIT)
@@ -609,29 +663,29 @@ public:
         const auto jit = llvm_backend::executeWithLLJIT(native);
         const bool jitPassed = jit.error.empty() && jit.stdoutText == expectedOutput &&
             std::to_string(jit.returnValue) == expectedReturn;
-        response.checks.push_back({"JIT", jitPassed,
-            jitPassed ? "native output matches CoreIR" : (jit.error.empty() ? "native output differs from CoreIR" : jit.error)});
+        response.checks.push_back(correctnessCheck("JIT", jitPassed ? CorrectnessCheckStatus::Passed : CorrectnessCheckStatus::Failed,
+            jitPassed ? "native output matches CoreIR" : (jit.error.empty() ? "native output differs from CoreIR" : jit.error)));
         equivalent = equivalent && jitPassed;
         llvm_backend::AdaptiveJITConfig config; config.hotFunctionCallThreshold = 2;
         const auto adaptive = llvm_backend::executeAdaptivelyWithLLJIT(pipeline.ssa, config);
         const bool adaptivePassed = adaptive.execution.error.empty() &&
             adaptive.execution.stdoutText == expectedOutput &&
             std::to_string(adaptive.execution.returnValue) == expectedReturn;
-        response.checks.push_back({"Adaptive JIT", adaptivePassed,
-            adaptivePassed ? "adaptive native output matches CoreIR" : (adaptive.execution.error.empty() ? "adaptive native output differs from CoreIR" : adaptive.execution.error)});
+        response.checks.push_back(correctnessCheck("Adaptive JIT", adaptivePassed ? CorrectnessCheckStatus::Passed : CorrectnessCheckStatus::Failed,
+            adaptivePassed ? "adaptive native output matches CoreIR" : (adaptive.execution.error.empty() ? "adaptive native output differs from CoreIR" : adaptive.execution.error)));
         equivalent = equivalent && adaptivePassed;
       } else {
-        response.checks.push_back({"JIT", true, "not executed under current server execution policy"});
-        response.checks.push_back({"Adaptive JIT", true, "not executed under current server execution policy"});
+        response.checks.push_back(correctnessCheck("JIT", CorrectnessCheckStatus::Skipped, "not executed under current server execution policy"));
+        response.checks.push_back(correctnessCheck("Adaptive JIT", CorrectnessCheckStatus::Skipped, "not executed under current server execution policy"));
       }
 #else
-      response.checks.push_back({"JIT", false, "capability unavailable in this service build"});
-      response.checks.push_back({"Adaptive JIT", false, "capability unavailable in this service build"});
+      response.checks.push_back(correctnessCheck("JIT", CorrectnessCheckStatus::Unavailable, "capability unavailable in this service build"));
+      response.checks.push_back(correctnessCheck("Adaptive JIT", CorrectnessCheckStatus::Unavailable, "capability unavailable in this service build"));
 #endif
       response.success = true;
       response.equivalent = equivalent;
     } catch (const std::exception &error) {
-      response.checks.push_back({"internal", false, error.what()});
+      response.checks.push_back(correctnessCheck("internal", CorrectnessCheckStatus::Failed, error.what()));
     }
     return response;
   }
@@ -673,9 +727,9 @@ inline std::string compileResponseJson(const CompileResponseV1 &response) {
   for(size_t i=0;i<response.passes.size();++i){if(i)out<<',';const auto&p=response.passes[i];out<<"{\"id\":\""<<jsonEscape(p.id)<<"\",\"displayName\":\""<<jsonEscape(p.displayName)<<"\",\"category\":\""<<p.category<<"\",\"changed\":"<<(p.changed?"true":"false")<<",\"durationUs\":"<<p.durationUs<<",\"instructionsBefore\":"<<p.instructionsBefore<<",\"instructionsAfter\":"<<p.instructionsAfter<<",\"blocksBefore\":"<<p.blocksBefore<<",\"blocksAfter\":"<<p.blocksAfter<<",\"valuesBefore\":"<<p.valuesBefore<<",\"valuesAfter\":"<<p.valuesAfter<<",\"verified\":"<<(p.verified?"true":"false")<<",\"counters\":{";size_t n=0;for(const auto&[key,value]:p.counters){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":"<<value;}out<<"}}";} out<<"],\"remarks\":[";
   for(size_t i=0;i<response.remarks.size();++i){if(i)out<<',';const auto&r=response.remarks[i];out<<"{\"kind\":\""<<r.kind<<"\",\"passId\":\""<<jsonEscape(r.passId)<<"\",\"message\":\""<<jsonEscape(r.message)<<"\",\"block\":"<<(r.block?std::to_string(*r.block):"null")<<",\"value\":"<<(r.value?std::to_string(*r.value):"null")<<",\"line\":"<<r.line<<",\"column\":"<<r.column<<"}";} out<<"],\"graphs\":[";
   for(size_t i=0;i<response.graphs.size();++i){if(i)out<<',';const auto&g=response.graphs[i];out<<"{\"kind\":\""<<g.kind<<"\",\"function\":\""<<jsonEscape(g.function)<<"\",\"nodes\":[";for(size_t j=0;j<g.nodes.size();++j){if(j)out<<',';const auto&node=g.nodes[j];out<<"{\"id\":\""<<jsonEscape(node.id)<<"\",\"label\":\""<<jsonEscape(node.label)<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:node.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"],\"edges\":[";for(size_t j=0;j<g.edges.size();++j){if(j)out<<',';const auto&edge=g.edges[j];out<<"{\"from\":\""<<jsonEscape(edge.from)<<"\",\"to\":\""<<jsonEscape(edge.to)<<"\",\"kind\":\""<<edge.kind<<"\",\"metadata\":{";size_t n=0;for(const auto&[key,value]:edge.metadata){if(n++)out<<',';out<<"\""<<jsonEscape(key)<<"\":\""<<jsonEscape(value)<<"\"";}out<<"}}";}out<<"]}";} out<<"],\"values\":[";
-  for(size_t i=0;i<response.values.size();++i){if(i)out<<',';const auto&v=response.values[i];out<<"{\"value\":"<<v.value<<",\"function\":\""<<jsonEscape(v.function)<<"\",\"kind\":\""<<v.kind<<"\",\"type\":\""<<v.type<<"\",\"definingBlock\":"<<v.definingBlock<<",\"line\":"<<v.line<<",\"column\":"<<v.column<<",\"uses\":[";for(size_t j=0;j<v.uses.size();++j){if(j)out<<',';const auto&use=v.uses[j];out<<"{\"kind\":\""<<use.kind<<"\",\"block\":"<<use.block<<",\"detail\":\""<<jsonEscape(use.detail)<<"\"}";}out<<"]}";} out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"policyRecords\":[";for(size_t i=0;i<response.policyRecords.size();++i){if(i)out<<',';out<<response.policyRecords[i];}out<<"],\"telemetry\":{\"totalCompileUs\":"<<response.totalCompileUs<<",\"functions\":"<<response.functions<<",\"blocks\":"<<response.blocks<<",\"values\":"<<response.valuesCount<<"}}"; return out.str();
+  for(size_t i=0;i<response.values.size();++i){if(i)out<<',';const auto&v=response.values[i];out<<"{\"value\":"<<v.value<<",\"function\":\""<<jsonEscape(v.function)<<"\",\"kind\":\""<<v.kind<<"\",\"type\":\""<<v.type<<"\",\"definingBlock\":"<<v.definingBlock<<",\"line\":"<<v.line<<",\"column\":"<<v.column<<",\"uses\":[";for(size_t j=0;j<v.uses.size();++j){if(j)out<<',';const auto&use=v.uses[j];out<<"{\"kind\":\""<<use.kind<<"\",\"block\":"<<use.block<<",\"detail\":\""<<jsonEscape(use.detail)<<"\"}";}out<<"]}";} out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"policyRecords\":[";for(size_t i=0;i<response.policyRecords.size();++i){if(i)out<<',';out<<response.policyRecords[i];}out<<"],\"telemetry\":{\"totalCompileUs\":"<<response.totalCompileUs<<",\"functions\":"<<response.functions<<",\"blocks\":"<<response.blocks<<",\"values\":"<<response.valuesCount<<",\"instructions\":"<<response.instructions<<"}}"; return out.str();
 }
 inline std::string runResponseJson(const RunResponseV1 &response) { std::ostringstream out; out<<"{\"schemaVersion\":"<<response.schemaVersion<<",\"success\":"<<(response.success?"true":"false")<<",\"errorKind\":\""<<errorKindName(response.errorKind)<<"\",\"status\":\""<<jsonEscape(response.status)<<"\",\"stdout\":\""<<jsonEscape(response.stdoutText)<<"\",\"stderr\":\""<<jsonEscape(response.stderrText)<<"\",\"returnValue\":\""<<jsonEscape(response.returnValue)<<"\",\"stepsExecuted\":"<<response.stepsExecuted<<",\"executionDurationUs\":"<<response.executionDurationUs<<",\"runtimeProfile\":"<< (response.runtimeProfileJson.empty()?"null":response.runtimeProfileJson) <<",\"adaptiveEvents\":[";for(size_t i=0;i<response.adaptiveEvents.size();++i){if(i)out<<',';const auto&event=response.adaptiveEvents[i];out<<"{\"kind\":\""<<jsonEscape(event.kind)<<"\",\"function\":\""<<jsonEscape(event.function)<<"\",\"calls\":"<<event.calls<<",\"detail\":\""<<jsonEscape(event.detail)<<"\"}";}out<<"],\"policyFeatures\":";writePolicyFeaturesJson(out,response.policyFeatures);out<<",\"compilation\":"<<compileResponseJson(response.compilation)<<"}";return out.str(); }
-inline std::string correctnessResponseJson(const CorrectnessResponseV1 &response) { std::ostringstream out; out << "{\"schemaVersion\":" << response.schemaVersion << ",\"success\":" << (response.success ? "true" : "false") << ",\"equivalent\":" << (response.equivalent ? "true" : "false") << ",\"checks\":["; for (size_t index = 0; index < response.checks.size(); ++index) { if (index) out << ','; const auto &check = response.checks[index]; out << "{\"stage\":\"" << jsonEscape(check.stage) << "\",\"passed\":" << (check.passed ? "true" : "false") << ",\"detail\":\"" << jsonEscape(check.detail) << "\"}"; } out << "],\"compilation\":" << compileResponseJson(response.compilation) << '}'; return out.str(); }
+inline std::string correctnessResponseJson(const CorrectnessResponseV1 &response) { std::ostringstream out; out << "{\"schemaVersion\":" << response.schemaVersion << ",\"success\":" << (response.success ? "true" : "false") << ",\"equivalent\":" << (response.equivalent ? "true" : "false") << ",\"checks\":["; for (size_t index = 0; index < response.checks.size(); ++index) { if (index) out << ','; const auto &check = response.checks[index]; out << "{\"stage\":\"" << jsonEscape(check.stage) << "\",\"passed\":" << (check.passed ? "true" : "false") << ",\"status\":\"" << correctnessCheckStatusName(check.status) << "\",\"detail\":\"" << jsonEscape(check.detail) << "\"}"; } out << "],\"compilation\":" << compileResponseJson(response.compilation) << '}'; return out.str(); }
 
 } // namespace nanopass::service

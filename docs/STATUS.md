@@ -12,6 +12,18 @@ generation/inspection, Tier-0 JIT, adaptive promotion, profile consumption,
 and the small deterministic adaptive fuzz smoke; the larger campaigns remain
 explicit local evidence rather than CI claims.
 
+### Current focused validation (2026-11-17)
+- **Compiler-service contract** — Windows MinGW `compiler_service_tests`:
+  **89/89 assertions passed**. This includes readiness capability reporting,
+  final instruction telemetry, and explicit `passed`/`failed`/`skipped`/
+  `unavailable` correctness statuses.
+- **Web client** — `npm run typecheck`, `npm run test -- --run` (**16/16**),
+  and `npm run build` passed. The strict UI audit reports zero findings.
+- **Real-server browser suite** — not rerun on this Windows host: Playwright
+  cannot start `nano-server.exe` because the local LLVM CMake package remains
+  incomplete (`C:\llvm\bin\llvm-tblgen.exe` is missing). This is a tooling
+  limitation, not a passing browser claim.
+
 ---
 
 ## Stable

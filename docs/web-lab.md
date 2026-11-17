@@ -33,12 +33,17 @@ The lab is intentionally an inspector rather than a mock dashboard:
 - Clicking an optimizer timeline entry displays the compiler-captured SSA
   before/after snapshot. The O0–O3 comparison uses four actual service
   compilations and reports only measured structural/compiler-time fields.
+- The readiness response controls execution affordances. CoreIR and SSA are
+  available in interpreter-only deployments; JIT and adaptive-JIT are enabled
+  only when the connected build and execution policy advertise them. Disabled
+  modes are unavailable, not failed runs.
 - CoreIR, SSA interpreter, JIT, and adaptive-JIT controls show actual output,
   bounded runtime profile data, and adaptive events where the build supports
   them.
 - The correctness pane calls the bounded `/api/v1/correctness` service route;
   it reports CoreIR versus SSA O0–O3 and includes native/adaptive checks only
-  in a JIT-capable service build.
+  in a JIT-capable service build. Each check is explicitly passed, failed,
+  skipped, or unavailable; unavailable native checks do not imply a mismatch.
 - Runtime counts overlay CFG nodes/edges numerically; hot nodes additionally
   carry a text marker, so hotness is not conveyed only by color. The policy
   pane renders compiler-extracted static/dynamic feature vectors and the
@@ -49,17 +54,22 @@ The lab is intentionally an inspector rather than a mock dashboard:
   verifier gate); it never accepts a browser model upload or synthesizes an
   explanation.
 
-The client debounces live compile requests, caches identical successful
-compile inputs, preserves explicit custom-pass order, and embeds source,
+The client debounces live compile requests, aborts superseded requests, keeps
+a bounded LRU cache of identical successful compile inputs, preserves explicit
+custom-pass order, and embeds source,
 optimization level, selected pass sequence, selected IR stage, and graph view
 in the share URL fragment.
+Selecting a named inline policy clears a custom pass pipeline; selecting a
+custom pass returns the pipeline to `default`, so request state is never
+ambiguous. The comparison table reports final compiler telemetry rather than
+summing intermediate pass snapshots.
 The fragment remains client-side; source is only sent to the configured local
 service for compilation.
 
-The shipped public surface uses a black editorial system that leads to the
-workbench; the lab itself is a focused deep-navy instrument with cyan
-inspection state, mint compiler-verification state, and amber caution state.
-Both use the real local API instead of placeholder cards. Durable visual decisions live in
+The shipped public surface and the lab share a black-and-off-white editorial
+system. Mint is reserved for real compiler-confirmed success; neutral states
+remain neutral. Both use the real local API instead of placeholder cards.
+Durable visual decisions live in
 [`DESIGN.md`](../DESIGN.md).
 
 `npm run test:e2e` is a bounded Playwright journey that starts the real local
