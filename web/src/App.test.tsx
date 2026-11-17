@@ -111,6 +111,16 @@ describe('compiler lab', () => {
     expect(screen.getByRole('figure', { name: /a request becomes a verified representation before it can execute/i })).toBeInTheDocument();
     expect(screen.getByText('nano-server')).toBeInTheDocument();
   });
+  it('labels representative landing motion honestly and keeps its architecture inspector interactive', () => {
+    window.history.pushState({}, '', '/');
+    render(<App />);
+    expect(screen.getByText(/static illustration · not a live compiler run/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /verify ssa/i }));
+    expect(screen.getByText(/representative SSA passes its structural check/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /SSA optimizer/i }));
+    expect(screen.getByText(/applies verifier-gated rewrites/i)).toBeInTheDocument();
+    window.history.pushState({}, '', '/lab');
+  });
   it('keeps optimization evidence and verification controls on dedicated routes', async () => {
     window.history.pushState({}, '', '/optimizations');
     render(<App />);

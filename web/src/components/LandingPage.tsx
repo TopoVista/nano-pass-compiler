@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUpRight, Check } from 'lucide-react';
+import { ArrowDown, ArrowUpRight, Check, Pause, Play, RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArchitectureDiagram } from './ArchitectureDiagram';
 import { BuildAtlas } from './BuildAtlas';
@@ -41,7 +42,30 @@ function Mark() {
   return <span className="landing-mark" aria-hidden="true"><i /><i /><i /></span>;
 }
 
+const heroSteps = [
+  { id: 'source', label: 'Read source', note: 'The illustration begins with source syntax.' },
+  { id: 'lower', label: 'Lower structure', note: 'Control flow and values become explicit.' },
+  { id: 'verify', label: 'Verify SSA', note: 'The representative SSA passes its structural check.' },
+] as const;
+
 export function LandingPage() {
+  const [heroStep, setHeroStep] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing) return undefined;
+    const timer = window.setTimeout(() => setHeroStep((current) => {
+      if (current === heroSteps.length - 1) {
+        setPlaying(false);
+        return current;
+      }
+      return current + 1;
+    }), 1400);
+    return () => window.clearTimeout(timer);
+  }, [heroStep, playing]);
+  const replayHero = () => {
+    setHeroStep(0);
+    setPlaying(true);
+  };
   return (
     <main className="public-shell">
       <header className="public-nav">
@@ -58,14 +82,14 @@ export function LandingPage() {
         <div className="public-hero-copy">
           <h1 id="public-title">A compiler you can <em>interrogate.</em></h1>
           <p className="public-intro">Trace a small C-like language through typed representations, SSA construction, verification, optimization, LLVM, and execution, without treating the middle as a black box.</p>
-          <p className="public-status-line">C++20 <span>·</span> LLVM 18 <span>·</span> SSA <span>·</span> ORC JIT</p>
+          <p className="public-status-line">C++20 <span>·</span> explicit IR <span>·</span> SSA <span>·</span> optional LLVM path</p>
           <div className="public-actions">
             <a className="public-action primary" href="/lab">Open Compiler Lab <Arrow /></a>
             <a className="public-action text" href="#method">See the method <ArrowDown aria-hidden="true" className="landing-arrow-down" strokeWidth={1.8} /></a>
           </div>
         </div>
-        <div className="hero-artifact" aria-label="Compiler transformation from source to verified SSA">
-          <div className="artifact-topline"><span>REPRESENTATION EXAMPLE</span><b>compiler pipeline</b></div>
+        <div className={`hero-artifact hero-step-${heroStep}`} aria-label="Representative compiler transformation from source to verified SSA">
+          <div className="artifact-topline"><span>REPRESENTATIVE TRANSFORMATION</span><b>static illustration · not a live compiler run</b></div>
           <div className="artifact-columns">
             <article className="artifact-code source"><header><span>01</span> Source / NanoPass C</header><pre><code className="hero-code-typing hero-source-typing">{source}</code></pre></article>
             <div className="artifact-transfer" aria-label="Parse, lower, and verify the program">
@@ -74,6 +98,11 @@ export function LandingPage() {
             <article className="artifact-code output"><header><span>06</span> SSA / @score</header><pre><code className="hero-code-typing hero-ssa-typing">{ssa}</code></pre></article>
           </div>
           <footer><span><Check aria-hidden="true" strokeWidth={2} /> SSA checks unique value definitions</span><span><Check aria-hidden="true" strokeWidth={2} /> CFG makes control flow explicit</span></footer>
+          <div className="hero-sequence" aria-label="Representative compiler transformation controls">
+            <div role="tablist" aria-label="Transformation steps">{heroSteps.map((step, index) => <button type="button" key={step.id} role="tab" aria-selected={heroStep === index} className={heroStep === index ? 'active' : index < heroStep ? 'complete' : ''} onClick={() => { setHeroStep(index); setPlaying(false); }}><span>{String(index + 1).padStart(2, '0')}</span>{step.label}</button>)}</div>
+            <p aria-live="polite">{heroSteps[heroStep].note}</p>
+            <div><button type="button" aria-label="Replay representative compiler transformation" onClick={replayHero}><RotateCcw aria-hidden="true" /></button><button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}{playing ? 'Pause' : 'Play'}</button></div>
+          </div>
         </div>
       </section>
 
