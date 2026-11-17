@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
-import { arrangeGraph, GraphPane } from './GraphPane';
+import { arrangeGraph, GraphInspector, GraphPane } from './GraphPane';
 import type { Graph } from '../lib/api';
 
 vi.mock('@xyflow/react', () => ({
@@ -38,5 +38,13 @@ describe('GraphPane', () => {
     expect(screen.getByText(/0 outgoing · 1 incoming compiler-emitted edges highlighted/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('bb0.entry'));
     expect(onSelect).toHaveBeenCalledWith('main:bb0');
+  });
+
+  it('uses a graph-specific guide instead of an unrelated empty SSA inspector', () => {
+    render(<GraphInspector graph={graph} selectedBlock={1} />);
+    expect(screen.getByRole('complementary', { name: 'Graph guide' })).toHaveTextContent('Control-flow graph');
+    expect(screen.getByText('@main')).toBeInTheDocument();
+    expect(screen.getByText('bb1.then')).toBeInTheDocument();
+    expect(screen.getByText(/1 direct relationship is highlighted/)).toBeInTheDocument();
   });
 });

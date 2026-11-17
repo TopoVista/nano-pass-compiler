@@ -4,7 +4,6 @@ import {
   Diagnostics,
   Remarks,
   Timeline,
-  ValueInspector,
 } from "./components/Panels";
 import { Correctness } from "./components/Correctness";
 import { OptimizationComparison } from "./components/Comparison";
@@ -41,6 +40,9 @@ const SourceEditor = lazy(async () => ({
 }));
 const GraphPane = lazy(async () => ({
   default: (await import("./components/GraphPane")).GraphPane,
+}));
+const GraphInspector = lazy(async () => ({
+  default: (await import("./components/GraphPane")).GraphInspector,
 }));
 
 const examples: Record<string, string> = {
@@ -798,7 +800,7 @@ export default function App() {
           emitted for the current program.
         </p>
       </header>
-      <section className="route-grid">
+      <section className="route-grid graph-route-grid">
         <div className="panel graph-panel route-graph">
           <header>
             <div>
@@ -827,7 +829,9 @@ export default function App() {
             />
           </Suspense>
         </div>
-        <ValueInspector value={value} />
+        <Suspense fallback={<aside className="list-panel graph-inspector" aria-label="Graph guide" />}>
+          <GraphInspector graph={graph} selectedBlock={selectedBlock} />
+        </Suspense>
       </section>
     </section>
   );
