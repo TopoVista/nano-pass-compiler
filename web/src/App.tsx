@@ -19,6 +19,7 @@ import { FeatureTour } from "./components/FeatureTour";
 import { TerminalPane, type TerminalReply } from "./components/TerminalPane";
 import { IRExplainer } from "./components/IRExplainer";
 import { LandingPage } from "./components/LandingPage";
+import { TransformationDiff } from "./components/TransformationDiff";
 import {
   allowedPasses,
   checkCorrectness,
@@ -325,9 +326,9 @@ export default function App() {
       const response = await run(options, mode);
       if (requestKey !== latestOptionsKey.current) return;
       setRunResult(response);
-      [2, 3, 4].forEach((step, index) =>
-        window.setTimeout(() => setExecutionStep(step), 260 * (index + 1)),
-      );
+      // The service gives us one completed run result, not per-substage events.
+      // Do not animate unobserved compiler work as if it were telemetry.
+      setExecutionStep(response.success ? 4 : 0);
     } catch {
       if (requestKey !== latestOptionsKey.current) return;
       setExecutionStep(0);
@@ -858,16 +859,7 @@ export default function App() {
         <PolicyDecisions records={result?.policyRecords} />
       </section>
       {transform && selectedPass && (
-        <section className="panel diff-panel">
-          <header>
-            <strong>Before / after</strong>
-            <span>{selectedPass}</span>
-          </header>
-          <div className="diff">
-            <pre>{transform.before}</pre>
-            <pre>{transform.after}</pre>
-          </div>
-        </section>
+        <TransformationDiff before={transform.before} after={transform.after} passId={selectedPass} />
       )}
     </section>
   );
@@ -901,7 +893,7 @@ export default function App() {
           <header><strong>Latest execution</strong><span>{runResult?.status ?? "not run"}</span></header>
           <div className="execution-content">
             <div className="execution-trace" aria-label="Execution progress">
-              {["Lower", "Verify", "Execute", "Report"].map((label, index) => (
+              {["Request", "Compile + lower", "Execute", "Result"].map((label, index) => (
                 <span key={label} className={executionStep > index ? "complete" : executionStep === index ? "active" : ""}><i>{index + 1}</i>{label}</span>
               ))}
             </div>

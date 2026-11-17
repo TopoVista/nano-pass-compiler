@@ -25,7 +25,7 @@
 
 | Capability | Canonical owner | Source of truth | Allowed variants | Verification |
 |---|---|---|---|---|
-| Public introduction | `LandingPage` | static, compiler-capability copy | public route `/` | unit + browser |
+| Public introduction | `LandingPage` | clearly-labelled representative compiler illustration | public route `/`, step controls | unit + browser |
 | Product navigation | `App.tsx` dashboard rail | route path | persistent desktop rail / compact mobile rail | unit + browser |
 | Select/Listbox | Native selects in `App.tsx` | browser control + accessible label | stage, graph, policy, example | unit + E2E |
 | Source input | Monaco `SourceEditor` | component props/API | code editing | unit + browser |
@@ -34,7 +34,8 @@
 | Compiler terminal | `TerminalPane` | compile/run response | verifier, diagnostics, program output | unit + browser |
 | Form | `TerminalPane` | `web/src/components/TerminalPane.tsx` | safe in-app compiler command input only; never an operating-system shell | allowlist unit/browser coverage and `noValidate` form ownership |
 | Terminal command reference | `TerminalPane` tabs | documented CLI surface + compile response | verify, emit SSA, explain, optimize, learned policy | unit + browser |
-| Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph | unit + E2E |
+| Graph | `GraphPane` / React Flow | structured compiler graph JSON | cfg, dominator-tree, loops, call-graph; direct-edge focus | unit + E2E |
+| Transformation comparison | `TransformationDiff` | compiler-captured before/after text | selected optimizer pass only | unit + browser |
 | Diagnostics/remarks | `Panels.tsx` | compiler response | applied/missed/analysis | unit |
 | Scrollbar | `web/src/styles.css` | runtime CSS tokens | geometry only | browser |
 
@@ -46,6 +47,8 @@
 | Run mode | Named native button | busy controls | runtime/profile output | API result shows explicit unavailable/error status |
 | IR/graph inspection | Labeled select or graph node | none | selected IR/block is highlighted | retain last valid compilation |
 | Explain representation | Plain-language guide beneath IR | selected compiler snapshot and SSA value | explanation updates with stage/value | state remains useful with no selection |
+| Explore public architecture | Landing architecture diagram node | static, documented system boundary | selected layer receives input/output explanation | selected layer remains visible and keyboard reachable |
+| Play representative transformation | Landing step tabs or play control | static illustration only | explanation and emphasis change; never reported as a live compile | pause, replay, and direct tab selection |
 | Generate program | Generate program button | none | a deterministic language-valid program is inserted | user can edit/regenerate it |
 | Focus editor | Focus / Restore button | none | source editor and terminal occupy the workbench | restores the prior artifact layout without losing source |
 | Terminal command | command prompt or suggestion | command is evaluated against a strict compiler-command allowlist | compiler response is appended to terminal history | unknown commands are rejected; no shell is available |
@@ -58,10 +61,10 @@ Home (`/`) is a public introduction to the observable compiler pipeline and link
 
 ## Async and resilience
 
-Live compilation is debounced by the app and identical successful work is cached by the client API layer. The UI never presents synthetic stage, timing, policy, or runtime output. The security and capability boundary remains exactly as defined in `docs/web-security.md` and `docs/compiler-api.md`.
+Live compilation is debounced by the app and identical successful work is cached by the client API layer. The UI never presents synthetic stage, timing, policy, or runtime output. Static explanatory motion is visibly labelled as representative and does not claim to be service telemetry. The security and capability boundary remains exactly as defined in `docs/web-security.md` and `docs/compiler-api.md`.
 
 ## Verification
 
 - Static: TypeScript, Vitest, Vite production build, and the project E2E browser journey.
-- Browser: source selection, IR selection, graph selection, SSA execution, adaptive JIT facts, plus desktop and narrow visual inspection.
+- Browser: source selection, IR selection, graph selection, SSA execution, adaptive JIT facts, public-story controls, reduced-motion behavior, plus desktop and narrow visual inspection.
 - Canonical sibling comparison: `web/e2e/lab.spec.ts` describes the production interaction baseline.

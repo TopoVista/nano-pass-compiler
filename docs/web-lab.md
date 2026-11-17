@@ -25,13 +25,17 @@ The lab is intentionally an inspector rather than a mock dashboard:
 - The timeline uses service pass telemetry; each status is an actual verifier
   gate, duration, and IR-size observation.
 - The graph pane renders structured CFG, dominator-tree, loop, and call-graph
-  JSON with React Flow. Selecting a basic block highlights matching IR lines.
+  JSON with React Flow. Selecting a basic block highlights matching IR lines and
+  its direct compiler-emitted graph relationships; animated edges are reserved
+  for observed profile counts.
 - SSA `%value` buttons open the compiler-provided definition/type/source
   inspector. Source locations are shown only when retained by the IR.
 - The remarks pane reports compiler-recorded applied/missed optimization
   reasons. It does not synthesize an explanation.
 - Clicking an optimizer timeline entry displays the compiler-captured SSA
-  before/after snapshot. The O0–O3 comparison uses four actual service
+  before/after snapshot as a conventional line diff, so additions and removals
+  are readable without asserting a source-level instruction correspondence.
+  The O0–O3 comparison uses four actual service
   compilations and reports only measured structural/compiler-time fields.
 - The readiness response controls execution affordances. CoreIR and SSA are
   available in interpreter-only deployments; JIT and adaptive-JIT are enabled
@@ -80,7 +84,11 @@ retry action.
 
 The shipped public surface and the lab share a black-and-off-white editorial
 system. Mint is reserved for real compiler-confirmed success; neutral states
-remain neutral. Both use the real local API instead of placeholder cards.
+remain neutral. The landing transformation is explicitly labelled as a static
+representative illustration; its playable controls teach the pipeline without
+presenting the animation as a compiler run. Both use the real local API instead
+of placeholder cards where compiler data is shown. Decorative movement is
+disabled for users who request reduced motion.
 Durable visual decisions live in
 [`DESIGN.md`](../DESIGN.md).
 

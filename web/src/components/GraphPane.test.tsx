@@ -35,6 +35,7 @@ describe('GraphPane', () => {
     expect(screen.getAllByText('bb1.then')).toHaveLength(2);
     expect(screen.getByText('2 instructions')).toBeInTheDocument();
     expect(screen.getByText(/instructions: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/0 outgoing · 1 incoming compiler-emitted edges highlighted/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('bb0.entry'));
     expect(onSelect).toHaveBeenCalledWith('main:bb0');
   });
