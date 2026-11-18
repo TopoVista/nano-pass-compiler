@@ -19,4 +19,24 @@ test.describe('public compiler story', () => {
     await expect(page.locator('.hero-code-typing').first()).toHaveCSS('animation-name', 'none');
     await expect(page.locator('.hero-code-typing').first()).toHaveCSS('width', /\d+px|auto/);
   });
+
+  test('keeps the build brief readable without horizontal clipping on a narrow screen', async ({ page }) => {
+    await page.setViewportSize({ width: 674, height: 900 });
+    await page.goto('/');
+
+    const brief = page.locator('.build-blueprint');
+    await expect(brief).toBeVisible();
+    await expect(page.getByText('Syntax / typed AST')).toBeVisible();
+    await expect(page.getByRole('button', { name: /CoreIR normalize/i })).toBeVisible();
+    await page.getByRole('button', { name: /CoreIR normalize/i }).click();
+    await expect(brief.locator('.blueprint-inspector')).toContainText('Explicit IR');
+
+    const layout = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      artifactWidth: document.querySelector('.blueprint-artifact button')?.getBoundingClientRect().width ?? 0,
+    }));
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.artifactWidth).toBeGreaterThanOrEqual(44);
+  });
 });

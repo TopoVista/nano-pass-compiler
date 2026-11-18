@@ -613,3 +613,30 @@ a { color: inherit; text-decoration: none; }
   .rail-nav a.active { border-bottom-color: var(--ink); border-left-color: transparent; }
 }
 
+/* The build brief needs to remain an explanation at phone and zoomed widths.
+   Replace its desktop-only isometric illustration and horizontal artifact rail
+   with labelled, touch-sized representations rather than shrinking them until
+   the content becomes decorative. */
+@media (max-width: 760px) {
+  .public-nav .public-brand { gap: 8px; min-height: 40px; font-size: 16px; letter-spacing: -.055em; }
+  .public-nav .landing-mark { width: 24px; height: 24px; padding: 3px; border-color: var(--line-strong); background: #111; }
+  .public-nav .landing-mark i { height: 8px; }.public-nav .landing-mark i:nth-child(2) { height: 14px; }.public-nav .landing-mark i:nth-child(3) { height: 5px; }
+
+  .blueprint-hero > div:first-child > p { margin-top: 18px; color: var(--muted); font: 16px/1.5 var(--font-ui); font-style: normal; }
+  .blueprint-stack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-height: 0; margin: 0; padding: 0; transform: none; }
+  .blueprint-stack::before, .blueprint-slab::after { display: none; }
+  .blueprint-slab, .blueprint-slab.syntax, .blueprint-slab.ir, .blueprint-slab.flow, .blueprint-slab.llvm { --offset: 0; min-height: 122px; margin: 0; padding: 14px; transform: none; }
+  .blueprint-slab { flex-direction: column; align-items: flex-start; justify-content: space-between; border-color: var(--line-strong); background: #0d0d0d; }
+  .blueprint-slab > * { transform: none; }
+  .blueprint-slab b { position: static; display: block; width: auto; color: var(--ink); font: 600 13px/1.25 var(--font-ui); }
+  .blueprint-slab i, .blueprint-slab.syntax i { width: 62px; height: 28px; }
+  .blueprint-slab i::before, .blueprint-slab i::after { display: none; }
+  .blueprint-slab.syntax i { background: radial-gradient(circle at 20% 80%, #c9c9c2 0 2px, transparent 3px), radial-gradient(circle at 50% 20%, #c9c9c2 0 2px, transparent 3px), radial-gradient(circle at 80% 80%, #c9c9c2 0 2px, transparent 3px); }
+  .blueprint-slab.llvm { grid-column: 1 / -1; min-height: 92px; }.blueprint-slab.llvm code { color: #d2d2cc; font-size: 11px; }.blueprint-slab.llvm b { top: auto; }
+
+  .blueprint-board { display: block; overflow: visible; }.blueprint-tree { padding: 20px 16px; border-right: 0; border-bottom: 1px solid #454540; }.blueprint-tree ul { grid-template-columns: 1fr; gap: 2px; }.blueprint-tree button { min-height: 48px; grid-template-columns: 28px minmax(0, 1fr); padding: 8px 9px; }.blueprint-tree button b { font-size: 13px; }.blueprint-tree button small { font-size: 10px; }.blueprint-tree > p { display: block; margin: 16px 0 0; font-size: 10px; }
+  .blueprint-pipeline { padding: 20px 16px; }.blueprint-pipeline h3 { font: 22px var(--font-display); }.blueprint-pipeline header span { display: block; }.blueprint-artifacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; justify-content: stretch; overflow: visible; padding: 18px 0; }.blueprint-artifact { display: block; min-width: 0; }.blueprint-artifact > svg { display: none; }.blueprint-artifact button { min-height: 132px; gap: 7px; padding: 12px 8px; border-radius: 3px; }.blueprint-artifact button:hover, .blueprint-artifact button.selected { transform: none; }.blueprint-artifact button b { font-size: 16px; }.artifact-glyph { width: 58px; height: 45px; transform: none; }.artifact-glyph.blocks span { width: 23px; height: 11px; }.artifact-glyph.anf span { width: 41px; height: 8px; }.blueprint-pipeline footer { grid-template-columns: 1fr; gap: 0; }.blueprint-pipeline footer div { grid-template-columns: 88px 1fr; align-items: baseline; padding: 9px 0; text-align: left; }.blueprint-pipeline footer b { font: 600 12px var(--font-ui); }.blueprint-pipeline footer span { font-size: 10px; }
+  .blueprint-proof { padding: 20px 16px; }.blueprint-proof ol { grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; padding: 0; }.blueprint-proof ol::before, .blueprint-proof li::before { display: none; }.blueprint-proof li { padding-left: 22px; font-size: 10px; }.blueprint-proof li::after { position: absolute; left: 0; color: #b6e3c8; content: '✓'; }.blueprint-proof > strong { font: 600 12px var(--font-ui); }
+  .blueprint-inspector { grid-template-columns: 1fr; }.blueprint-inspector header { padding: 18px 16px; }.blueprint-inspector pre { min-height: 210px; padding: 18px 16px; font-size: 10px; }.blueprint-inspector aside { grid-template-columns: 1fr 18px 1fr; padding: 18px 16px; }.blueprint-inspector aside > span { grid-row: 1; }.blueprint-inspector aside > b { grid-row: 2; }.blueprint-inspector aside > svg { grid-column: 2; grid-row: 1 / 3; align-self: center; justify-self: center; }.blueprint-inspector aside > p { grid-column: 1 / -1; }
+}
+
