@@ -19,6 +19,7 @@ import { TerminalPane, type TerminalReply } from "./components/TerminalPane";
 import { IRExplainer } from "./components/IRExplainer";
 import { LandingPage } from "./components/LandingPage";
 import { TransformationDiff } from "./components/TransformationDiff";
+import { CompilerMotif } from "./components/CompilerMotif";
 import {
   allowedPasses,
   checkCorrectness,
@@ -952,6 +953,7 @@ export default function App() {
           <span>LOCAL SESSION / NANO C</span>
           <strong>{routeLabel}<i aria-hidden="true">/</i><b>{snapshot?.displayName ?? "Compile view"}</b></strong>
         </div>
+        <CompilerMotif kind="verify" className="dashboard-compiler-motif" label="Verifier path" />
         <div className="top-actions">
           <label>
             O-level{" "}

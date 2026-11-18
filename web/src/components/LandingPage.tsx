@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ArchitectureDiagram } from './ArchitectureDiagram';
 import { BuildAtlas } from './BuildAtlas';
+import { CompilerMotif } from './CompilerMotif';
 
 const pipeline = [
   { name: "Source", action: "read", explanation: "The C-like program as a developer wrote it." },
@@ -153,6 +154,7 @@ export function LandingPage() {
 
       <section className="public-section public-runtime">
         <div className="section-title"><p>Execution is optional. Evidence is not.</p><h2>Build ahead of time.<br />Or observe <em>hot paths.</em></h2></div>
+        <CompilerMotif kind="flow" className="runtime-compiler-motif" label="A simplified compiler control-flow path" caption="A program becomes explicit graph structure before the optional backend path." />
         <div className="runtime-rows">
           <article><span>LLVM AOT</span><b>Generate native artifacts through the configured LLVM toolchain.</b><small>Build-gated capability</small></article>
           <article><span>ORC JIT</span><b>Execute verified SSA through LLVM’s ORC APIs where the local build supports it.</b><small>Optional capability</small></article>

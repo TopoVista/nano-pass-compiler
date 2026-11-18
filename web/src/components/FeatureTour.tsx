@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Braces, Check, GitBranch, Network, Pause, Play, RotateCcw, ShieldCheck, Workflow } from 'lucide-react';
 import { BuildAtlas } from './BuildAtlas';
+import { CompilerMotif } from './CompilerMotif';
 
 type Lens = 'pipeline' | 'graphs' | 'evidence';
 type Props = { onExample: (name: string) => void; onStage: (stage: string) => void; onGraph: (kind: string) => void; };
@@ -59,7 +60,7 @@ export function FeatureTour({ onExample, onStage, onGraph }: Props) {
   return <section className="feature-tour guide-deck" id="feature-tour" aria-labelledby="feature-tour-title">
     <header className="guide-hero">
       <div><p className="eyebrow">NanoPass / animated field guide</p><h2 id="feature-tour-title">A compiler lab,<br /><em>presented as a system.</em></h2><p>Use this walkthrough as a demo: the program changes form, the graph becomes visible, and each verification claim says exactly what it checks.</p></div>
-      <div className="guide-hero-facts" aria-label="Guide contents"><span><Braces aria-hidden="true" /> representation journey</span><span><GitBranch aria-hidden="true" /> control-flow diagram</span><span><ShieldCheck aria-hidden="true" /> verifier evidence</span></div>
+      <div className="guide-hero-side"><CompilerMotif kind="values" label="Values moving through a compiler representation" caption="A visual cue for explicit value flow." /><div className="guide-hero-facts" aria-label="Guide contents"><span><Braces aria-hidden="true" /> representation journey</span><span><GitBranch aria-hidden="true" /> control-flow diagram</span><span><ShieldCheck aria-hidden="true" /> verifier evidence</span></div></div>
     </header>
 
     <section className="guide-presentation" aria-labelledby="guide-demo-title">
