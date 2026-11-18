@@ -87,15 +87,7 @@ describe('compiler lab', () => {
     expect(screen.getByText(/Untrusted source never becomes a host command/i)).toBeInTheDocument();
     window.history.pushState({}, '', '/lab');
   });
-  it('makes the codebase build tour inspectable from both public surfaces', () => {
-    window.history.pushState({}, '', '/');
-    const { unmount } = render(<App />);
-    expect(screen.getByRole('heading', { name: /how nanopass is built/i })).toBeInTheDocument();
-    expect(screen.getByText('compiler/ir/ssa/ssa_builder.h')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Optimizer optimizer\/ssa_optimizer\.h/i }));
-    expect(screen.getByText('compiler/optimizer/ssa_optimizer.h')).toBeInTheDocument();
-    unmount();
-
+  it('keeps the detailed codebase tour in the guide rather than the landing page', () => {
     window.history.pushState({}, '', '/guide');
     render(<App />);
     expect(screen.getByRole('heading', { name: /trace the compiler through its actual modules/i })).toBeInTheDocument();
@@ -108,17 +100,14 @@ describe('compiler lab', () => {
     render(<App />);
     expect(screen.getByRole('heading', { name: /a compiler you can interrogate/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open compiler lab/i })).toHaveAttribute('href', '/lab');
-    expect(screen.getByRole('figure', { name: /a request becomes a verified representation before it can execute/i })).toBeInTheDocument();
-    expect(screen.getByText('nano-server')).toBeInTheDocument();
+    expect(screen.queryByText('nano-server')).not.toBeInTheDocument();
   });
-  it('labels representative landing motion honestly and keeps its architecture inspector interactive', () => {
+  it('keeps the representative transformation honest and static', () => {
     window.history.pushState({}, '', '/');
     render(<App />);
     expect(screen.getByText(/static illustration · not a live compiler run/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: /verify ssa/i }));
-    expect(screen.getByText(/representative SSA passes its structural check/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /SSA optimizer/i }));
-    expect(screen.getByText(/applies verifier-gated rewrites/i)).toBeInTheDocument();
+    expect(screen.getByText('Parse')).toBeInTheDocument();
+    expect(screen.getByText('Verify')).toBeInTheDocument();
     window.history.pushState({}, '', '/lab');
   });
   it('keeps optimization evidence and verification controls on dedicated routes', async () => {

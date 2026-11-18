@@ -1,8 +1,4 @@
-import { ArrowDown, ArrowUpRight, Check, Pause, Play, RotateCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { ArchitectureDiagram } from './ArchitectureDiagram';
-import { BuildAtlas } from './BuildAtlas';
+import { ArrowDown, ArrowUpRight, Check } from 'lucide-react';
 import { CompilerMotif } from './CompilerMotif';
 
 const pipeline = [
@@ -43,30 +39,7 @@ function Mark() {
   return <span className="landing-mark" aria-hidden="true"><i /><i /><i /></span>;
 }
 
-const heroSteps = [
-  { id: 'source', label: 'Read source', note: 'The illustration begins with source syntax.' },
-  { id: 'lower', label: 'Lower structure', note: 'Control flow and values become explicit.' },
-  { id: 'verify', label: 'Verify SSA', note: 'The representative SSA passes its structural check.' },
-] as const;
-
 export function LandingPage() {
-  const [heroStep, setHeroStep] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  useEffect(() => {
-    if (!playing) return undefined;
-    const timer = window.setTimeout(() => setHeroStep((current) => {
-      if (current === heroSteps.length - 1) {
-        setPlaying(false);
-        return current;
-      }
-      return current + 1;
-    }), 1400);
-    return () => window.clearTimeout(timer);
-  }, [heroStep, playing]);
-  const replayHero = () => {
-    setHeroStep(0);
-    setPlaying(true);
-  };
   return (
     <main className="public-shell">
       <header className="public-nav">
@@ -89,28 +62,20 @@ export function LandingPage() {
             <a className="public-action text" href="#method">See the method <ArrowDown aria-hidden="true" className="landing-arrow-down" strokeWidth={1.8} /></a>
           </div>
         </div>
-        <div className={`hero-artifact hero-step-${heroStep}`} aria-label="Representative compiler transformation from source to verified SSA">
+        <div className="hero-artifact" aria-label="Representative compiler transformation from source to verified SSA">
           <div className="artifact-topline"><span>REPRESENTATIVE TRANSFORMATION</span><b>static illustration · not a live compiler run</b></div>
           <div className="artifact-columns">
-            <article className="artifact-code source"><header><span>01</span> Source / NanoPass C</header><pre><code className="hero-code-typing hero-source-typing">{source}</code></pre></article>
-            <div className="artifact-transfer" aria-label="Parse, lower, and verify the program">
-              {['Parse', 'Lower', 'Verify'].map((stage, index) => <div className="artifact-step" style={{ '--step-delay': `${index * 760}ms` } as CSSProperties} key={stage}><i>{stage}</i><span aria-hidden="true">↓</span></div>)}
-            </div>
-            <article className="artifact-code output"><header><span>06</span> SSA / @score</header><pre><code className="hero-code-typing hero-ssa-typing">{ssa}</code></pre></article>
+            <article className="artifact-code source"><header><span>01</span> Source / NanoPass C</header><pre><code>{source}</code></pre></article>
+            <div className="artifact-transfer" aria-label="Parse, lower, and verify the program"><span>Parse</span><span>↓</span><span>Lower</span><span>↓</span><span>Verify</span></div>
+            <article className="artifact-code output"><header><span>06</span> SSA / @score</header><pre><code>{ssa}</code></pre></article>
           </div>
           <footer><span><Check aria-hidden="true" strokeWidth={2} /> SSA checks unique value definitions</span><span><Check aria-hidden="true" strokeWidth={2} /> CFG makes control flow explicit</span></footer>
-          <div className="hero-sequence" aria-label="Representative compiler transformation controls">
-            <div role="tablist" aria-label="Transformation steps">{heroSteps.map((step, index) => <button type="button" key={step.id} role="tab" aria-selected={heroStep === index} className={heroStep === index ? 'active' : index < heroStep ? 'complete' : ''} onClick={() => { setHeroStep(index); setPlaying(false); }}><span>{String(index + 1).padStart(2, '0')}</span>{step.label}</button>)}</div>
-            <p aria-live="polite">{heroSteps[heroStep].note}</p>
-            <div><button type="button" aria-label="Replay representative compiler transformation" onClick={replayHero}><RotateCcw aria-hidden="true" /></button><button type="button" onClick={() => setPlaying((value) => !value)}>{playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}{playing ? 'Pause' : 'Play'}</button></div>
-          </div>
         </div>
       </section>
 
       <section className="public-section public-architecture" id="architecture">
         <div className="section-title"><p>Architecture</p><h2>Compiler first.<br />Interface <em>second.</em></h2></div>
         <div className="architecture-copy"><p>The browser consumes a versioned, bounded JSON compiler API. It does not scrape terminal output or invent a compiler. The deterministic C++ compiler remains the source of truth; optional policies can only choose known compiler decisions, and the pipeline checks their resulting IR.</p><a href="https://github.com/TopoVista/nano-pass-compiler">Read the source on GitHub <Arrow /></a></div>
-        <ArchitectureDiagram />
       </section>
 
       <section className="public-proof" aria-label="Compiler proof points">
@@ -130,11 +95,9 @@ export function LandingPage() {
           <a href="/guide">Take the interactive guided tour <Arrow /></a>
         </div>
         <ol className="pipeline-list" aria-label="NanoPass pipeline">
-          {pipeline.map((stage, index) => <li key={stage.name} tabIndex={0} aria-label={`${stage.name}: ${stage.explanation}`}><span>{String(index + 1).padStart(2, "0")}</span><b>{stage.name}</b><i>{stage.action}</i><small className="pipeline-explanation"><span>{stage.explanation}</span></small></li>)}
+          {pipeline.map((stage, index) => <li key={stage.name} tabIndex={0} aria-label={`${stage.name}: ${stage.explanation}`}><span>{String(index + 1).padStart(2, "0")}</span><b>{stage.name}</b><i>{stage.action}</i></li>)}
         </ol>
       </section>
-
-      <BuildAtlas mode="brief" />
 
       <section className="public-feature public-feature-optimizer" id="optimizer">
         <div className="feature-number">A</div>
