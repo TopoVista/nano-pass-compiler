@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 34308)
+Total output lines: 660
+
 :root {
   color-scheme: dark;
   --canvas: #050505;
@@ -225,151 +228,7 @@ a { color: inherit; text-decoration: none; }
 }
 @media (max-width: 760px) {
   .public-nav, .public-hero, .public-proof, .public-section, .public-feature, .public-lab-callout, .public-footer { width: min(100% - 36px, 640px); }.public-nav { height: 66px; }.public-nav nav { display: none; }.public-hero { grid-template-columns: 1fr; gap: 48px; min-height: auto; padding: 68px 0; }.public-hero h1 { font-size: clamp(52px, 16vw, 72px); }.artifact-columns { grid-template-columns: 1fr; }.artifact-transfer, .artifact-code.output { display: none; }.public-proof { grid-template-columns: 1fr 1fr; gap: 18px; }.public-proof > i { display: none; }.public-section, .public-feature, .public-feature-correctness, .public-lab-callout { grid-template-columns: 1fr; gap: 30px; padding: 80px 0; }.public-feature { min-height: auto; }.feature-number { display: none; }.pipeline-list { grid-template-columns: 1fr 1fr; }.pipeline-list li:nth-child(4n) { border-right: 1px solid var(--line); }.runtime-rows article { grid-template-columns: 1fr; gap: 8px; }.public-footer { flex-direction: column; align-items: flex-start; gap: 20px; padding: 28px 0; }
-  .dashboard-shell { display: block; }.app-rail { position: static; flex-direction: row; align-items: center; width: 100%; height: 60px; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--line); }.rail-brand { padding: 0; border: 0; }.rail-brand > span:last-child { display: block; max-width: 82px; overflow: hidden; }.rail-brand strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }.rail-brand small, .rail-brand .brand-mark, .rail-label, .rail-nav a em, .rail-status { display: none; }.rail-nav { display: flex; gap: 2px; margin: 0 0 0 auto; }.rail-nav a { width: 34px; min-height: 34px; justify-content: center; padding: 0; }.rail-nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }.rail-nav a i { width: 10px; height: 10px; }.dashboard-topbar { position: static; height: 56px; padding: 0 14px; }.dashboard-context { display: none; }.top-actions label, .top-actions > button:not(.run) { display: none; }
-  .toolbar { display: grid; grid-template-columns: 1fr; gap: 12px; min-height: auto; padding: 14px; overflow: visible; }.control-step { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: end; min-width: 0; padding: 0; border: 0; }.control-step > small { grid-row: 1 / 3; align-self: start; padding-top: 3px; }.control-step label { min-width: 0; }.control-step label select { width: 100%; min-width: 0; }.pipeline-picker { grid-column: 2; }.pipeline-picker summary { width: 100%; }.pipeline-options { width: min(280px, calc(100vw - 28px)); }.pipeline-order { right: 0; left: auto; width: min(280px, calc(100vw - 28px)); }.toolbar-actions { display: grid; grid-template-columns: 1fr 1fr; }.toolbar-actions > small { grid-column: 1 / -1; }.compile-status { justify-self: start; margin-left: 0; }.compiler-revision { display: none; }
-  .workspace { grid-template-columns: 1fr; grid-template-rows: auto; gap: 14px; padding: 14px; }.source-panel, .ir-panel, .timeline-panel, .graph-panel, .diagnostics-panel, .runtime-panel, .correctness-wrap, .comparison-wrap, .policy-wrap, .diff-panel { grid-column: 1; grid-row: auto; }.source-panel, .ir-panel { min-height: 680px; }.source-stack { grid-template-rows: minmax(0, 1fr) 270px; }.source-actions .focus-editor { display: none; }.source-actions button { padding: 0 6px; }.ir-explainer { grid-template-columns: 1fr; gap: 12px; }.timeline-step { flex-basis: 165px; min-width: 165px; }.runtime-panel { grid-template-columns: 1fr; }.run-controls { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }.run-controls strong { width: 100%; }.run-controls button { flex: 1 0 34%; }.execution-trace, .proof-path { flex-wrap: wrap; }.benchmark-empty, .benchmark-results, .route-grid { grid-template-columns: 1fr; }.feature-trace { grid-template-columns: repeat(2, 1fr); }.feature-tour, .route-page { padding: 32px 18px 50px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-}
-
-/* Compiler cockpit: the workbench is one continuous instrument, not a card wall.
-   The sharp activity rail, wide source surface, and bottom terminal make the
-   code path primary; evidence lives in the dedicated routes. */
-.dashboard-shell { grid-template-columns: 248px minmax(0, 1fr); background: #070a0f; }
-.app-rail { padding: 20px 14px 16px; background: #090d13; border-right-color: #26333e; }
-.rail-brand { padding: 10px 10px 24px; border-bottom-color: #26333e; }
-.rail-brand strong { font-size: 18px; letter-spacing: -.06em; }.rail-brand small { margin-top: 4px; color: #7b8c9d; letter-spacing: .16em; }
-.rail-nav { gap: 4px; margin-top: 26px; }.rail-label { padding-left: 10px; color: #667789; }
-.rail-nav a { min-height: 58px; padding: 9px 10px; border-left: 2px solid transparent; border-radius: 2px; }
-.rail-nav a > span { display: grid; gap: 3px; }.rail-nav a b { color: inherit; font-size: 12px; }.rail-nav a small { color: #627486; font: 9px var(--font-code); }
-.rail-nav a:hover { background: #121923; }.rail-nav a.active { border-left-color: var(--cyan); background: #101c27; }
-.rail-status { padding: 16px 10px 4px; border-top-color: #26333e; }
-.app-main { background: linear-gradient(180deg, #0b1118 0, #080c12 430px); }
-.dashboard-topbar { height: 72px; padding-inline: 34px; border-bottom-color: #26333e; background: rgb(9 13 19 / .96); }
-.dashboard-context span { color: #6f8192; }.dashboard-context strong { font-size: 18px; }.dashboard-context strong b { color: #8194a5; }
-.top-actions label, .control-step > small, .toolbar-actions > small { color: #7e91a2; }
-.top-actions select, .panel select, .toolbar select, .pipeline-picker summary { border-color: #3a4b59; border-radius: 2px; background: #111923; }
-.top-actions .run { border-color: #9cefd1; background: #9cefd1; }
-.toolbar { min-height: 74px; gap: 22px; padding: 10px 34px; border-bottom-color: #26333e; background: #0b1017; }
-.control-step { gap: 12px; border-right-color: #26333e; }.toolbar-actions button { border-color: #3a4b59; border-radius: 2px; background: #111923; }
-.compile-status { border-radius: 2px; background: #111923; }
-.workspace { grid-template-columns: minmax(0, 1.6fr) minmax(390px, .8fr); grid-template-rows: minmax(820px, calc(100vh - 168px)) auto; gap: 0; padding: 0 34px 72px; }
-.panel, .list-panel, .profile-panel, .correctness-panel, .comparison-panel, .policy-panel { border-color: #2b3b49; border-radius: 0; box-shadow: none; background: #0c121a; }
-.workspace > .panel { margin-top: 26px; }.source-panel { border-color: #3c5b70; }.source-panel > header, .ir-panel > header { min-height: 62px; padding-inline: 20px; background: #101822; }
-.source-panel > header strong, .ir-panel > header strong { font-size: 14px; }.source-actions { gap: 7px; }
-.source-actions button { min-height: 32px; border-radius: 2px; }.source-actions .format-source { border-color: #63d6b5; color: #b8f4df; background: #102a28; }
-.source-stack { grid-template-rows: minmax(0, 1fr) 306px; }.editor, .editor .monaco-editor, .editor .monaco-editor-background, .editor .margin { background: #090d13 !important; }
-.editor::after { height: 31px; border-top-color: #26333e; background: #0d131b; line-height: 31px; }
-.terminal-pane { grid-template-rows: 44px minmax(0, 1fr) 46px 36px; border-top: 1px solid #2b3b49; background: #05080c; }
-.terminal-pane header { padding-inline: 18px; border-bottom-color: #293844; background: #0a1016; }.terminal-pane header strong { color: #e7eef5; }
-.terminal-pane header small { border-radius: 2px; }.terminal-output { padding: 16px 18px; background: #05080c; }
-.terminal-input { min-height: 46px; padding-inline: 18px; border-block-color: #293844; background: #0b1118; }.terminal-input button { border-radius: 2px; }
-.terminal-suggestions { padding: 6px 18px; background: #080d13; }.terminal-suggestions button { border-radius: 2px; }
-.ir-panel { border-left: 0; }.ir-panel .code-view pre { background: #090d13; font-size: 12px; }.ir-explainer { min-height: 206px; border-top-color: #2b3b49; background: #101822; }
-.timeline-panel { grid-column: 1 / -1; grid-row: 2; margin-top: 0 !important; border-left: 0; border-right: 0; }.timeline-panel > header { min-height: 52px; padding-inline: 20px; background: #0b1017; }.timeline { min-height: 138px; padding: 14px 20px; background: #0b1017; }
-.timeline-step { grid-template-columns: 24px minmax(155px, 1fr); flex-basis: 205px; min-width: 205px; padding: 12px 15px; border-right-color: #26333e; border-radius: 0; }.timeline-step:not(:last-child)::after { display: none; }.timeline-step.selected { background: #142433; }
-.workspace.editor-focus { grid-template-columns: minmax(0, 1fr); padding-inline: 34px; }.workspace.editor-focus .source-panel { min-height: calc(100vh - 168px); }
-
-.route-page { max-width: 1500px; padding: 54px 34px 80px; }.route-intro { max-width: 720px; }.route-intro h1 { max-width: 680px; color: #f0f6fb; font-size: clamp(44px, 4vw, 68px); letter-spacing: -.07em; }.route-intro p { max-width: 630px; color: #9fb1c0; }
-.route-grid { gap: 20px; }.optimization-evidence-grid { margin-top: 20px; }.policy-panel, .correctness-panel, .comparison-panel { border-radius: 0; }.policy-panel > header, .correctness-panel > header, .comparison-panel > header { min-height: 56px; border-bottom-color: #2b3b49; background: #101822; }.feature-cards article, .decision-cards article { background: #0c121a; border-right-color: #2b3b49; }.feature-metrics span { border-color: #34495a; border-radius: 2px; background: #101822; }
-.verification-page { display: grid; gap: 20px; }.verification-actionbar { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 20px; border: 1px solid #2b3b49; background: #101822; }.verification-actionbar > div:first-child { display: grid; gap: 5px; }.verification-actionbar strong { font-size: 14px; }.verification-actionbar span { color: #97aabb; font-size: 12px; }.verification-actionbar > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; }.verification-actionbar button { min-height: 34px; padding: 0 11px; border: 1px solid #3a4b59; border-radius: 2px; color: #dce9f4; background: #0b1118; font-size: 11px; }.verification-actionbar .verification-primary { border-color: #9cefd1; color: #061b16; background: #9cefd1; font-weight: 700; }.verification-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }.verification-runtime { min-height: 280px; }.verification-runtime > header { display: flex; justify-content: space-between; min-height: 56px; padding: 0 17px; border-bottom: 1px solid #2b3b49; background: #101822; }.verification-runtime > header strong { align-self: center; }.verification-runtime > header span { align-self: center; color: #8ea2b3; font: 10px var(--font-code); }.verification-runtime .execution-content { padding: 18px; }.verification-diagnostics { min-height: 170px; }.verification-diagnostics .list-panel { border: 0; background: transparent; }
-
-@media (min-width: 761px) and (max-width: 1080px) { .dashboard-shell { grid-template-columns: 78px minmax(0, 1fr); }.app-rail { width: 78px; padding-inline: 10px; }.rail-brand { justify-content: center; padding-inline: 0; }.rail-brand > span:last-child, .rail-label, .rail-nav a > span, .rail-status { display: none; }.rail-nav a { justify-content: center; padding: 0; }.workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(820px, calc(100vh - 168px)) auto; padding-inline: 22px; }.workspace > .ir-panel { grid-column: 1; grid-row: auto; min-height: 680px; }.source-panel { grid-column: 1; grid-row: 1; }.timeline-panel { grid-row: auto; }.source-actions .focus-editor { display: inline-flex; }.verification-grid { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .workspace { padding: 0 14px 40px; }.workspace > .panel { margin-top: 14px; }.source-panel > header, .ir-panel > header { min-height: 56px; padding-inline: 12px; }.source-actions .focus-editor { display: none; }.source-actions button { padding-inline: 7px; }.terminal-path { display: none; }.route-page { padding: 34px 18px 56px; }.verification-actionbar, .verification-grid { grid-template-columns: 1fr; }.verification-actionbar { display: grid; }.verification-actionbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }.verification-actionbar .verification-primary { grid-column: 1 / -1; }
-  .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; gap: 14px; }
-  .workspace > .ir-panel { grid-column: 1; min-width: 0; }
-  .editor, .terminal-pane, .terminal-suggestions { min-width: 0; max-width: 100%; }
-  .editor, .terminal-pane { overflow: hidden; }
-  .ir-panel > header { gap: 8px; min-width: 0; }
-  .ir-panel > header > div { min-width: 0; }
-  .ir-panel > header select { min-width: 0; max-width: 48%; }
-  .rail-nav a > span { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
-  .timeline-panel { grid-column: 1; grid-row: auto; }
-}
-
-/* Shared material system: public editorial route and compiler workbench use the
-   same graphite field. Semantic compiler results retain their own restrained
-   colors; navigation, surfaces, code, and inspection are deliberately neutral. */
-.dashboard-shell, .app-main { background: #050505; }
-.app-rail, .dashboard-topbar, .toolbar { background: #080808; border-color: #282825; }
-.app-main { background-image: none; }
-.brand-mark { border-color: #51514d; background: #0c0c0c; }
-.brand-mark i:nth-child(2) { background: #f5f5f1; }
-.brand-mark::after { border-color: #080808; }
-.rail-brand, .rail-status, .control-step { border-color: #282825; }
-.rail-brand small, .rail-label, .dashboard-context span, .dashboard-context strong b,
-.top-actions label, .control-step > small, .toolbar-actions > small { color: #9c9b94; }
-.rail-nav a:hover { background: #111111; }
-.rail-nav a.active { border-left-color: #f5f5f1; background: #151515; }
-.rail-nav a.active i { border-color: #f5f5f1; background: #f5f5f1; }
-.dashboard-topbar { background: rgb(5 5 5 / .94); }
-.top-actions select, .panel select, .toolbar select, .pipeline-picker summary,
-.top-actions button, .toolbar-actions button, .service-retry, .pipeline-order button,
-.compile-status { color: #f5f5f1; border-color: #51514d; background: #0d0d0d; }
-.top-actions .run { color: #050505; border-color: #f5f5f1; background: #f5f5f1; }
-.toolbar { background: #080808; }
-.pipeline-options, .pipeline-order { border-color: #51514d; background: #111111; box-shadow: 0 18px 40px rgb(0 0 0 / .4); }
-.pipeline-options label, .pipeline-order span { color: #deded8; }
-.workspace { background: #050505; }
-.panel, .list-panel, .profile-panel, .correctness-panel, .comparison-panel, .policy-panel,
-.feature-console, .verification-actionbar { border-color: #282825; background: #0a0a0a; }
-.workspace > .panel { border-color: #282825; }
-.source-panel { border-color: #51514d; }
-.source-panel > header, .ir-panel > header, .panel > header, .code-view > header,
-.profile-panel > header, .timeline-panel > header, .policy-panel > header,
-.correctness-panel > header, .comparison-panel > header, .verification-runtime > header {
-  background: #111111; border-color: #282825;
-}
-.panel > header > div::before, .code-view > header > div::before { background: #f5f5f1; box-shadow: none; }
-.source-actions button, .feature-action, .verification-actionbar button { color: #f5f5f1; border-color: #51514d; background: #0d0d0d; }
-.source-actions .format-source { color: #f5f5f1; border-color: #f5f5f1; background: #151515; }
-.source-actions button:hover, .source-actions .format-source:hover { color: #050505; border-color: #f5f5f1; background: #f5f5f1; }
-.editor, .editor .monaco-editor, .editor .monaco-editor-background, .editor .margin,
-.ir-panel .code-view pre, .diff pre { background: #090909 !important; }
-.editor::after { color: #9c9b94; border-top-color: #282825; background: #101010; }
-.hero-artifact .artifact-code.output { border: 0; color: #deded8; background: #0a0a0a; }
-.hero-artifact .artifact-code.output pre { color: #deded8; background: #0a0a0a; }
-.terminal-pane, .terminal-output { background: #050505; }
-.terminal-pane { border-top-color: #282825; }
-.terminal-pane header, .terminal-input, .terminal-suggestions { border-color: #282825; background: #0b0b0b; }
-.terminal-pane header strong { color: #f5f5f1; }
-.terminal-lights i { background: #66655f; }.terminal-lights i:nth-child(2) { background: #9c9b94; }.terminal-lights i:nth-child(3) { background: #f5f5f1; }
-.terminal-input button, .terminal-suggestions button { border-color: #51514d; background: #111111; }
-.ir-panel { border-left-color: #282825; }
-.ir-explainer { border-top-color: #282825; background: #0e0e0e; }
-.timeline, .timeline-panel > header { background: #0a0a0a; }
-.timeline-step { border-right-color: #282825; }
-.timeline-step.selected { background: #161616; }
-.graph-canvas { background: radial-gradient(circle at 1px 1px, #494942 1px, transparent 1.5px) 0 0 / 24px 24px, #080808; }
-.flow-node { border-color: #66655f !important; background: #111111 !important; box-shadow: none !important; }
-.flow-node.selected { border-color: #f5f5f1 !important; }
-.react-flow__edge-path { stroke: #8b8a83 !important; }
-.react-flow__controls { border-color: #51514d !important; box-shadow: none !important; }
-.react-flow__controls button { border-color: #51514d !important; background: #111111 !important; fill: #f5f5f1 !important; }
-.route-intro h1 { color: #f5f5f1; }.route-intro p { color: #b8b7b0; }
-.feature-tabs button.selected { color: #f5f5f1; background: #161616; box-shadow: inset 0 -2px #f5f5f1; }
-.feature-cards article, .decision-cards article { border-color: #282825; background: #0a0a0a; }
-.feature-cards article::before, .decision-cards article::before { background: #f5f5f1; }
-.feature-cards article header b, .decision-cards article header b { color: #f5f5f1; }
-.feature-metrics span, .decision-steps span { border-color: #51514d; color: #c8c7c0; background: #111111; }
-.temperature.cold { color: #c8c7c0; background: #252525; }
-.benchmark-empty .sample-bars i { background: #d7d6cf; }
-.sample-chart i { background: #d7d6cf; }
-.verification-actionbar .verification-primary { color: #050505; border-color: #f5f5f1; background: #f5f5f1; }
-
-@media (max-width: 760px) {
-  .architecture-diagram { min-width: 0; }
-  .architecture-diagram figcaption { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 18px 0; }
-  .architecture-scroll { min-width: 0; width: 100%; }
-  .architecture-legend { gap: 12px; }
-}
-
-/* Landing narrative: motion teaches the pipeline; it never supplies compiler facts. */
-.public-brand { gap: 11px; min-height: 34px; line-height: 1; }.public-brand > span:last-child { display: block; padding-top: 1px; font-size: 15px; letter-spacing: -.055em; }
-.landing-mark { flex: 0 0 auto; width: 29px; height: 29px; padding: 5px; border-color: #777770; }.landing-mark i { height: 9px; }.landing-mark i:nth-child(2) { height: 15px; }.landing-mark i:nth-child(3) { height: 6px; }
-.public-architecture { padding: 92px 0 104px; }.public-architecture .architecture-copy { align-self: start; }
+  .dashboard-shell { display: block; }.app-rail { position: static; flex-direction: row; align-items: center; width: 100%; height: 60px; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--line); }.rail-brand { padding: 0; border: 0; }.rail-brand > span:last-child { display: block; max-width: 82px; overflow: hidden; }.rail-brand strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }.rail-brand small, .rail-brand .brand-mark, .rail-label, .rail-nav a em, .rail-status { display: none; }.rail-nav { display: flex; gap: 2px; margin: 0 0 0 auto; }.rail-nav a { width: 34px; min-height: 34px; justify-content: center; padding: 0; }.rail-nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }.rail-nav a i { width: 10px; height: 10px; }.dashboard-topbar { position: static; height: 56px; padding: 0 14px; }.dashboard-context { display: none; }.top-actions label, .top-actions > button:not(.run) { display: none; }…4308 tokens truncated…re .architecture-copy { align-self: start; }
 .hero-code-typing { display: inline-block; width: 0; overflow: hidden; border-right: 1px solid #f5f5f1; white-space: pre; animation: hero-caret .72s step-end infinite; }
 .hero-source-typing { animation: hero-type-source 2.9s steps(56, end) .25s forwards, hero-caret .72s step-end .25s 5, hero-caret-finish .01s linear 3.86s forwards; }.hero-ssa-typing { animation: hero-type-ssa 3.25s steps(78, end) 2.6s forwards, hero-caret .72s step-end 2.6s 5, hero-caret-finish .01s linear 6.21s forwards; }
 .artifact-transfer { justify-content: center; gap: 0; }.artifact-step { display: grid; justify-items: center; gap: 5px; opacity: .38; animation: artifact-step-flow 2.28s ease-in-out infinite; animation-delay: var(--step-delay); }.artifact-step i { font-style: normal; }.artifact-step span { color: #f5f5f1; font-size: 17px; line-height: 1; animation: artifact-arrow-drop .76s ease-in-out infinite; animation-delay: var(--step-delay); }
@@ -697,4 +556,5 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .compiler-motif-route, .compiler-motif-signal { animation: none !important; }
 }
+
 

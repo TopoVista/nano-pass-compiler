@@ -17,3 +17,4 @@ describe('BuildAtlas brief', () => {
     expect(screen.getByRole('button', { name: /ANF normalize/i })).not.toHaveClass('selected');
   });
 });
+
