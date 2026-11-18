@@ -6,6 +6,8 @@ describe('BuildAtlas brief', () => {
     render(<BuildAtlas mode="brief" />);
 
     expect(screen.getByText('SSA builder', { selector: '.blueprint-inspector b' })).toBeInTheDocument();
+    expect(screen.getByText('int score(i32 x)')).toBeInTheDocument();
+    expect(document.querySelectorAll('.blueprint-slab i')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: /CoreIR normalize/i }));
 
     expect(screen.getByText('Explicit IR', { selector: '.blueprint-inspector b' })).toBeInTheDocument();

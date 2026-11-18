@@ -146,10 +146,10 @@ export function BuildAtlas({ mode }: { mode: AtlasMode }) {
       <div className="blueprint-hero">
         <div><h2 id="build-blueprint-title">How NanoPass<br />is <em>built.</em></h2><p>A map of the implementation.</p></div>
         <div className="blueprint-stack" aria-label="Layered compiler architecture">
-          <div className="blueprint-slab syntax"><i /><b>Syntax / typed AST</b></div>
-          <div className="blueprint-slab ir"><i /><b>Explicit representations</b></div>
-          <div className="blueprint-slab flow"><i /><b>Control + data flow</b></div>
-          <div className="blueprint-slab llvm"><code>%0 = add i64 %1, %2</code><b>Lowering / LLVM</b></div>
+          <div className="blueprint-slab syntax"><span className="slab-index">01</span><div className="slab-copy"><b>Syntax / typed AST</b><code>int score(i32 x)</code><small>tokens, scope, and types</small></div></div>
+          <div className="blueprint-slab ir"><span className="slab-index">02</span><div className="slab-copy"><b>Explicit representations</b><code>AST → CoreIR → ANF</code><small>one clear transformation at a time</small></div></div>
+          <div className="blueprint-slab flow"><span className="slab-index">03</span><div className="slab-copy"><b>Control + data flow</b><code>bb0 → bb1 / bb2 → bb3</code><small>blocks, edges, and value origins</small></div></div>
+          <div className="blueprint-slab llvm"><span className="slab-index">04</span><div className="slab-copy"><b>Lowering / LLVM</b><code>%0 = add i64 %1, %2</code><small>verified backend representation</small></div></div>
         </div>
       </div>
       <div className="blueprint-board">
